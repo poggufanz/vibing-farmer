@@ -1,0 +1,37 @@
+# Foundry
+/out
+/cache
+/broadcast
+/artifacts
+
+# Forge coverage
+lcov.info
+coverage/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Node (npx serve, tooling)
+node_modules/
+.pnp
+.pnp.js
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Deploy artifacts (fill after deploy)
+# VAULT_DEPOSITOR_ADDRESS and MOCK_VAULT_ADDRESS go in .env, not committed
+
+# Context mode cache
+.ctx/
