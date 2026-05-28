@@ -10,13 +10,15 @@ export class OrchestratorAgent {
    * @param {object} config
    * @param {string} config.user - user address
    * @param {string} config.permissionContext - from ERC-7715
-   * @param {string} config.veniceApiKey
+   * @param {string|null} config.veniceAuth - base64 SIWE header for Venice x402
+   * @param {string|null} config.devApiKey - DeepSeek API key for dev mode
    * @param {function} config.onEvent - (eventName, data) => void
    */
-  constructor({ user, permissionContext, veniceApiKey, sessionId, onEvent }) {
+  constructor({ user, permissionContext, veniceAuth, devApiKey, sessionId, onEvent }) {
     this.user = user
     this.permissionContext = permissionContext
-    this.veniceApiKey = veniceApiKey
+    this.veniceAuth = veniceAuth || null
+    this.devApiKey = devApiKey || null
     this.onEvent = onEvent || (() => {})
     this.sessionId = sessionId || `session-${Date.now()}`
   }
@@ -50,7 +52,8 @@ export class OrchestratorAgent {
           agentId: plan.agentId,
           vault: plan.vault,
           amount: plan.amountUSDC,
-          apiKey: this.veniceApiKey
+          veniceAuth: this.veniceAuth,
+          devApiKey: this.devApiKey
         }).then(skill => {
           saveSkill(plan.agentId, skill)
           return { agentId: plan.agentId, skill }

@@ -1,4 +1,4 @@
-import { connectWallet, getAccount, requestERC7715Permission } from './wallet.js'
+import { connectWallet, getAccount, requestERC7715Permission, signSiweForVenice } from './wallet.js'
 import { generateStrategy } from './venice.js'
 import { OrchestratorAgent } from './orchestrator.js'
 import { AgentGraph } from './graph.js'
@@ -18,7 +18,9 @@ const state = {
   strategy: null,
   vaultPlans: [],
   sessionId: null,
-  graph: null
+  graph: null,
+  veniceAuth: null,   // Venice x402 SIWE header — set at Generate time
+  devApiKey: null     // DeepSeek API key — dev mode fallback
 }
 
 // Initialize graph
@@ -128,12 +130,26 @@ document.getElementById('btn-generate').addEventListener('click', async () => {
   const amount = Number(document.getElementById('input-amount').value)
   const riskLevel = document.getElementById('input-risk').value
   const numVaults = Number(document.getElementById('input-vaults').value)
-  const apiKey = document.getElementById('input-venice-key').value
+  const devApiKey = document.getElementById('input-venice-key').value || null
+
+  // Try Venice x402 first (wallet SIWE), fall back to DeepSeek dev key
+  let veniceAuth = null
+  if (state.account && !devApiKey) {
+    try {
+      logActivity('Signing Venice x402 auth (SIWE)...', 'info')
+      veniceAuth = await signSiweForVenice(state.account)
+      logActivity('Venice x402 auth signed.', 'success')
+    } catch (e) {
+      console.warn('[ai] SIWE signing failed, trying devApiKey fallback:', e.message)
+    }
+  }
 
   logActivity(`Generating strategy — ${amount} USDC, ${riskLevel} risk, ${numVaults} vaults...`, 'info')
 
   try {
-    state.strategy = await generateStrategy({ amount, riskLevel, numVaults, apiKey })
+    state.strategy = await generateStrategy({ amount, riskLevel, numVaults, veniceAuth, devApiKey })
+    state.veniceAuth = veniceAuth
+    state.devApiKey = devApiKey
     state.sessionId = `session-${Date.now()}`
 
     state.vaultPlans = state.strategy.vaults.map((v, i) => ({
@@ -182,12 +198,12 @@ document.getElementById('btn-approve').addEventListener('click', async () => {
     showGraph()
 
     const amount = Number(document.getElementById('input-amount').value)
-    const apiKey = document.getElementById('input-venice-key').value
 
     const orchestrator = new OrchestratorAgent({
       user: state.account,
       permissionContext: state.permissionContext,
-      veniceApiKey: apiKey,
+      veniceAuth: state.veniceAuth,
+      devApiKey: state.devApiKey,
       sessionId: state.sessionId,
       onEvent: handleAgentEvent
     })
@@ -211,6 +227,8 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   state.strategy = null
   state.vaultPlans = []
   state.permissionContext = null
+  state.veniceAuth = null
+  state.devApiKey = null
   state.graph?.reset()
   clearMemory()
   clearSkills()

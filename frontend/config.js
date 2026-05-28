@@ -16,6 +16,10 @@ export const VENICE_BASE_URL = 'https://api.venice.ai/api/v1'
 export const VENICE_MODEL = 'llama-3.3-70b'
 export const VENICE_TIMEOUT_MS = 10000
 
+// DeepSeek — OpenAI-compatible, used as dev fallback when Venice x402 not funded
+export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
+export const DEEPSEEK_MODEL = 'deepseek-chat'
+
 // AgentVaultDepositor ABI — only what frontend needs
 export const DEPOSITOR_ABI = [
   'function grantAgentPermission(bytes32 agentId, address vault, uint256 maxAmount, uint256 expiresAt) external',

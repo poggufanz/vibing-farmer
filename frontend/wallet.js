@@ -126,3 +126,43 @@ export async function onContractEvent(eventName, callback) {
   contract.on(eventName, callback)
   return () => contract.off(eventName, callback)
 }
+
+/**
+ * Sign a SIWE message for Venice x402 wallet authentication.
+ * Returns base64-encoded X-Sign-In-With-X header value.
+ * No private key needed — MetaMask personal_sign only.
+ * SIWE expires in 5 minutes; call fresh per session.
+ * @param {string} address - connected wallet address
+ * @returns {Promise<string>} base64 header value
+ */
+export async function signSiweForVenice(address) {
+  const now = new Date()
+  const nonce = Math.random().toString(36).slice(2, 12)
+  const resourceUrl = 'https://api.venice.ai/api/v1/chat/completions'
+  const message = [
+    'api.venice.ai wants you to sign in with your Ethereum account:',
+    address,
+    '',
+    'Sign in to Venice AI',
+    '',
+    `URI: ${resourceUrl}`,
+    'Version: 1',
+    'Chain ID: 8453',
+    `Nonce: ${nonce}`,
+    `Issued At: ${now.toISOString()}`,
+    `Expiration Time: ${new Date(now.getTime() + 5 * 60 * 1000).toISOString()}`,
+  ].join('\n')
+
+  const signature = await window.ethereum.request({
+    method: 'personal_sign',
+    params: [message, address]
+  })
+
+  return btoa(JSON.stringify({
+    address,
+    message,
+    signature,
+    timestamp: now.getTime(),
+    chainId: 8453
+  }))
+}
