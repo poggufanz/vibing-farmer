@@ -611,6 +611,8 @@ input, select { font-family: inherit; color: inherit; }
 .memory-step   { font-family: var(--font-mono); font-weight: 600; color: var(--text); }
 .memory-status { font-family: var(--font-mono); color: var(--text-muted); }
 .memory-lesson { font-family: var(--font-mono); color: var(--accent); font-size: 10px; margin-top: 2px; }
+.memory-entry-row { display: flex; align-items: center; gap: 6px; }
+.memory-time { margin-left: auto; font-size: 10px; color: var(--text-faint); font-family: var(--font-mono); }
 
 /* Scrollbars */
 ::-webkit-scrollbar       { width: 4px; height: 4px; }

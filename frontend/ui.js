@@ -65,13 +65,19 @@ export function showAgentDetail(agent) {
     <div class="detail-section">
       <div class="detail-key">Memory${agent.memory && agent.memory.length > 0 ? ` (${agent.memory.length})` : ''}</div>
       ${agent.memory && agent.memory.length > 0
-        ? agent.memory.map(e => `
-          <div class="memory-entry memory-entry--${e.status}">
-            <span class="memory-step">${e.step}</span>
-            <span class="memory-status">${e.status}</span>
-            ${e.lesson ? `<span class="memory-lesson">${e.lesson}</span>` : ''}
-          </div>
-        `).join('')
+        ? agent.memory.map(e => {
+            const t = new Date(e.timestamp * 1000).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            return `
+              <div class="memory-entry memory-entry--${e.status}">
+                <div class="memory-entry-row">
+                  <span class="memory-step">${e.step}</span>
+                  <span class="memory-status">${e.status === 'success' ? '✓' : '✕'}</span>
+                  <span class="memory-time">${t}</span>
+                </div>
+                ${e.lesson ? `<div class="memory-lesson">${e.lesson}</div>` : ''}
+              </div>
+            `
+          }).join('')
         : `<div class="detail-empty">No entries yet</div>`}
     </div>
   `

@@ -34,9 +34,9 @@ Timeline: 20 days total (26 Mei – 15 Juni 2026)
 | Phase | Days | Status | Focus |
 |-------|------|--------|-------|
 | 1 — Foundation | 1–3 | ✅ Done | Solidity review + setup + spike review |
-| 2 — Smart Contract | 4–8 | 🔴 Next | AgentVaultDepositor.sol + tests |
-| 3 — Integration | 9–13 | ⬜ | 1Shot + Orchestrator/Worker agents + vis.js graph + Sepolia test |
-| 4 — Polish | 14–17 | ⬜ | Bug fix, Venice AI skill gen, memory UI, demo video |
+| 2 — Smart Contract | 4–8 | ✅ Done | AgentVaultDepositor.sol + tests |
+| 3 — Integration | 9–13 | ✅ Done | 1Shot + Orchestrator/Worker agents + vis.js graph + Sepolia test |
+| 4 — Polish | 14–17 | ✅ Done | Bug fix, Venice AI skill gen, memory UI, demo video |
 | 5 — Buffer | 18–20 | ⬜ | Submission |
 
 **All 4 spikes resolved. ✅ See `docs/spikes/` for full findings. Key decisions below.**

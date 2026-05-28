@@ -199,3 +199,44 @@ Menunjukkan bahwa Vibing Farmer berhasil mengotomatisasi multi-vault deposit flo
 | Agent memory visible di node detail | ✓ (Agent track) |
 | Durasi demo | ≤ 5 menit |
 | User interactions (klik) selama demo | ≤ 8 klik |
+
+---
+
+## 6. Demo Flow (Final — Phase 4)
+
+### Scene 1: Load App (30s)
+- Open http://localhost:3000
+- Show dark 3-column layout
+- Console: "YIELD VIBING ready. Connect wallet to start."
+
+### Scene 2: Connect Wallet (30s)
+- Click Connect Wallet → MetaMask Flask popup
+- After connect: step dot "01 Connect" green, right rail shows address + "eip-7702 ready"
+
+### Scene 3: Venice AI Strategy (60s)
+- Fill: Amount 10 USDC, Risk Medium, Vaults 2, Venice API Key
+- Click Generate Strategy
+- Show: graph appears — Orchestrator (yellow) + 2 Workers (grey) + 2 Vaults (purple)
+- Activity log: Venice AI rationale (not fallback)
+
+### Scene 4: Node Detail (30s)
+- Click Orchestrator node → right rail shows agent counts
+- Click Worker 1 → Agent ID, Vault address, Skills (Venice-generated JSON)
+
+### Scene 5: ERC-7715 Permission (60s)
+- Click Approve & Execute
+- MetaMask Flask popup: erc20-token-periodic, USDC, 24h expiry
+- Approve → "Permission granted. Dispatching agents..."
+
+### Scene 6: Agent Execution (60s)
+- Workers turn blue (active)
+- Workers turn green (completed)
+- Activity log: "Done — 2 deposited, 0 failed"
+- Step 04 Execute green
+
+### Scene 7: Memory Entries (30s)
+- Click Worker node AFTER execute
+- Memory entries: step names, ✓ status, timestamps, lesson text
+
+### Scene 8: Reset (15s)
+- Click Reset → clean slate, localStorage cleared

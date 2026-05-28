@@ -2,8 +2,8 @@ import { connectWallet, getAccount, requestERC7715Permission } from './wallet.js
 import { generateStrategy } from './venice.js'
 import { OrchestratorAgent } from './orchestrator.js'
 import { AgentGraph } from './graph.js'
-import { readMemory, loadAllMemory } from './memory.js'
-import { loadSkill } from './skills.js'
+import { readMemory, loadAllMemory, clearMemory } from './memory.js'
+import { loadSkill, clearSkills } from './skills.js'
 import {
   setStep, logActivity, showAgentDetail, showOrchestratorDetail,
   setButtonEnabled, setButtonVisible
@@ -85,7 +85,10 @@ function handleAgentEvent(eventName, data) {
       break
 
     case 'completed':
-      logActivity(`Agent ${agentId.slice(0, 10)}... completed. TX: ${txHash?.slice(0, 14)}...`, 'success')
+      logActivity(
+        `Agent ${agentId.slice(0, 10)}... completed. ${data.simulated ? '[simulated]' : `TX: ${data.txHash?.slice(0, 14)}...`}`,
+        'success'
+      )
       state.graph?.setWorkerStatus(agentId, 'done')
       break
 
@@ -209,6 +212,8 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   state.vaultPlans = []
   state.permissionContext = null
   state.graph?.reset()
+  clearMemory()
+  clearSkills()
   hideGraph()
   document.getElementById('log-entries').innerHTML = ''
   document.getElementById('detail-panel').innerHTML = '<span class="empty">—</span>'

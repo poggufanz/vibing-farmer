@@ -76,7 +76,12 @@ export class WorkerAgent {
 
       // Write memory
       writeMemory(this.agentId, this.sessionId, this.vault, this.memoryEntries)
-      this.emit('completed', { agentId: this.agentId, vault: this.vault, txHash: depositResult.txHash })
+      this.emit('completed', {
+        agentId: this.agentId,
+        vault: this.vault,
+        txHash: depositResult.txHash,
+        simulated: depositResult.status === 'simulated'
+      })
 
       return { success: true, txHash: depositResult.txHash }
 
