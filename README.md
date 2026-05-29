@@ -4,9 +4,6 @@
 
 Automated multi-vault yield farming powered by an AI-coordinated agent swarm. User expresses intent once — agents execute in parallel, blockchain enforces boundaries cryptographically.
 
-**Hackathon:** MetaMask Smart Accounts Kit × 1Shot API × Venice AI Dev Cook Off  
-**Deadline:** 15 Juni 2026 | **Prize:** $11,000 | **Solo**
-
 ---
 
 ## What It Does
@@ -19,18 +16,6 @@ Automated multi-vault yield farming powered by an AI-coordinated agent swarm. Us
 6. **Real-time vis.js graph** visualizes agent network, status, and memory in browser
 
 ---
-
-## Hackathon Tracks Targeted
-
-| Track | Prize | How We Win |
-|-------|-------|-----------|
-| Best Agent | $3,000 | Agent swarm with skill system + persistent memory |
-| Best Venice AI | $3,000 | Coordinator + skill auto-generation per agent |
-| Best A2A Coordination | $3,000 | Orchestrator → parallel Worker dispatch |
-| Best Use of 1Shot | $1,000 | All agent transactions via 1Shot relay |
-
----
-
 ## Architecture
 
 ```
@@ -74,31 +59,9 @@ Agent Memory + vis.js Graph (real-time)
 
 ---
 
-## Differentiators vs DeleGate
-
-| Feature | Vibing Farmer | DeleGate |
-|---------|--------------|---------|
-| Execution | Parallel multi-agent | Sequential |
-| Skill system | Per-agent JSON, user reviews | None |
-| Agent memory | Persistent, visualized | None |
-| AI coordinator | Venice AI (skill gen + strategy) | Groq (no Venice track) |
-| Relay | 1Shot (active) | Skips 1Shot track |
-| Use case | Yield farming specific | Generic |
-
----
-
 ## Quick Start
 
 See [GETTING_STARTED.md](GETTING_STARTED.md) for full setup.
-
-```bash
-# Smart contracts (WSL only)
-wsl -e bash -c "cd /mnt/c/SharredData/project/competition/yield-vibing && forge build"
-wsl -e bash -c "cd /mnt/c/SharredData/project/competition/yield-vibing && forge test"
-
-# Frontend
-npx serve frontend/
-```
 
 ---
 
