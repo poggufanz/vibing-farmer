@@ -65,22 +65,21 @@ const makeInitialExecState = (agents) => {
 };
 
 /* ============================================
-   Agent Graph (vis.js Network)
+   Agent Graph — state palette + helpers
    ============================================ */
-// NVL nodes use a single fill color + activated/selected glow.
-const NVL_COLOR = {
+const GRAPH_COLOR = {
   idle:      "#3a3b33",
   running:   "#f0b54a",
   confirmed: "#6fe39a",
   failed:    "#ff7479",
 };
-const NVL_COLOR_LIGHT = {
+const GRAPH_COLOR_LIGHT = {
   idle:      "#b8b5aa",
   running:   "#b07a1a",
   confirmed: "#2d7a4a",
   failed:    "#a83a3a",
 };
-const GROUP_BASE = { orchestrator: "#cfff3d", worker: null, step: null, vault: "#6366f1" };
+const GROUP_BASE = { orchestrator: "#cfff3d", vault: "#6366f1" };
 
 const computeOrchestratorState = (execMap) => {
   const vals = Object.values(execMap);
@@ -90,288 +89,220 @@ const computeOrchestratorState = (execMap) => {
   return "idle";
 };
 
-const buildGraphTopology = (strategy) => {
-  const nodes = [];
-  const rels = [];
-  nodes.push({ id: "orchestrator", captions: [{ value: "Orchestrator" }], size: 34 });
+/* ============================================
+   Premium Canvas Graph Renderer (no NVL dependency)
+   Hierarchical layout: Orchestrator → Workers → Steps → Vaults
+   ============================================ */
 
-  strategy.agents.forEach((a) => {
-    nodes.push({ id: a.id, captions: [{ value: a.name }], size: 26 });
-    rels.push({ id: `e-orch-${a.id}`, from: "orchestrator", to: a.id });
-
-    STEP_IDS.forEach((sid) => {
-      const nid = `${a.id}-${sid}`;
-      nodes.push({ id: nid, captions: [{ value: STEP_LABELS[sid] }], size: 18 });
-      rels.push({ id: `e-${a.id}-${sid}`, from: a.id, to: nid });
-    });
-
-    const vid = `${a.id}-vault`;
-    nodes.push({ id: vid, captions: [{ value: a.vault.name }], size: 22, color: GROUP_BASE.vault });
-    rels.push({ id: `e-${a.id}-vault`, from: `${a.id}-deposit`, to: vid });
-  });
-
-  return { nodes, rels };
+const drawEdge = (ctx, x1, y1, x2, y2, color, lineWidth) => {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  const midY = (y1 + y2) / 2;
+  ctx.moveTo(x1, y1);
+  ctx.bezierCurveTo(x1, midY, x2, midY, x2, y2);
+  ctx.stroke();
 };
 
-const nvlStyleFor = (state, palette) => ({
-  color: palette[state] || palette.idle,
-  activated: state === "running",
-});
+const drawNode = (ctx, x, y, r, fillColor, label, labelColor, glowing, borderColor) => {
+  // Glow for running nodes
+  if (glowing) {
+    ctx.save();
+    ctx.shadowColor = fillColor;
+    ctx.shadowBlur = 18;
+    ctx.beginPath(); ctx.arc(x, y, r + 2, 0, Math.PI * 2);
+    ctx.fillStyle = fillColor; ctx.globalAlpha = 0.25; ctx.fill();
+    ctx.restore();
+  }
+  // Border ring
+  if (borderColor) {
+    ctx.beginPath(); ctx.arc(x, y, r + 1.5, 0, Math.PI * 2);
+    ctx.strokeStyle = borderColor; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+  // Main fill
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = fillColor; ctx.fill();
+  // Label
+  if (label) {
+    ctx.fillStyle = labelColor || "#fff";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(label, x, y);
+  }
+};
 
-/* ---------- Pure canvas fallback graph renderer ---------- */
-const drawFallbackGraph = (canvas, strategy, execMap, palette) => {
+const renderGraph = (canvas, strategy, execMap, palette, paletteIsLight, tick) => {
   const ctx = canvas.getContext("2d");
-  const W = canvas.width;
-  const H = canvas.height;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.width / dpr;
+  const H = canvas.height / dpr;
+  ctx.save();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
   const agents = strategy.agents;
-  const orchX = W / 2, orchY = 38;
-  const colW = W / (agents.length + 1);
+  const nAgents = agents.length;
+  const orchX = W / 2, orchY = 40;
+  const colW = W / (nAgents + 1);
+  const workerY = 100;
+  const stepStartY = 155;
+  const stepGap = 52;
+  const vaultY = stepStartY + STEP_IDS.length * stepGap;
 
-  // Draw orchestrator node
+  const edgeColor = paletteIsLight ? "#c0bdb5" : "#3a3a35";
+  const borderColor = paletteIsLight ? "#95928a" : "#56564f";
   const orchState = computeOrchestratorState(execMap);
-  ctx.fillStyle = orchState === "idle" ? GROUP_BASE.orchestrator : palette[orchState];
-  ctx.beginPath(); ctx.arc(orchX, orchY, 16, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#1a1b16"; ctx.font = "bold 9px 'Geist', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText("ORCH", orchX, orchY);
+  const orchColor = orchState === "idle" ? GROUP_BASE.orchestrator : palette[orchState];
 
+  // ---------- Edges first (below nodes) ----------
+  agents.forEach((a, i) => {
+    const cx = colW * (i + 1);
+    // Orchestrator → Worker
+    drawEdge(ctx, orchX, orchY + 18, cx, workerY - 14, edgeColor, 1.5);
+
+    // Worker → first step
+    drawEdge(ctx, cx, workerY + 14, cx, stepStartY - 11, edgeColor, 1);
+
+    // Step → Step
+    STEP_IDS.forEach((sid, si) => {
+      if (si > 0) {
+        const prevY = stepStartY + (si - 1) * stepGap + 10;
+        const curY = stepStartY + si * stepGap - 10;
+        drawEdge(ctx, cx, prevY, cx, curY, edgeColor, 1);
+      }
+    });
+
+    // Last step → Vault
+    const lastStepY = stepStartY + (STEP_IDS.length - 1) * stepGap + 10;
+    drawEdge(ctx, cx, lastStepY, cx, vaultY - 13, edgeColor, 1);
+  });
+
+  // ---------- Orchestrator node ----------
+  ctx.font = "bold 10px 'Geist', sans-serif";
+  drawNode(ctx, orchX, orchY, 18, orchColor, "ORCH", "#1a1b16", orchState === "running", borderColor);
+
+  // ---------- Agent columns ----------
   agents.forEach((a, i) => {
     const ex = execMap[a.id] || { status: "idle", steps: {} };
     const cx = colW * (i + 1);
-    const wy = 90;
-
-    // Edge orchestrator → worker
-    ctx.strokeStyle = palette.idle; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(orchX, orchY + 16); ctx.lineTo(cx, wy - 12); ctx.stroke();
 
     // Worker node
-    ctx.fillStyle = palette[ex.status] || palette.idle;
-    ctx.beginPath(); ctx.arc(cx, wy, 12, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#fff"; ctx.font = "bold 8px 'Geist', sans-serif";
-    ctx.fillText(`W${i + 1}`, cx, wy);
+    const wColor = palette[ex.status] || palette.idle;
+    const isRunning = ex.status === "running";
+    const wRadius = isRunning ? (tick % 2 === 0 ? 15 : 13) : 14;
+    ctx.font = "bold 9px 'Geist', sans-serif";
+    drawNode(ctx, cx, workerY, wRadius, wColor, `W${i + 1}`, "#fff", isRunning, borderColor);
+
+    // Worker label below
+    ctx.fillStyle = paletteIsLight ? "#4a4840" : "#8a8880";
+    ctx.font = "500 8px 'Geist', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(a.name.replace("Worker ", "W").replace(" · ", "·"), cx, workerY + 24);
 
     // Step nodes
     STEP_IDS.forEach((sid, si) => {
-      const sy = 135 + si * 44;
+      const sy = stepStartY + si * stepGap;
       const stepState = ex.steps?.[sid] || "idle";
-
-      // Edge worker/prev-step → step
-      ctx.strokeStyle = palette.idle; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(cx, si === 0 ? wy + 12 : 135 + (si - 1) * 44 + 9); ctx.lineTo(cx, sy - 9); ctx.stroke();
-
-      // Step circle
-      ctx.fillStyle = palette[stepState] || palette.idle;
-      ctx.beginPath(); ctx.arc(cx, sy, 9, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#fff"; ctx.font = "bold 7px 'Geist', sans-serif";
-      ctx.fillText(STEP_LABELS[sid][0], cx, sy);
+      const sColor = palette[stepState] || palette.idle;
+      const sRunning = stepState === "running";
+      const sRadius = sRunning ? (tick % 2 === 0 ? 12 : 10) : 10;
+      ctx.font = "bold 8px 'Geist', sans-serif";
+      drawNode(ctx, cx, sy, sRadius, sColor, STEP_LABELS[sid]?.[0] || sid[0].toUpperCase(), "#fff", sRunning, null);
+      // Step label
+      ctx.fillStyle = paletteIsLight ? "#6a6860" : "#6a6860";
+      ctx.font = "400 7px 'Geist', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(STEP_LABELS[sid], cx, sy + 17);
     });
 
     // Vault node
-    const vy = 135 + STEP_IDS.length * 44;
-    const vaultState = ex.steps?.deposit === "confirmed" ? "confirmed" : ex.steps?.deposit === "running" ? "running" : ex.steps?.deposit === "failed" ? "failed" : "idle";
-    ctx.strokeStyle = palette.idle; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(cx, vy - 44 + 9); ctx.lineTo(cx, vy - 11); ctx.stroke();
+    const vaultState =
+      ex.steps?.deposit === "confirmed" ? "confirmed" :
+      ex.steps?.deposit === "running" ? "running" :
+      ex.steps?.deposit === "failed" ? "failed" : "idle";
+    const vColor = vaultState === "idle" ? GROUP_BASE.vault : palette[vaultState];
+    const vRunning = vaultState === "running";
+    const vRadius = vRunning ? (tick % 2 === 0 ? 14 : 12) : 13;
+    ctx.font = "bold 7px 'Geist', sans-serif";
+    drawNode(ctx, cx, vaultY, vRadius, vColor, "VAULT", "#fff", vRunning, borderColor);
 
-    ctx.fillStyle = vaultState === "idle" ? GROUP_BASE.vault : palette[vaultState];
-    ctx.beginPath(); ctx.arc(cx, vy, 11, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#fff"; ctx.font = "bold 6px 'Geist', sans-serif";
-    ctx.fillText("VAULT", cx, vy);
+    // Vault label
+    ctx.fillStyle = paletteIsLight ? "#6a6860" : "#6a6860";
+    ctx.font = "400 7px 'Geist', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(a.vault.protocol, cx, vaultY + 22);
   });
+
+  ctx.restore();
 };
 
 const AgentGraph = ({ strategy, execMap, onAgentClick, paletteIsLight }) => {
   const containerRef = useRAg(null);
-  const nvlRef = useRAg(null);
-  const clickHandlerRef = useRAg(null);
-  const pulseRef = useRAg(null);
   const canvasRef = useRAg(null);
+  const tickRef = useRAg(0);
+  const animRef = useRAg(null);
 
-  const [nvlReady, setNvlReady] = useAg(!!window._nvl);
-  const [useFallback, setUseFallback] = useAg(false);
+  const palette = paletteIsLight ? GRAPH_COLOR_LIGHT : GRAPH_COLOR;
 
-  // Listen to async NVL loaded bridge event
+  // Resize canvas to match container
   useEAg(() => {
-    if (window._nvl) { setNvlReady(true); return; }
-    const handleReady = () => {
-      if (window._nvl) setNvlReady(true);
-      else setUseFallback(true);
-    };
-    window.addEventListener("nvl-ready", handleReady);
-    // If NVL still not loaded after 6s, use fallback
-    const timeout = setTimeout(() => {
-      if (!window._nvl) {
-        console.warn("[AgentGraph] NVL not loaded after 6s, using canvas fallback");
-        setUseFallback(true);
-      }
-    }, 6000);
-    return () => {
-      window.removeEventListener("nvl-ready", handleReady);
-      clearTimeout(timeout);
-    };
-  }, []);
-
-  const palette = paletteIsLight ? NVL_COLOR_LIGHT : NVL_COLOR;
-
-  // Try NVL, fall back to canvas if it fails
-  useEAg(() => {
-    if (!containerRef.current) return;
-    if (useFallback) return; // handled by fallback effect
-    if (!window._nvl) return;
-
-    const { NVL } = window._nvl;
-    if (!NVL) { setUseFallback(true); return; }
-
-    const { nodes, rels } = buildGraphTopology(strategy);
-
-    const options = {
-      layout: "hierarchical",
-      renderer: "canvas",
-      disableTelemetry: true,
-      disableWebWorkers: true,
-      initialZoom: 0.72,
-      minZoom: 0.2,
-      maxZoom: 2,
-      styling: {
-        defaultNodeColor: palette.idle,
-        defaultRelationshipColor: paletteIsLight ? "#aaa6a0" : "#3a3a35",
-        dropShadowColor: paletteIsLight ? "rgba(176,122,26,0.35)" : "rgba(207,255,61,0.35)",
-        selectedBorderColor: "#cfff3d",
-        nodeDefaultBorderColor: paletteIsLight ? "#95928a" : "#56564f",
-      },
-    };
-
-    let nvl;
-    try {
-      nvl = new NVL(containerRef.current, nodes, rels, options, {
-        onLayoutDone: () => {
-          setTimeout(() => {
-            try { if (nvlRef.current) nvlRef.current.fit([]); } catch (e) { console.warn("[NVL] fit failed:", e); }
-          }, 50);
-        },
-      });
-      nvlRef.current = nvl;
-      console.log("[AgentGraph] NVL instance created successfully");
-
-      // Verify canvas was actually created
-      setTimeout(() => {
-        const hasCanvas = !!containerRef.current?.querySelector("canvas");
-        if (!hasCanvas) {
-          console.warn("[AgentGraph] NVL created but no canvas found, switching to fallback");
-          try { nvl.destroy(); } catch (e) { /* ignore */ }
-          nvlRef.current = null;
-          setUseFallback(true);
-        }
-      }, 500);
-    } catch (err) {
-      console.error("[AgentGraph] NVL constructor failed:", err);
-      setUseFallback(true);
-      return;
-    }
-
-    const onClick = (evt) => {
-      try {
-        const { nvlTargets } = nvl.getHits(evt);
-        const hit = nvlTargets?.nodes?.[0];
-        const id = hit?.data?.id ?? hit?.id;
-        if (id && strategy.agents.find((a) => a.id === id)) onAgentClick(id);
-      } catch (e) { /* ignore click errors */ }
-    };
-    containerRef.current.addEventListener("click", onClick);
-    clickHandlerRef.current = onClick;
-
-    return () => {
-      if (pulseRef.current) clearInterval(pulseRef.current);
-      if (clickHandlerRef.current && containerRef.current) {
-        containerRef.current.removeEventListener("click", clickHandlerRef.current);
-      }
-      try { nvl.destroy(); } catch (e) { /* ignore */ }
-      nvlRef.current = null;
-    };
-  }, [strategy, paletteIsLight, nvlReady, useFallback]);
-
-  // Fallback canvas rendering
-  useEAg(() => {
-    if (!useFallback || !canvasRef.current) return;
     const canvas = canvasRef.current;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (rect) {
-      canvas.width = rect.width * (window.devicePixelRatio || 1);
-      canvas.height = rect.height * (window.devicePixelRatio || 1);
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = container.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
       canvas.style.width = rect.width + "px";
       canvas.style.height = rect.height + "px";
-      const ctx = canvas.getContext("2d");
-      ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
-    }
-    drawFallbackGraph(canvas, strategy, execMap, palette);
-  }, [useFallback, execMap, strategy, paletteIsLight]);
-
-  // NVL state-driven styling
-  useEAg(() => {
-    const nvl = nvlRef.current;
-    if (!nvl) return;
-
-    const orchState = computeOrchestratorState(execMap);
-    const updates = [{ id: "orchestrator", ...nvlStyleFor(orchState, palette), color: orchState === "idle" ? GROUP_BASE.orchestrator : nvlStyleFor(orchState, palette).color }];
-
-    strategy.agents.forEach((a) => {
-      const ex = execMap[a.id] || { status: "idle", steps: {} };
-      updates.push({ id: a.id, ...nvlStyleFor(ex.status, palette) });
-      STEP_IDS.forEach((sid) => {
-        updates.push({ id: `${a.id}-${sid}`, ...nvlStyleFor(ex.steps?.[sid] || "idle", palette) });
-      });
-      const vaultState =
-        ex.steps?.deposit === "confirmed" ? "confirmed" :
-        ex.steps?.deposit === "running" ? "running" :
-        ex.steps?.deposit === "failed" ? "failed" : "idle";
-      const vaultColor = vaultState === "idle" ? GROUP_BASE.vault : palette[vaultState];
-      updates.push({ id: `${a.id}-vault`, color: vaultColor, activated: vaultState === "running" });
-    });
-
-    try { nvl.updateElementsInGraph(updates, []); } catch (e) { console.warn("[NVL] updateElements failed:", e); }
-
-    // Pulse running nodes
-    if (pulseRef.current) clearInterval(pulseRef.current);
-    let big = false;
-    pulseRef.current = setInterval(() => {
-      const n = nvlRef.current;
-      if (!n) return;
-      big = !big;
-      const pulses = [];
-      const orch = computeOrchestratorState(execMap);
-      if (orch === "running") pulses.push({ id: "orchestrator", size: big ? 38 : 34 });
-      strategy.agents.forEach((a) => {
-        const ex = execMap[a.id] || { status: "idle", steps: {} };
-        if (ex.status === "running") pulses.push({ id: a.id, size: big ? 29 : 26 });
-        STEP_IDS.forEach((sid) => {
-          if (ex.steps?.[sid] === "running") pulses.push({ id: `${a.id}-${sid}`, size: big ? 21 : 18 });
-        });
-        if (ex.steps?.deposit === "running") pulses.push({ id: `${a.id}-vault`, size: big ? 25 : 22 });
-      });
-      if (pulses.length) { try { n.updateElementsInGraph(pulses, []); } catch (e) { /* ignore */ } }
-    }, 550);
-
-    return () => {
-      if (pulseRef.current) clearInterval(pulseRef.current);
+      renderGraph(canvas, strategy, execMap, palette, paletteIsLight, tickRef.current);
     };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, [strategy, paletteIsLight]);
+
+  // Render on every execMap change + pulse animation
+  useEAg(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Immediate render
+    renderGraph(canvas, strategy, execMap, palette, paletteIsLight, tickRef.current);
+
+    // Pulse animation (toggle size on running nodes)
+    const hasRunning = Object.values(execMap).some(
+      (ex) => ex.status === "running" || Object.values(ex.steps || {}).some((s) => s === "running")
+    );
+    if (animRef.current) clearInterval(animRef.current);
+    if (hasRunning) {
+      animRef.current = setInterval(() => {
+        tickRef.current += 1;
+        renderGraph(canvas, strategy, execMap, palette, paletteIsLight, tickRef.current);
+      }, 550);
+    }
+    return () => { if (animRef.current) clearInterval(animRef.current); };
   }, [execMap, strategy, paletteIsLight]);
 
-  // Fallback: click on canvas → detect which agent was clicked
-  const handleFallbackClick = (evt) => {
-    if (!useFallback || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
+  // Click detection
+  const handleClick = (evt) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
     const x = evt.clientX - rect.left;
+    const y = evt.clientY - rect.top;
     const agents = strategy.agents;
     const colW = rect.width / (agents.length + 1);
     agents.forEach((a, i) => {
       const cx = colW * (i + 1);
-      if (Math.abs(x - cx) < 20) onAgentClick(a.id);
+      // Click anywhere in the agent column = open memory
+      if (Math.abs(x - cx) < 30 && y > 70) onAgentClick(a.id);
     });
   };
 
   return (
     <div ref={containerRef} className="agent-graph">
-      {useFallback && <canvas ref={canvasRef} onClick={handleFallbackClick} style={{ width: "100%", height: "100%", cursor: "pointer" }} />}
+      <canvas ref={canvasRef} onClick={handleClick} style={{ width: "100%", height: "100%", cursor: "pointer" }} />
     </div>
   );
 };

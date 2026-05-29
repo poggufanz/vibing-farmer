@@ -284,7 +284,8 @@ const App = () => {
 
   const addLog = (entry) => {
     logIdRef.current += 1;
-    setLogs((l) => [...l, { id: logIdRef.current, time: nowT(), ...entry }]);
+    const uid = `${logIdRef.current}-${Date.now()}`;
+    setLogs((l) => [...l, { id: uid, time: nowT(), ...entry }]);
   };
 
   /* ----- STRATEGY (step 01) ----- */
