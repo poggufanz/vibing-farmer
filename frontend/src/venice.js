@@ -1,18 +1,10 @@
-import { VENICE_BASE_URL, VENICE_MODEL, VENICE_TIMEOUT_MS, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEMO_VAULTS } from './config.js'
+import { VENICE_BASE_URL, VENICE_MODEL, VENICE_TIMEOUT_MS, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, VAULT_CATALOG } from './config.js'
+import { loadVaultSkill } from './skillLoader.js'
 
 // AI provider priority: Venice x402 → DeepSeek (dev) → hardcoded fallback
 // Venice x402: wallet SIWE auth, pays USDC on Base — no API key needed
 // DeepSeek: dev mode, OpenAI-compat, needs API key
 // Fallback: hardcoded equal split — always works
-
-const FALLBACK_STRATEGY = {
-  vaults: [
-    { address: DEMO_VAULTS[0].address, name: DEMO_VAULTS[0].name, allocation: 0.5, expectedApy: 8.2 },
-    { address: DEMO_VAULTS[1].address, name: DEMO_VAULTS[1].name, allocation: 0.5, expectedApy: 12.7 }
-  ],
-  rationale: 'Fallback: equal split across available vaults',
-  generatedBy: 'fallback'
-}
 
 /**
  * Call an OpenAI-compatible chat completions endpoint.
@@ -72,11 +64,23 @@ function resolveProvider(veniceAuth, devApiKey) {
  * @param {string|null} params.devApiKey - DeepSeek API key for dev mode
  */
 export async function generateStrategy({ amount, riskLevel, numVaults, veniceAuth, devApiKey }) {
+  // Load skill (user override or default) and inject the live vault catalog
+  const skill = await loadVaultSkill()
+  const systemPrompt = skill.content.replace('[VAULT_CATALOG_JSON]', JSON.stringify(VAULT_CATALOG, null, 2))
+  const safeNumVaults = Math.min(numVaults, VAULT_CATALOG.length) // fixes high-risk fallback bug
+
   const provider = resolveProvider(veniceAuth, devApiKey)
   if (!provider) {
     console.warn('[ai] No provider — using fallback strategy')
-    return buildFallbackForParams(amount, numVaults)
+    return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source }
   }
+
+  const userPrompt = `User profile:
+- Amount: ${amount} USDC
+- Risk tolerance: ${riskLevel}
+- Requested vault count: ${safeNumVaults}
+
+Select the optimal vault(s). Apply your expert framework. Respond in JSON only.`
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS)
@@ -85,38 +89,18 @@ export async function generateStrategy({ amount, riskLevel, numVaults, veniceAut
     const content = await callChatCompletions(
       provider.baseUrl, provider.model, provider.headers,
       [
-        {
-          role: 'system',
-          content: 'You are a DeFi yield strategy generator. Respond ONLY with valid JSON matching the requested schema. No explanation outside JSON.'
-        },
-        {
-          role: 'user',
-          content: `Generate a yield farming strategy.
-Amount: ${amount} USDC
-Risk level: ${riskLevel}
-Number of vaults: ${numVaults}
-Available vaults: ${JSON.stringify(DEMO_VAULTS)}
-
-Respond with JSON schema:
-{
-  "vaults": [{ "address": "0x...", "name": "...", "allocation": 0.5, "expectedApy": 8.2 }],
-  "rationale": "one sentence",
-  "generatedBy": "${provider.name}"
-}
-
-allocations must sum to 1.0. Use exactly ${numVaults} vaults.`
-        }
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
       ],
       provider.isVenice,
       controller.signal
     )
-    const parsed = JSON.parse(content)
-    validateStrategy(parsed, numVaults)
-    console.log(`[ai] Strategy via ${provider.name}`)
-    return parsed
+    const parsed = validateVeniceResponse(JSON.parse(content))
+    console.log(`[ai] Strategy via ${provider.name} · skill: ${skill.source}`)
+    return { ...parsed, generatedBy: provider.name, skillSource: skill.source }
   } catch (err) {
     console.warn(`[ai] Strategy failed (${provider.name}), using fallback:`, err.message)
-    return buildFallbackForParams(amount, numVaults)
+    return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source }
   } finally {
     clearTimeout(timeout)
   }
@@ -190,10 +174,10 @@ Respond with JSON schema:
 }
 
 function buildFallbackForParams(amount, numVaults) {
-  const count = Math.min(numVaults, DEMO_VAULTS.length)
+  const count = Math.min(numVaults, VAULT_CATALOG.length)
   const allocation = 1 / count
   return {
-    vaults: DEMO_VAULTS.slice(0, count).map(v => ({
+    vaults: VAULT_CATALOG.slice(0, count).map(v => ({
       address: v.address,
       name: v.name,
       allocation,
@@ -204,9 +188,31 @@ function buildFallbackForParams(amount, numVaults) {
   }
 }
 
-function validateStrategy(strategy, numVaults) {
-  if (!Array.isArray(strategy.vaults)) throw new Error('Missing vaults array')
-  if (strategy.vaults.length !== numVaults) throw new Error(`Expected ${numVaults} vaults`)
-  const total = strategy.vaults.reduce((s, v) => s + v.allocation, 0)
-  if (Math.abs(total - 1.0) > 0.01) throw new Error('Allocations do not sum to 1.0')
+function validateVeniceResponse(response) {
+  const allowedAddresses = new Set(VAULT_CATALOG.map(v => v.address.toLowerCase()))
+
+  if (!response.selected_vaults || !Array.isArray(response.selected_vaults)) {
+    throw new Error('Missing selected_vaults array')
+  }
+
+  response.selected_vaults.forEach((v, i) => {
+    if (!allowedAddresses.has(v.address?.toLowerCase())) {
+      throw new Error(`Vault ${i}: hallucinated address ${v.address}`)
+    }
+    if (!v.reasoning || v.reasoning.length < 20) {
+      throw new Error(`Vault ${i}: reasoning missing or too short`)
+    }
+  })
+
+  const total = response.selected_vaults.reduce((s, v) => s + v.allocation, 0)
+  if (Math.abs(total - 1.0) > 0.01) {
+    throw new Error(`Allocation sum ${total.toFixed(2)} !== 1.0`)
+  }
+
+  // Cap to catalog size
+  if (response.selected_vaults.length > VAULT_CATALOG.length) {
+    response.selected_vaults = response.selected_vaults.slice(0, VAULT_CATALOG.length)
+  }
+
+  return response
 }

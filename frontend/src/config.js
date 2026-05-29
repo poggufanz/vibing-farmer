@@ -34,8 +34,54 @@ export const DEPOSITOR_ABI = [
   'event AgentFailed(bytes32 indexed agentId, address indexed user, string reason)'
 ]
 
-// Default vault list for demo
-export const DEMO_VAULTS = [
-  { name: 'MockVault USDC-A', address: MOCK_VAULT_A_ADDRESS, apy: 8.2 },
-  { name: 'MockVault USDC-B', address: MOCK_VAULT_B_ADDRESS, apy: 12.7 }
+// Vault catalog — enriched metadata so the AI advisor can reason, not just split.
+// All entries map to the two really-deployed MockVaults (execution-safe universe).
+export const VAULT_CATALOG = [
+  {
+    name: 'Aave v3 USDC',
+    protocol: 'aave-v3',
+    address: MOCK_VAULT_A_ADDRESS,
+    apy: 4.8,
+    risk: 'low',
+    yield_source: 'lending',
+    drawdown: '-1.2',
+    min_capital: 100,
+    description: 'Overcollateralized pooled lending. Battle-tested, highest TVL in DeFi. Best for principal preservation.'
+  },
+  {
+    name: 'Morpho Blue USDC',
+    protocol: 'morpho-blue',
+    address: MOCK_VAULT_B_ADDRESS,
+    apy: 6.1,
+    risk: 'medium',
+    yield_source: 'curated',
+    drawdown: '-2.8',
+    min_capital: 500,
+    description: 'Curator-managed isolated lending markets. Better yield than Aave, curator-dependent risk.'
+  },
+  {
+    name: 'Pendle PT-USDC',
+    protocol: 'pendle-v2',
+    address: MOCK_VAULT_B_ADDRESS,
+    apy: 9.4,
+    risk: 'high',
+    yield_source: 'structured',
+    drawdown: '-6.5',
+    min_capital: 1000,
+    description: 'Fixed-rate yield via zero-coupon bond mechanics. Hold to maturity or face AMM exit loss.'
+  },
+  {
+    name: 'Fluid USDC',
+    protocol: 'fluid',
+    address: MOCK_VAULT_A_ADDRESS,
+    apy: 5.2,
+    risk: 'high',
+    yield_source: 'hybrid',
+    drawdown: '-4.1',
+    min_capital: 2000,
+    description: 'Unified lending + DEX architecture. Highest capital efficiency, highest architectural risk.'
+  }
 ]
+
+// Back-compat alias — older imports referenced DEMO_VAULTS
+export const DEMO_VAULTS = VAULT_CATALOG

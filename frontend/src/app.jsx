@@ -22,6 +22,7 @@ import { connectWallet, requestERC7715Permission, signSiweForVenice } from './wa
 import { generateStrategy } from './venice.js';
 import { OrchestratorAgent } from './orchestrator.js';
 import { makeAgentId } from './worker.js';
+import { VAULT_CATALOG } from './config.js';
 
 /* ---------- Right rail panels ---------- */
 const WalletPanel = ({ phase, address }) => {
@@ -231,29 +232,36 @@ const nowT = () => {
 // Map real worker step names → design's 3-step model
 const WORKER_STEP_MAP = { swap: "swap", approve: "approve", deposit: "deposit" };
 
-// Map Venice strategy output → design strategy format
+// Map Venice strategy output (selected_vaults schema) → design strategy format
 const mapVeniceToStrategy = (veniceResult, amount, risk) => {
   const total = Number(amount);
   const PROTOCOLS = ["aave-v3", "morpho-blue", "pendle-v2"];
-  const DRAWDOWNS = ["-1.8", "-3.6", "-7.2"];
   const ROLES = ["Conservative · lending", "Balanced · liquidity provision", "Aggressive · leveraged yield"];
-  const agents = veniceResult.vaults.map((v, i) => ({
-    id: `worker-${i + 1}`,
-    idx: String(i + 1).padStart(2, "0"),
-    name: `Worker ${i + 1} · ${ROLES[i]?.split(" · ")[0] || "Conservative"}`,
-    role: ROLES[i] || "Conservative · lending",
-    allocation: +(total * v.allocation).toFixed(2),
-    skillName: "yield_vault_deposit",
-    vault: {
-      name: v.name || `MockVault ${i + 1}`,
-      protocol: PROTOCOLS[i] || "aave-v3",
-      apy: String(v.expectedApy || 8.2),
-      drawdown: DRAWDOWNS[i] || "-1.8",
-      addr: v.address,
-    },
-  }));
+  const byAddr = (addr) => VAULT_CATALOG.find((c) => c.address.toLowerCase() === String(addr).toLowerCase()) || {};
+  const list = veniceResult.selected_vaults || [];
+  const agents = list.map((v, i) => {
+    const cat = byAddr(v.address);
+    return {
+      id: `worker-${i + 1}`,
+      idx: String(i + 1).padStart(2, "0"),
+      name: `Worker ${i + 1} · ${ROLES[i]?.split(" · ")[0] || "Conservative"}`,
+      role: ROLES[i] || "Conservative · lending",
+      allocation: +(total * v.allocation).toFixed(2),
+      skillName: "yield_vault_deposit",
+      reasoning: v.reasoning,                    // AI metadata → UI
+      riskTier: v.risk_tier,                     // AI metadata → UI
+      yieldSource: v.yield_source_type,          // AI metadata → UI
+      vault: {
+        name: v.name || cat.name || `MockVault ${i + 1}`,
+        protocol: v.protocol || cat.protocol || PROTOCOLS[i] || "aave-v3",
+        apy: String(v.expected_apy ?? cat.apy ?? 4.8),
+        drawdown: cat.drawdown || "-1.8",
+        addr: v.address,
+      },
+    };
+  });
   const blended = agents.reduce((acc, a) => acc + Number(a.vault.apy) * (a.allocation / total), 0);
-  return { agents, total, blendedApy: blended.toFixed(1), risk, rationale: veniceResult.rationale };
+  return { agents, total, blendedApy: blended.toFixed(1), risk, rationale: veniceResult.strategy_summary || veniceResult.rationale };
 };
 
 /* ---------- App ---------- */
@@ -270,6 +278,7 @@ const App = () => {
   const [strategyPhase, setStrategyPhase] = useS("input"); // input | thinking | ready
   const [thinkingPhase, setThinkingPhase] = useS(0);
   const [strategy, setStrategy] = useS(null);
+  const [skillSource, setSkillSource] = useS("default");
 
   const [connectPhase, setConnectPhase] = useS("idle");
 
@@ -333,8 +342,8 @@ const App = () => {
           veniceAuth: null, // wallet not connected yet at step 1
           devApiKey: devApiKey || null,
         });
-        if (veniceResult.generatedBy !== "fallback") {
-          s = mapVeniceToStrategy(veniceResult, amount, risk);
+        setSkillSource(veniceResult.skillSource || "default");
+        if (veniceResult.generatedBy !== "fallback") {          s = mapVeniceToStrategy(veniceResult, amount, risk);
           addLog({ event: "OrchestratorPlanned", meta: `strategy via ${veniceResult.generatedBy} · ${veniceResult.rationale?.slice(0, 60)}` });
         }
       } catch (e) {
@@ -700,7 +709,7 @@ const App = () => {
           return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} devApiKey={devApiKey} setDevApiKey={setDevApiKey} onSubmit={handleSubmitPreference} />;
         if (strategyPhase === "thinking")
           return <ThinkingCard phase={thinkingPhase} />;
-        return <StrategyCard strategy={strategy} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} />;
+        return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} />;
       case "connect":
         return <ConnectCard phase={connectPhase} onConnect={handleConnect} onUpgrade={handleUpgrade} onDone={handleConnectDone} onCancel={() => { setConnectPhase("idle"); setStage("strategy"); }} />;
       case "skills":

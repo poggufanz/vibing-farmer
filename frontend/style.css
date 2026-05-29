@@ -1813,6 +1813,11 @@ input, select, textarea {
 
 .agent-graph canvas { outline: none !important; }
 
+/* Skill-source badge on the strategy card */
+.skill-badge { margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; letter-spacing: 0.02em; }
+.skill-badge.default { background: rgba(120,120,110,0.18); color: var(--text-faint); }
+.skill-badge.custom { background: rgba(207,255,61,0.18); color: #cfff3d; }
+
 .agent-legend {
   display: flex;
   align-items: center;

@@ -362,7 +362,8 @@ const MemoryModal = ({ agentId, strategy, execMap, onClose }) => {
 /* ============================================
    Strategy card (step 02 result) — multi-agent
    ============================================ */
-const StrategyCard = ({ strategy, onProceed, onRegenerate }) => {
+const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate }) => {
+  const customSkill = skillSource === "user-local" || skillSource === "user-file";
   return (
     <section className="rec-card enter">
       <div className="eyebrow">
@@ -370,6 +371,9 @@ const StrategyCard = ({ strategy, onProceed, onRegenerate }) => {
         <span>Strategy · {strategy.agents.length} worker{strategy.agents.length === 1 ? "" : "s"} · {strategy.risk} risk</span>
         <span className="rule" />
         <span>{strategy.agents.reduce((n) => n + 1, 0) * 3} on-chain steps</span>
+        <span className={`skill-badge ${customSkill ? "custom" : "default"}`} title={`advisor skill: ${skillSource || "default"}`}>
+          {customSkill ? "Custom Strategy" : "Default Strategy"}
+        </span>
       </div>
 
       <div className="rec-hgroup">
