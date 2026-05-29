@@ -9,5 +9,8 @@ export default defineConfig({
     rollupOptions: {
       external: []
     }
+  },
+  optimizeDeps: {
+    include: ['react-force-graph-2d']
   }
 })

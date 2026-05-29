@@ -4,9 +4,11 @@
      Orchestrator → Worker Agents → Step nodes (Swap/Approve/Deposit) → Vault nodes
    Node colors driven by state: idle / running / confirmed / failed
    ============================================ */
-import React, { useEffect as useEAg, useMemo as useMAg, useCallback as useCAg } from 'react';
-import { ReactFlow, Background } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+import React, {
+  useEffect as useEAg, useMemo as useMAg, useCallback as useCAg,
+  useRef as useRAg, useState as useSAg,
+} from 'react';
+import ForceGraph2D from 'react-force-graph-2d';
 import { Icon } from './components.jsx';
 import { shortAddr } from './screens.jsx';
 
@@ -93,117 +95,137 @@ const computeOrchestratorState = (execMap) => {
 };
 
 /* ============================================
-   Agent Graph — React Flow node/edge builder
-   Hierarchical layout: Orchestrator → Workers → Steps (Swap/Approve/Deposit) → Vaults
+   Agent Graph — force-directed network (Obsidian-style)
+   Topology: Orchestrator → Workers → Steps (Swap/Approve/Deposit) → Vault
    ============================================ */
-const COL_W = 190;
-const WORKER_Y = 110;
-const STEP_Y0 = 200;
-const STEP_GAP = 80;
+const NODE_R = { orchestrator: 9, worker: 6.5, step: 4, vault: 6.5 };
 
-// Pick readable text color for a given hex background
-const textOn = (hex) => {
-  const c = hex.replace("#", "");
-  const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
-  return (r * 299 + g * 587 + b * 114) / 1000 > 140 ? "#1a1b16" : "#f5f5f0";
-};
-
-const flowNode = (id, label, x, y, bg, border, running, clickable) => ({
-  id,
-  position: { x, y },
-  data: { label },
-  sourcePosition: "bottom",
-  targetPosition: "top",
-  draggable: false,
-  selectable: clickable,
-  className: running ? "rf-node rf-running" : "rf-node",
-  style: {
-    background: bg, color: textOn(bg), border: `1.5px solid ${border}`,
-    borderRadius: 10, fontSize: 11, fontWeight: 600, width: 124,
-    padding: "7px 6px", textAlign: "center", cursor: clickable ? "pointer" : "default",
-  },
-});
-
-const flowEdge = (source, target, active, edgeColor) => ({
-  id: `${source}->${target}`,
-  source, target,
-  animated: active,
-  style: { stroke: active ? "#cfff3d" : edgeColor, strokeWidth: 1.5 },
-});
-
-const buildFlow = (strategy, execMap, paletteIsLight) => {
-  const palette = paletteIsLight ? GRAPH_COLOR_LIGHT : GRAPH_COLOR;
-  const edgeColor = paletteIsLight ? "#c0bdb5" : "#3a3a35";
-  const border = paletteIsLight ? "#95928a" : "#56564f";
-  const n = strategy.agents.length;
-  const centerX = ((n - 1) * COL_W) / 2;
-
-  const orchState = computeOrchestratorState(execMap);
-  const orchColor = orchState === "idle" ? GROUP_BASE.orchestrator : (palette[orchState] || palette.idle);
-  const nodes = [flowNode("orchestrator", "ORCHESTRATOR", centerX, 0, orchColor, border, orchState === "running", false)];
-  const edges = [];
-
-  strategy.agents.forEach((a, i) => {
-    const x = i * COL_W;
-    const ex = execMap[a.id] || { status: "idle", steps: {} };
-    nodes.push(flowNode(a.id, `W${a.idx} · ${a.vault.protocol}`, x, WORKER_Y,
-      palette[ex.status] || palette.idle, border, ex.status === "running", true));
-    edges.push(flowEdge("orchestrator", a.id, ex.status !== "idle", edgeColor));
-
+// Stable node/link objects — only rebuilt when the strategy changes,
+// so the physics simulation keeps positions across exec-state updates.
+const buildGraphData = (strategy) => {
+  const nodes = [{ id: "orchestrator", name: "Orchestrator", kind: "orchestrator" }];
+  const links = [];
+  strategy.agents.forEach((a) => {
+    nodes.push({ id: a.id, name: `W${a.idx} · ${a.vault.protocol}`, kind: "worker", agentId: a.id });
+    links.push({ source: "orchestrator", target: a.id });
     let prev = a.id;
-    STEP_IDS.forEach((sid, si) => {
-      const sId = `${a.id}-${sid}`;
-      const s = ex.steps?.[sid] || "idle";
-      nodes.push(flowNode(sId, STEP_LABELS[sid], x, STEP_Y0 + si * STEP_GAP,
-        palette[s] || palette.idle, border, s === "running", false));
-      edges.push(flowEdge(prev, sId, s !== "idle", edgeColor));
-      prev = sId;
+    STEP_IDS.forEach((sid) => {
+      const id = `${a.id}-${sid}`;
+      nodes.push({ id, name: STEP_LABELS[sid], kind: "step", agentId: a.id, stepId: sid });
+      links.push({ source: prev, target: id });
+      prev = id;
     });
-
-    const vaultState =
-      ex.steps?.deposit === "confirmed" ? "confirmed" :
-      ex.steps?.deposit === "running" ? "running" :
-      ex.steps?.deposit === "failed" ? "failed" : "idle";
     const vId = `${a.id}-vault`;
-    nodes.push(flowNode(vId, `VAULT · ${a.vault.apy}%`, x, STEP_Y0 + STEP_IDS.length * STEP_GAP,
-      vaultState === "idle" ? GROUP_BASE.vault : (palette[vaultState] || palette.idle), border, vaultState === "running", false));
-    edges.push(flowEdge(prev, vId, vaultState !== "idle", edgeColor));
+    nodes.push({ id: vId, name: `Vault · ${a.vault.apy}%`, kind: "vault", agentId: a.id });
+    links.push({ source: prev, target: vId });
   });
-
-  return { nodes, edges };
+  return { nodes, links };
 };
 
-/* ============================================
-   Agent Graph — React Flow renderer
-   ============================================ */
+const stepState = (ex) => {
+  const d = ex.steps?.deposit;
+  return d === "confirmed" ? "confirmed" : d === "running" ? "running" : d === "failed" ? "failed" : "idle";
+};
+
+const nodeColor = (node, execMap, palette) => {
+  if (node.kind === "orchestrator") {
+    const s = computeOrchestratorState(execMap);
+    return s === "idle" ? GROUP_BASE.orchestrator : (palette[s] || palette.idle);
+  }
+  const ex = execMap[node.agentId] || { status: "idle", steps: {} };
+  if (node.kind === "worker") return palette[ex.status] || palette.idle;
+  if (node.kind === "step") return palette[ex.steps?.[node.stepId] || "idle"] || palette.idle;
+  const s = stepState(ex);
+  return s === "idle" ? GROUP_BASE.vault : (palette[s] || palette.idle);
+};
+
+const nodeRunning = (node, execMap) => {
+  if (node.kind === "orchestrator") return computeOrchestratorState(execMap) === "running";
+  const ex = execMap[node.agentId] || { status: "idle", steps: {} };
+  if (node.kind === "worker") return ex.status === "running";
+  if (node.kind === "step") return ex.steps?.[node.stepId] === "running";
+  return stepState(ex) === "running";
+};
+
 const AgentGraph = ({ strategy, execMap, onAgentClick, paletteIsLight }) => {
-  const { nodes, edges } = useMAg(
-    () => buildFlow(strategy, execMap, paletteIsLight),
-    [strategy, execMap, paletteIsLight]
-  );
-  const agentIds = useMAg(() => new Set(strategy.agents.map((a) => a.id)), [strategy]);
-  const onNodeClick = useCAg((_, node) => {
-    if (agentIds.has(node.id)) onAgentClick?.(node.id);
-  }, [agentIds, onAgentClick]);
+  const fgRef = useRAg(null);
+  const wrapRef = useRAg(null);
+  const execRef = useRAg(execMap);
+  const fittedRef = useRAg(false);
+  const [size, setSize] = useSAg({ w: 0, h: 0 });
+  execRef.current = execMap;
+  const palette = paletteIsLight ? GRAPH_COLOR_LIGHT : GRAPH_COLOR;
+  const data = useMAg(() => buildGraphData(strategy), [strategy]);
+
+  // Measure container so the canvas fills it
+  useEAg(() => {
+    if (!wrapRef.current) return;
+    const ro = new ResizeObserver(([e]) => {
+      const { width, height } = e.contentRect;
+      setSize({ w: width, h: height });
+    });
+    ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Spread the layout a bit wider than the default
+  useEAg(() => {
+    const fg = fgRef.current;
+    if (!fg || !size.w) return;
+    fg.d3Force("charge")?.strength(-90);
+    fg.d3Force("link")?.distance(30);
+  }, [data, size.w]);
+
+  // Repaint when execution state changes (also gives an Obsidian-like nudge)
+  useEAg(() => { fgRef.current?.d3ReheatSimulation(); }, [execMap]);
+
+  const drawNode = useCAg((node, ctx) => {
+    const color = nodeColor(node, execRef.current, palette);
+    const r = NODE_R[node.kind] || 5;
+    if (nodeRunning(node, execRef.current)) { ctx.shadowColor = color; ctx.shadowBlur = 16; }
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 0.6;
+    ctx.strokeStyle = paletteIsLight ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.18)";
+    ctx.stroke();
+    ctx.font = "600 4px Geist, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = paletteIsLight ? "#4a4840" : "#cfcdc4";
+    ctx.fillText(node.name, node.x, node.y + r + 1.5);
+  }, [palette, paletteIsLight]);
 
   return (
-    <div className="agent-graph">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodeClick={onNodeClick}
-        fitView
-        fitViewOptions={{ padding: 0.18 }}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        zoomOnScroll={false}
-        panOnScroll
-        minZoom={0.2}
-        maxZoom={2}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background color={paletteIsLight ? "#d8d5cd" : "#2a2a26"} gap={20} size={1} />
-      </ReactFlow>
+    <div className="agent-graph" ref={wrapRef}>
+      {size.w > 0 && (
+        <ForceGraph2D
+          ref={fgRef}
+          width={size.w}
+          height={size.h}
+          graphData={data}
+          backgroundColor="rgba(0,0,0,0)"
+          nodeCanvasObject={drawNode}
+          nodePointerAreaPaint={(node, color, ctx) => {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, (NODE_R[node.kind] || 5) + 2, 0, 2 * Math.PI);
+            ctx.fill();
+          }}
+          linkColor={() => (paletteIsLight ? "#c4c1b8" : "#3a3a32")}
+          linkWidth={1}
+          cooldownTicks={120}
+          onEngineStop={() => {
+            if (!fittedRef.current && fgRef.current) {
+              fgRef.current.zoomToFit(400, 24);
+              fittedRef.current = true;
+            }
+          }}
+          onNodeClick={(node) => { if (node.kind === "worker") onAgentClick?.(node.id); }}
+        />
+      )}
     </div>
   );
 };
