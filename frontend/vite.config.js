@@ -11,7 +11,8 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', '@neo4j-nvl/base', 'ethers', 'viem']
+    include: ['react', 'react-dom', 'ethers', 'viem'],
+    exclude: ['@neo4j-nvl/base']
   },
   worker: {
     format: 'es'
