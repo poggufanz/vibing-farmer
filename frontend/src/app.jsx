@@ -23,6 +23,7 @@ import { generateStrategy } from './venice.js';
 import { OrchestratorAgent } from './orchestrator.js';
 import { makeAgentId } from './worker.js';
 import { VAULT_CATALOG } from './config.js';
+import SkillDrawer from './components/SkillDrawer.jsx';
 
 /* ---------- Right rail panels ---------- */
 const WalletPanel = ({ phase, address }) => {
@@ -162,6 +163,24 @@ const ActivityPanel = ({ logs }) => {
   );
 };
 
+const SkillPanel = ({ skillSource, onCustomize }) => {
+  const custom = skillSource === "user-local" || skillSource === "user-file";
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <div className="panel-title">Vault Advisor Skill</div>
+        <button className="panel-meta skill-customize" onClick={onCustomize}>customize →</button>
+      </div>
+      <div className="perm-status active">
+        {custom ? "Custom Strategy" : "Default Strategy by Yield Vibing"}
+      </div>
+      <div className="skill-sub">
+        {custom ? "active · user-defined" : "4 vaults · expert framework"}
+      </div>
+    </div>
+  );
+};
+
 /* ---------- Palette picker ---------- */
 const PALETTES = [
   { id: "acid-yield", name: "Acid Yield", swatch: ["#cfff3d", "#1a1b16", "#ecebe1"], desc: "Default · warm dark + acid lime" },
@@ -279,6 +298,7 @@ const App = () => {
   const [thinkingPhase, setThinkingPhase] = useS(0);
   const [strategy, setStrategy] = useS(null);
   const [skillSource, setSkillSource] = useS("default");
+  const [skillDrawerOpen, setSkillDrawerOpen] = useS(false);
 
   const [connectPhase, setConnectPhase] = useS("idle");
 
@@ -706,7 +726,7 @@ const App = () => {
     switch (stage) {
       case "strategy":
         if (strategyPhase === "input")
-          return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} devApiKey={devApiKey} setDevApiKey={setDevApiKey} onSubmit={handleSubmitPreference} />;
+          return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} onSubmit={handleSubmitPreference} />;
         if (strategyPhase === "thinking")
           return <ThinkingCard phase={thinkingPhase} />;
         return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} />;
@@ -764,7 +784,15 @@ const App = () => {
         <WalletPanel phase={walletPhase} address={realAddress} />
         <PermissionPanel active={permActive} strategy={strategy} onRevoke={handleRevoke} />
         <ActivityPanel logs={logs} />
+        <SkillPanel skillSource={skillSource} onCustomize={() => setSkillDrawerOpen(true)} />
       </aside>
+
+      <SkillDrawer
+        open={skillDrawerOpen}
+        onClose={() => setSkillDrawerOpen(false)}
+        skillSource={skillSource}
+        onSkillChange={(newSource) => setSkillSource(newSource)}
+      />
 
       {openAgentId && strategy && (
         <MemoryModal

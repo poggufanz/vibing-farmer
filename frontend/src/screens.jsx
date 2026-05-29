@@ -16,7 +16,7 @@ const RISK_OPTIONS = [
 /* ============================================
    01a — INPUT
    ============================================ */
-const InputScreen = ({ amount, setAmount, risk, setRisk, devApiKey, setDevApiKey, onSubmit }) => {
+const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
   const valid = Number(amount) > 0 && risk;
   return (
     <section className="card enter">
@@ -68,19 +68,6 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, devApiKey, setDevApiKey
                 <span className="risk-opt-sub">{r.sub}</span>
               </button>
             ))}
-          </div>
-        </div>
-
-        <div className="field-row" style={{ marginTop: 8 }}>
-          <div className="field-group" style={{ flex: 1 }}>
-            <div className="amount-label">DeepSeek API Key <span className="field-opt">(dev mode · optional)</span></div>
-            <input
-              type="password"
-              placeholder="isi untuk dev · kosong → Venice x402 wallet"
-              value={devApiKey}
-              onChange={(e) => setDevApiKey(e.target.value)}
-              style={{ width: "100%", boxSizing: "border-box" }}
-            />
           </div>
         </div>
       </div>

@@ -19,6 +19,8 @@ export const VENICE_TIMEOUT_MS = 10000
 // DeepSeek — OpenAI-compatible, used as dev fallback when Venice x402 not funded
 export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
 export const DEEPSEEK_MODEL = 'deepseek-v4-pro'
+// Server-side AI proxy — key stays on the server (see api/ai.js). No secret in client.
+export const AI_PROXY_URL = '/api/ai'
 
 // AgentVaultDepositor ABI — only what frontend needs
 export const DEPOSITOR_ABI = [

@@ -1,4 +1,4 @@
-import { VENICE_BASE_URL, VENICE_MODEL, VENICE_TIMEOUT_MS, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, VAULT_CATALOG } from './config.js'
+import { VENICE_BASE_URL, VENICE_MODEL, VENICE_TIMEOUT_MS, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, AI_PROXY_URL, VAULT_CATALOG } from './config.js'
 import { loadVaultSkill } from './skillLoader.js'
 
 // AI provider priority: Venice x402 → DeepSeek (dev) → hardcoded fallback
@@ -15,7 +15,7 @@ import { loadVaultSkill } from './skillLoader.js'
  * @param {boolean} isVenice - include venice_parameters when true
  * @param {AbortSignal} signal
  */
-async function callChatCompletions(baseUrl, model, headers, messages, isVenice, signal) {
+async function callChatCompletions(url, model, headers, messages, isVenice, signal) {
   const body = {
     model,
     response_format: { type: 'json_object' },
@@ -23,7 +23,7 @@ async function callChatCompletions(baseUrl, model, headers, messages, isVenice, 
   }
   if (isVenice) body.venice_parameters = { include_venice_system_prompt: false }
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     signal,
@@ -38,20 +38,28 @@ async function callChatCompletions(baseUrl, model, headers, messages, isVenice, 
 
 function resolveProvider(veniceAuth, devApiKey) {
   if (veniceAuth) return {
-    baseUrl: VENICE_BASE_URL,
+    url: `${VENICE_BASE_URL}/chat/completions`,
     model: VENICE_MODEL,
     headers: { 'X-Sign-In-With-X': veniceAuth },
     isVenice: true,
     name: 'venice-ai'
   }
+  // Manual dev override: direct DeepSeek with a user-supplied key
   if (devApiKey) return {
-    baseUrl: DEEPSEEK_BASE_URL,
+    url: `${DEEPSEEK_BASE_URL}/chat/completions`,
     model: DEEPSEEK_MODEL,
     headers: { 'Authorization': `Bearer ${devApiKey}` },
     isVenice: false,
     name: 'deepseek-ai'
   }
-  return null
+  // Default (production): server-side proxy — key never reaches the client
+  return {
+    url: AI_PROXY_URL,
+    model: DEEPSEEK_MODEL,
+    headers: {},
+    isVenice: false,
+    name: 'deepseek-proxy'
+  }
 }
 
 /**
@@ -87,7 +95,7 @@ Select the optimal vault(s). Apply your expert framework. Respond in JSON only.`
 
   try {
     const content = await callChatCompletions(
-      provider.baseUrl, provider.model, provider.headers,
+      provider.url, provider.model, provider.headers,
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -137,7 +145,7 @@ export async function generateAgentSkills({ agentId, vault, amount, veniceAuth, 
 
   try {
     const content = await callChatCompletions(
-      provider.baseUrl, provider.model, provider.headers,
+      provider.url, provider.model, provider.headers,
       [
         {
           role: 'system',
