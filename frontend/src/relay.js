@@ -1,3 +1,4 @@
+import { ethers } from 'ethers'
 import { ONE_SHOT_RELAYER_URL, AGENT_VAULT_DEPOSITOR_ADDRESS, SEPOLIA_CHAIN_ID } from './config.js'
 
 /**
@@ -10,7 +11,6 @@ import { ONE_SHOT_RELAYER_URL, AGENT_VAULT_DEPOSITOR_ADDRESS, SEPOLIA_CHAIN_ID }
  * @returns {Promise<string>} hex calldata
  */
 export async function encodeExecuteAgentDeposit(agentId, user, vault, amount) {
-  const { ethers } = await import('https://esm.sh/ethers')
   const iface = new ethers.Interface([
     'function executeAgentDeposit(bytes32 agentId, address user, address vault, uint256 amount)'
   ])
@@ -26,7 +26,6 @@ export async function encodeExecuteAgentDeposit(agentId, user, vault, amount) {
  * @returns {Promise<string>} hex calldata
  */
 export async function encodeGrantAgentPermission(agentId, vault, maxAmount, expiresAt) {
-  const { ethers } = await import('https://esm.sh/ethers')
   const iface = new ethers.Interface([
     'function grantAgentPermission(bytes32 agentId, address vault, uint256 maxAmount, uint256 expiresAt)'
   ])

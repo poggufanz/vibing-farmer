@@ -2,8 +2,26 @@
    YIELD VIBING — App (multi-agent + real Web3)
    Design state machine wired to real wallet.js / venice.js / orchestrator.js
    ============================================ */
+import React, { useState as useS, useEffect as useE, useRef as useR } from 'react';
 
-const { useState: useS, useEffect: useE, useRef: useR, useMemo: useM } = React;
+import { Icon, Sidebar, TopBar, StepRail, STEPS } from './components.jsx';
+import {
+  InputScreen, ThinkingCard, ConnectCard,
+  PermissionCard, SuccessCard, shortAddr, fakeHash,
+} from './screens.jsx';
+import { SkillReviewCard } from './skills.jsx';
+import {
+  StrategyCard, ExecuteCard, MemoryModal,
+  buildStrategy, makeInitialExecState,
+} from './agents.jsx';
+import {
+  useTweaks, TweaksPanel, TweakSection, TweakRadio,
+} from './tweaks-panel.jsx';
+
+import { connectWallet, requestERC7715Permission, signSiweForVenice } from './wallet.js';
+import { generateStrategy } from './venice.js';
+import { OrchestratorAgent } from './orchestrator.js';
+import { makeAgentId } from './worker.js';
 
 /* ---------- Right rail panels ---------- */
 const WalletPanel = ({ phase, address }) => {
@@ -268,6 +286,7 @@ const App = () => {
 
   const [logs, setLogs] = useS([]);
   const logIdRef = useR(0);
+  const agentMapRef = useR({});
 
   // Real Web3 state
   const [realAddress, setRealAddress] = useS(null);
@@ -305,10 +324,9 @@ const App = () => {
     const t = setTimeout(async () => {
       let s = null;
       try {
-        const yv = window._yv;
         const numVaults = { low: 1, med: 2, high: 3 }[risk] || 2;
         const riskLevel = risk === "med" ? "medium" : risk;
-        const veniceResult = await yv.generateStrategy({
+        const veniceResult = await generateStrategy({
           amount: Number(amount),
           riskLevel,
           numVaults,
@@ -347,7 +365,7 @@ const App = () => {
   const handleConnect = async () => {
     setConnectPhase("connecting");
     try {
-      const addr = await window._yv.connectWallet();
+      const addr = await connectWallet();
       setRealAddress(addr);
       setConnectPhase("connected");
       addLog({ event: "Connected", meta: shortAddr(addr) });
@@ -362,7 +380,7 @@ const App = () => {
     // Try Venice x402 SIWE signing — wallet now connected, no API key needed
     if (realAddress && !devApiKey) {
       try {
-        const auth = await window._yv.signSiweForVenice(realAddress);
+        const auth = await signSiweForVenice(realAddress);
         setVeniceAuth(auth);
         addLog({ event: "Authorized", meta: "venice x402 auth signed · SIWE" });
       } catch (e) {
@@ -430,7 +448,7 @@ const App = () => {
   const handlePermConfirm = async () => {
     setPermPhase("idle");
     try {
-      const permResult = await window._yv.requestERC7715Permission(86400);
+      const permResult = await requestERC7715Permission(86400);
       setPermContext(permResult.permissionContext);
       setPermActive(true);
       const ag = strategy?.agents || [];
@@ -466,10 +484,10 @@ const App = () => {
     const sessionId = `session-${Date.now()}`;
     const agentMap = {};
     strategy.agents.forEach((a, i) => {
-      const hexId = window._yv.makeAgentId(i, sessionId);
+      const hexId = makeAgentId(i, sessionId);
       agentMap[hexId] = a.id; // 'worker-1', 'worker-2', etc.
     });
-    window._yvAgentMap = agentMap;
+    agentMapRef.current = agentMap;
 
     const init = makeInitialExecState(strategy.agents);
     setExecMap(init);
@@ -482,7 +500,7 @@ const App = () => {
       })),
     };
 
-    const orch = new window._yv.OrchestratorAgent({
+    const orch = new OrchestratorAgent({
       user: realAddress,
       permissionContext: resolvedCtx,
       veniceAuth: veniceAuth,
@@ -493,7 +511,7 @@ const App = () => {
         if (!agentId) return;
 
         // Resolve hex agentId → design worker id ('worker-1', etc.)
-        const dId = window._yvAgentMap?.[agentId] || agentId;
+        const dId = agentMapRef.current?.[agentId] || agentId;
 
         if (evName === "started") {
           setExecMap((prev) => {
@@ -622,7 +640,7 @@ const App = () => {
     setVeniceAuth(null);
     setExecMap({});
     setLogs([]);
-    window._yvAgentMap = {};
+    agentMapRef.current = {};
   };
 
   const handleRevoke = () => {
@@ -809,4 +827,4 @@ const App = () => {
   );
 };
 
-Object.assign(window, { App, WalletPanel, PermissionPanel, ActivityPanel, PALETTES, PalettePicker });
+export default App;

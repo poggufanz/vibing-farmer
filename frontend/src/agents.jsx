@@ -4,8 +4,9 @@
      Orchestrator → Worker Agents → Step nodes (Swap/Approve/Deposit) → Vault nodes
    Node colors driven by state: idle / running / confirmed / failed
    ============================================ */
-
-const { useState: useAg, useEffect: useEAg, useRef: useRAg, useMemo: useMAg } = React;
+import React, { useEffect as useEAg, useRef as useRAg } from 'react';
+import { Icon } from './components.jsx';
+import { shortAddr } from './screens.jsx';
 
 /* ---------- Strategy data — generated per-flow ---------- */
 const AGENT_PROTOCOLS = [
@@ -580,7 +581,7 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
   );
 };
 
-Object.assign(window, {
+export {
   AgentGraph, AgentTiles, MemoryModal, StrategyCard, ExecuteCard,
   buildStrategy, makeInitialExecState, AGENT_PROTOCOLS, STEP_IDS, STEP_LABELS,
-});
+};

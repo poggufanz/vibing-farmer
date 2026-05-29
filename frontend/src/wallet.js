@@ -1,3 +1,4 @@
+import { ethers } from 'ethers'
 import { SEPOLIA_CHAIN_ID_HEX, AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, USDC_SEPOLIA } from './config.js'
 
 let ethersProvider = null
@@ -29,7 +30,6 @@ export async function connectWallet() {
   }
 
   // Setup ethers provider for contract calls
-  const { ethers } = await import('https://esm.sh/ethers')
   ethersProvider = new ethers.BrowserProvider(window.ethereum)
 
   return account
@@ -91,7 +91,6 @@ export async function requestERC7715Permission(expirySeconds = 86400) {
 export async function grantAgentPermissionOnChain(agentId, vault, maxAmount, expiresAt) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
   const signer = await ethersProvider.getSigner()
-  const { ethers } = await import('https://esm.sh/ethers')
   const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, signer)
   const tx = await contract.grantAgentPermission(agentId, vault, maxAmount, expiresAt)
   await tx.wait()
@@ -106,7 +105,6 @@ export async function grantAgentPermissionOnChain(agentId, vault, maxAmount, exp
  */
 export async function readAgentPermission(userAddress, agentId) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
-  const { ethers } = await import('https://esm.sh/ethers')
   const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, ethersProvider)
   const [vault, maxAmount, usedAmount, expiresAt, active] =
     await contract.agentPermissions(userAddress, agentId)
@@ -121,7 +119,6 @@ export async function readAgentPermission(userAddress, agentId) {
  */
 export async function onContractEvent(eventName, callback) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
-  const { ethers } = await import('https://esm.sh/ethers')
   const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, ethersProvider)
   contract.on(eventName, callback)
   return () => contract.off(eventName, callback)

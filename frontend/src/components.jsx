@@ -1,6 +1,7 @@
 /* ============================================
    YIELD VIBING — v2 shared components & icons
    ============================================ */
+import React from 'react';
 
 /* ---------- Icons (Lucide-style, stroke 1.5) ---------- */
 const Icon = ({ name, size = 16, className = "" }) => {
@@ -116,6 +117,4 @@ const StepRail = ({ stage }) => {
   );
 };
 
-Object.assign(window, {
-  Icon, Sidebar, TopBar, StepRail, STEPS,
-});
+export { Icon, Sidebar, TopBar, StepRail, STEPS };

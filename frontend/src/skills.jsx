@@ -3,8 +3,8 @@
    Auto-generated skill cards per worker agent.
    User can review, edit JSON, or approve each skill.
    ============================================ */
-
-const { useState: useSk, useMemo: useMemoSk } = React;
+import React, { useMemo as useMemoSk } from 'react';
+import { Icon } from './components.jsx';
 
 /* ---------- Skill template generator ---------- */
 const buildSkillForAgent = (agent, riskProfile) => {
@@ -213,6 +213,6 @@ const SkillReviewCard = ({ agents, riskProfile, skillStates, onApprove, onEdit, 
   );
 };
 
-Object.assign(window, {
+export {
   SkillReviewCard, SkillCard, JsonView, JsonEdit, buildSkillForAgent,
-});
+};

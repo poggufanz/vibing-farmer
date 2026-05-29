@@ -1,8 +1,8 @@
 /* ============================================
    YIELD VIBING — screens (multi-agent edition)
    ============================================ */
-
-const { useState, useEffect, useRef } = React;
+import React from 'react';
+import { Icon } from './components.jsx';
 
 const shortAddr = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "";
 const fakeHash = () => "0x" + Array.from({ length: 64 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
@@ -474,8 +474,8 @@ const SuccessCard = ({ strategy, onAgain, address }) => {
   );
 };
 
-Object.assign(window, {
+export {
   InputScreen, ThinkingCard, ConnectCard,
   PermissionCard, SuccessCard, shortAddr, fakeHash,
   THINK_STEPS, MmDialog,
-});
+};

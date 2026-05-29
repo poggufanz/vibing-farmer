@@ -7,38 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-
-  <!-- React 18 + Babel (in-browser JSX transpilation, no build step) -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
-<div id="root"></div>
-
-<!-- Bridge: load real Web3 ESM modules → window globals so Babel JSX can access them -->
-<script type="module">
-  import { connectWallet, getAccount, requestERC7715Permission, signSiweForVenice } from './wallet.js'
-  import { generateStrategy } from './venice.js'
-  import { OrchestratorAgent } from './orchestrator.js'
-  import { makeAgentId } from './worker.js'
-  window._yv = { connectWallet, getAccount, requestERC7715Permission, signSiweForVenice, generateStrategy, OrchestratorAgent, makeAgentId }
-  window._yvAgentMap = {}
-  console.log('[YIELD VIBING] Web3 modules loaded. Connect wallet to start.')
-</script>
-
-<!-- JSX components — loaded in dependency order -->
-<script type="text/babel" src="src/tweaks-panel.jsx"></script>
-<script type="text/babel" src="src/components.jsx"></script>
-<script type="text/babel" src="src/skills.jsx"></script>
-<script type="text/babel" src="src/screens.jsx"></script>
-<script type="text/babel" src="src/agents.jsx"></script>
-<script type="text/babel" src="src/app.jsx"></script>
-
-<!-- Mount React app -->
-<script type="text/babel">
-  ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-</script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
