@@ -118,34 +118,117 @@ const nvlStyleFor = (state, palette) => ({
   activated: state === "running",
 });
 
+/* ---------- Pure canvas fallback graph renderer ---------- */
+const drawFallbackGraph = (canvas, strategy, execMap, palette) => {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const agents = strategy.agents;
+  const orchX = W / 2, orchY = 38;
+  const colW = W / (agents.length + 1);
+
+  // Draw orchestrator node
+  const orchState = computeOrchestratorState(execMap);
+  ctx.fillStyle = orchState === "idle" ? GROUP_BASE.orchestrator : palette[orchState];
+  ctx.beginPath(); ctx.arc(orchX, orchY, 16, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#1a1b16"; ctx.font = "bold 9px 'Geist', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("ORCH", orchX, orchY);
+
+  agents.forEach((a, i) => {
+    const ex = execMap[a.id] || { status: "idle", steps: {} };
+    const cx = colW * (i + 1);
+    const wy = 90;
+
+    // Edge orchestrator → worker
+    ctx.strokeStyle = palette.idle; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(orchX, orchY + 16); ctx.lineTo(cx, wy - 12); ctx.stroke();
+
+    // Worker node
+    ctx.fillStyle = palette[ex.status] || palette.idle;
+    ctx.beginPath(); ctx.arc(cx, wy, 12, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 8px 'Geist', sans-serif";
+    ctx.fillText(`W${i + 1}`, cx, wy);
+
+    // Step nodes
+    STEP_IDS.forEach((sid, si) => {
+      const sy = 135 + si * 44;
+      const stepState = ex.steps?.[sid] || "idle";
+
+      // Edge worker/prev-step → step
+      ctx.strokeStyle = palette.idle; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx, si === 0 ? wy + 12 : 135 + (si - 1) * 44 + 9); ctx.lineTo(cx, sy - 9); ctx.stroke();
+
+      // Step circle
+      ctx.fillStyle = palette[stepState] || palette.idle;
+      ctx.beginPath(); ctx.arc(cx, sy, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = "bold 7px 'Geist', sans-serif";
+      ctx.fillText(STEP_LABELS[sid][0], cx, sy);
+    });
+
+    // Vault node
+    const vy = 135 + STEP_IDS.length * 44;
+    const vaultState = ex.steps?.deposit === "confirmed" ? "confirmed" : ex.steps?.deposit === "running" ? "running" : ex.steps?.deposit === "failed" ? "failed" : "idle";
+    ctx.strokeStyle = palette.idle; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx, vy - 44 + 9); ctx.lineTo(cx, vy - 11); ctx.stroke();
+
+    ctx.fillStyle = vaultState === "idle" ? GROUP_BASE.vault : palette[vaultState];
+    ctx.beginPath(); ctx.arc(cx, vy, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 6px 'Geist', sans-serif";
+    ctx.fillText("VAULT", cx, vy);
+  });
+};
+
 const AgentGraph = ({ strategy, execMap, onAgentClick, paletteIsLight }) => {
   const containerRef = useRAg(null);
   const nvlRef = useRAg(null);
   const clickHandlerRef = useRAg(null);
   const pulseRef = useRAg(null);
+  const canvasRef = useRAg(null);
 
   const [nvlReady, setNvlReady] = useAg(!!window._nvl);
+  const [useFallback, setUseFallback] = useAg(false);
 
   // Listen to async NVL loaded bridge event
   useEAg(() => {
-    if (window._nvl) return;
-    const handleReady = () => setNvlReady(true);
+    if (window._nvl) { setNvlReady(true); return; }
+    const handleReady = () => {
+      if (window._nvl) setNvlReady(true);
+      else setUseFallback(true);
+    };
     window.addEventListener("nvl-ready", handleReady);
-    return () => window.removeEventListener("nvl-ready", handleReady);
+    // If NVL still not loaded after 6s, use fallback
+    const timeout = setTimeout(() => {
+      if (!window._nvl) {
+        console.warn("[AgentGraph] NVL not loaded after 6s, using canvas fallback");
+        setUseFallback(true);
+      }
+    }, 6000);
+    return () => {
+      window.removeEventListener("nvl-ready", handleReady);
+      clearTimeout(timeout);
+    };
   }, []);
 
   const palette = paletteIsLight ? NVL_COLOR_LIGHT : NVL_COLOR;
 
-  // Build + mount NVL instance when strategy/palette/ready state changes
+  // Try NVL, fall back to canvas if it fails
   useEAg(() => {
-    if (!containerRef.current || !window._nvl) return;
+    if (!containerRef.current) return;
+    if (useFallback) return; // handled by fallback effect
+    if (!window._nvl) return;
+
     const { NVL } = window._nvl;
+    if (!NVL) { setUseFallback(true); return; }
+
     const { nodes, rels } = buildGraphTopology(strategy);
 
     const options = {
       layout: "hierarchical",
       renderer: "canvas",
       disableTelemetry: true,
+      disableWebWorkers: true,
       initialZoom: 0.72,
       minZoom: 0.2,
       maxZoom: 2,
@@ -158,21 +241,41 @@ const AgentGraph = ({ strategy, execMap, onAgentClick, paletteIsLight }) => {
       },
     };
 
-    const nvl = new NVL(containerRef.current, nodes, rels, options, {
-      onLayoutDone: () => {
-        // Defer fit call to next tick to ensure nvlRef.current is assigned
-        setTimeout(() => {
-          if (nvlRef.current) nvlRef.current.fit([]);
-        }, 0);
-      },
-    });
-    nvlRef.current = nvl;
+    let nvl;
+    try {
+      nvl = new NVL(containerRef.current, nodes, rels, options, {
+        onLayoutDone: () => {
+          setTimeout(() => {
+            try { if (nvlRef.current) nvlRef.current.fit([]); } catch (e) { console.warn("[NVL] fit failed:", e); }
+          }, 50);
+        },
+      });
+      nvlRef.current = nvl;
+      console.log("[AgentGraph] NVL instance created successfully");
+
+      // Verify canvas was actually created
+      setTimeout(() => {
+        const hasCanvas = !!containerRef.current?.querySelector("canvas");
+        if (!hasCanvas) {
+          console.warn("[AgentGraph] NVL created but no canvas found, switching to fallback");
+          try { nvl.destroy(); } catch (e) { /* ignore */ }
+          nvlRef.current = null;
+          setUseFallback(true);
+        }
+      }, 500);
+    } catch (err) {
+      console.error("[AgentGraph] NVL constructor failed:", err);
+      setUseFallback(true);
+      return;
+    }
 
     const onClick = (evt) => {
-      const { nvlTargets } = nvl.getHits(evt);
-      const hit = nvlTargets?.nodes?.[0];
-      const id = hit?.data?.id ?? hit?.id;
-      if (id && strategy.agents.find((a) => a.id === id)) onAgentClick(id);
+      try {
+        const { nvlTargets } = nvl.getHits(evt);
+        const hit = nvlTargets?.nodes?.[0];
+        const id = hit?.data?.id ?? hit?.id;
+        if (id && strategy.agents.find((a) => a.id === id)) onAgentClick(id);
+      } catch (e) { /* ignore click errors */ }
     };
     containerRef.current.addEventListener("click", onClick);
     clickHandlerRef.current = onClick;
@@ -182,12 +285,28 @@ const AgentGraph = ({ strategy, execMap, onAgentClick, paletteIsLight }) => {
       if (clickHandlerRef.current && containerRef.current) {
         containerRef.current.removeEventListener("click", clickHandlerRef.current);
       }
-      nvl.destroy();
+      try { nvl.destroy(); } catch (e) { /* ignore */ }
       nvlRef.current = null;
     };
-  }, [strategy, paletteIsLight, nvlReady]);
+  }, [strategy, paletteIsLight, nvlReady, useFallback]);
 
-  // Apply execution state → NVL node styles whenever execMap changes
+  // Fallback canvas rendering
+  useEAg(() => {
+    if (!useFallback || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect) {
+      canvas.width = rect.width * (window.devicePixelRatio || 1);
+      canvas.height = rect.height * (window.devicePixelRatio || 1);
+      canvas.style.width = rect.width + "px";
+      canvas.style.height = rect.height + "px";
+      const ctx = canvas.getContext("2d");
+      ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    }
+    drawFallbackGraph(canvas, strategy, execMap, palette);
+  }, [useFallback, execMap, strategy, paletteIsLight]);
+
+  // NVL state-driven styling
   useEAg(() => {
     const nvl = nvlRef.current;
     if (!nvl) return;
@@ -209,9 +328,9 @@ const AgentGraph = ({ strategy, execMap, onAgentClick, paletteIsLight }) => {
       updates.push({ id: `${a.id}-vault`, color: vaultColor, activated: vaultState === "running" });
     });
 
-    nvl.updateElementsInGraph(updates, []);
+    try { nvl.updateElementsInGraph(updates, []); } catch (e) { console.warn("[NVL] updateElements failed:", e); }
 
-    // Pulse running nodes: size oscillation
+    // Pulse running nodes
     if (pulseRef.current) clearInterval(pulseRef.current);
     let big = false;
     pulseRef.current = setInterval(() => {
@@ -229,7 +348,7 @@ const AgentGraph = ({ strategy, execMap, onAgentClick, paletteIsLight }) => {
         });
         if (ex.steps?.deposit === "running") pulses.push({ id: `${a.id}-vault`, size: big ? 25 : 22 });
       });
-      if (pulses.length) n.updateElementsInGraph(pulses, []);
+      if (pulses.length) { try { n.updateElementsInGraph(pulses, []); } catch (e) { /* ignore */ } }
     }, 550);
 
     return () => {
@@ -237,7 +356,24 @@ const AgentGraph = ({ strategy, execMap, onAgentClick, paletteIsLight }) => {
     };
   }, [execMap, strategy, paletteIsLight]);
 
-  return <div ref={containerRef} className="agent-graph" />;
+  // Fallback: click on canvas → detect which agent was clicked
+  const handleFallbackClick = (evt) => {
+    if (!useFallback || !canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = evt.clientX - rect.left;
+    const agents = strategy.agents;
+    const colW = rect.width / (agents.length + 1);
+    agents.forEach((a, i) => {
+      const cx = colW * (i + 1);
+      if (Math.abs(x - cx) < 20) onAgentClick(a.id);
+    });
+  };
+
+  return (
+    <div ref={containerRef} className="agent-graph">
+      {useFallback && <canvas ref={canvasRef} onClick={handleFallbackClick} style={{ width: "100%", height: "100%", cursor: "pointer" }} />}
+    </div>
+  );
 };
 
 /* ============================================

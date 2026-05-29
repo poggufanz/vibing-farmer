@@ -27,18 +27,32 @@
 <body>
 <div id="root"></div>
 
-<!-- Bridge: load real Web3 ESM modules + NVL → window globals so Babel JSX can access them -->
+<!-- Bridge: load real Web3 ESM modules → window globals so Babel JSX can access them -->
 <script type="module">
   import { connectWallet, getAccount, requestERC7715Permission, signSiweForVenice } from './wallet.js'
   import { generateStrategy } from './venice.js'
   import { OrchestratorAgent } from './orchestrator.js'
   import { makeAgentId } from './worker.js'
-  import { NVL } from 'https://esm.sh/@neo4j-nvl/base'
   window._yv = { connectWallet, getAccount, requestERC7715Permission, signSiweForVenice, generateStrategy, OrchestratorAgent, makeAgentId }
   window._yvAgentMap = {}
-  window._nvl = { NVL }
+  console.log('[YIELD VIBING] Web3 modules loaded. Connect wallet to start.')
+</script>
+
+<!-- NVL: separate import so failure doesn't break the app -->
+<script type="module">
+  try {
+    const mod = await import('https://esm.sh/@neo4j-nvl/base@1.2.0')
+    const NVL = mod.NVL || mod.default
+    if (NVL) {
+      window._nvl = { NVL }
+      console.log('[NVL] loaded successfully, constructor:', typeof NVL)
+    } else {
+      console.error('[NVL] module loaded but NVL class not found. Exports:', Object.keys(mod))
+    }
+  } catch (err) {
+    console.error('[NVL] failed to load from CDN:', err)
+  }
   window.dispatchEvent(new Event('nvl-ready'))
-  console.log('[YIELD VIBING] Web3 + NVL modules loaded. Connect wallet to start.')
 </script>
 
 <!-- JSX components — loaded in dependency order -->
