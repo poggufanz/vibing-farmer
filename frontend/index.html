@@ -9,6 +9,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 
+  <!-- Import map to resolve esm.sh absolute path imports in the browser -->
+  <script type="importmap">
+    {
+      "imports": {
+        "/@neo4j-nvl/": "https://esm.sh/@neo4j-nvl/",
+        "/@segment/": "https://esm.sh/@segment/"
+      }
+    }
+  </script>
+
   <!-- React 18 + Babel (in-browser JSX transpilation, no build step) -->
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>

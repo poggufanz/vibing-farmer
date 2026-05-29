@@ -124,9 +124,19 @@ const AgentGraph = ({ strategy, execMap, onAgentClick, paletteIsLight }) => {
   const clickHandlerRef = useRAg(null);
   const pulseRef = useRAg(null);
 
+  const [nvlReady, setNvlReady] = useAg(!!window._nvl);
+
+  // Listen to async NVL loaded bridge event
+  useEAg(() => {
+    if (window._nvl) return;
+    const handleReady = () => setNvlReady(true);
+    window.addEventListener("nvl-ready", handleReady);
+    return () => window.removeEventListener("nvl-ready", handleReady);
+  }, []);
+
   const palette = paletteIsLight ? NVL_COLOR_LIGHT : NVL_COLOR;
 
-  // Build + mount NVL instance when strategy/palette changes
+  // Build + mount NVL instance when strategy/palette/ready state changes
   useEAg(() => {
     if (!containerRef.current || !window._nvl) return;
     const { NVL } = window._nvl;
@@ -149,7 +159,12 @@ const AgentGraph = ({ strategy, execMap, onAgentClick, paletteIsLight }) => {
     };
 
     const nvl = new NVL(containerRef.current, nodes, rels, options, {
-      onLayoutDone: () => nvl.fit([]),
+      onLayoutDone: () => {
+        // Defer fit call to next tick to ensure nvlRef.current is assigned
+        setTimeout(() => {
+          if (nvlRef.current) nvlRef.current.fit([]);
+        }, 0);
+      },
     });
     nvlRef.current = nvl;
 
@@ -170,7 +185,7 @@ const AgentGraph = ({ strategy, execMap, onAgentClick, paletteIsLight }) => {
       nvl.destroy();
       nvlRef.current = null;
     };
-  }, [strategy, paletteIsLight]);
+  }, [strategy, paletteIsLight, nvlReady]);
 
   // Apply execution state → NVL node styles whenever execMap changes
   useEAg(() => {
