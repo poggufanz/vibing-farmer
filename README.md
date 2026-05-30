@@ -1,22 +1,27 @@
-# Vibing Farmer 🌾
+<p align="center">
+  <img src="frontend/public/vibing_farmer.logo.png" alt="Vibing Farmer Logo" width="160" />
+</p>
 
-> **"Set once. Vibe forever."**
+# Vibing Farmer
 
-Automated multi-vault yield farming powered by an AI-coordinated agent swarm. User expresses intent once — agents execute in parallel, blockchain enforces boundaries cryptographically.
+> **Set once. Vibe forever.**
+
+Most yield farming is exhausting. You find two or three vaults, swap into the assets, approve the spenders, and deposit—repeating a click-heavy loop over and over. Vibing Farmer changes this. We coordinate an AI agent swarm that automates this entire flow in parallel. You set your terms, review the worker skills once, and let the agents do the rest.
+
+---
+
+## How it works
+
+1. **Strategy Generation**: Venice AI evaluates your intent (deposit amount, risk tolerance, and number of target vaults) to compile a custom multi-vault allocation plan and action-level agent skills.
+2. **User Review**: You inspect the auto-generated skill JSON in an interactive editor. You can adjust slippage parameters, set spend caps, or approve them as-is.
+3. **Smart Account Upgrade**: A single EIP-7702 signature upgrades your MetaMask Flask account into a temporary smart account.
+4. **Batched Permission**: You authorize scoped worker agents via an ERC-7715 batched permission request. Each agent is strictly confined to its assigned vault and budget.
+5. **Parallel Execution**: The Orchestrator Agent spawns parallel Worker Agents to execute the transactions. Each worker carries out its specific Swap → Approve → Deposit sequence gaslessly via the 1Shot Permissionless Relayer.
+6. **Real-time Monitoring**: The frontend visualizes the active agent swarm, execution stages, and persistent agent memories in a live network graph.
 
 ---
 
-## What It Does
-
-1. **Venice AI** analyzes user intent (amount, risk, # of vaults) → generates multi-vault strategy + per-agent skill sets
-2. **User reviews** generated skills → edits if needed → approves
-3. **Orchestrator Agent** receives plan → dispatches Worker Agents in parallel
-4. **Worker Agents** each handle one complete vault flow: Swap → Approve → Deposit
-5. All transactions relay gas-free via **1Shot Permissionless Relayer**
-6. **Real-time vis.js graph** visualizes agent network, status, and memory in browser
-
----
-## Architecture
+## System Architecture
 
 ```
 User Input (amount, risk, # vaults)
@@ -52,7 +57,7 @@ Agent Memory + vis.js Graph (real-time)
 |-------|-----------|
 | Smart Contracts | Solidity ^0.8.24, Foundry |
 | Frontend | HTML/CSS/JS + ethers.js v6 + vis.js Network |
-| AI Coordinator | Venice AI API (OpenAI-compatible, llama-3.3-70b) |
+| AI Coordinator | Venice AI API (Llama-3.3-70b, OpenAI-compatible) |
 | Relay | 1Shot Permissionless Relayer (JSON-RPC) |
 | Wallet | MetaMask Flask 13.9+ (Smart Accounts Kit) |
 | Network | Ethereum Sepolia |
@@ -61,28 +66,31 @@ Agent Memory + vis.js Graph (real-time)
 
 ## Quick Start
 
-See [GETTING_STARTED.md](GETTING_STARTED.md) for full setup.
+See [GETTING_STARTED.md](GETTING_STARTED.md) to set up your environment, fund your wallet on Sepolia, and run the client.
 
 ---
 
-## Docs (Indonesian / Bahasa Indonesia)
+## Documentation
 
-| Doc | Isi |
+All core design decisions, requirements, and guides are fully documented in English:
+
+| Document | Focus |
 |-----|-----|
-| [teknis-arsitektur.md](docs/teknis-arsitektur.md) | Architecture, ADR, NFR, failure modes |
-| [teknis-blockchain-penggunaan.md](docs/teknis-blockchain-penggunaan.md) | On-chain scope, audit trail, risks |
-| [teknis-keamanan-privasi.md](docs/teknis-keamanan-privasi.md) | Security constraints, threat model |
-| [teknis-api-events.md](docs/teknis-api-events.md) | API docs, event schema, payloads |
-| [teknis-database.md](docs/teknis-database.md) | Data model: skill files, memory logs, on-chain |
-| [produk-demo-skenario.md](docs/produk-demo-skenario.md) | Demo script — **read before recording** |
-| [produk-fitur-lengkap.md](docs/produk-fitur-lengkap.md) | Full feature list + priorities |
-| [produk-user-stories.md](docs/produk-user-stories.md) | User stories + acceptance criteria |
-| [bisnis-dampak-model.md](docs/bisnis-dampak-model.md) | Business impact + value model |
-| [bisnis-roadmap-backlog.md](docs/bisnis-roadmap-backlog.md) | 20-day roadmap + risk matrix |
+| [teknis-arsitektur.md](docs/teknis-arsitektur.md) | High-level system architecture, design principles, ADRs, and NFRs |
+| [teknis-blockchain-penggunaan.md](docs/teknis-blockchain-penggunaan.md) | On-chain contract boundaries, audit trails, and delegation scope |
+| [teknis-keamanan-privasi.md](docs/teknis-keamanan-privasi.md) | Threat modeling, security controls, and regulatory compliance |
+| [teknis-api-events.md](docs/teknis-api-events.md) | Core event schemas, API request/response structures, and error routing |
+| [teknis-database.md](docs/teknis-database.md) | Local storage, agent memory structures, and data retention guidelines |
+| [produk-demo-skenario.md](docs/produk-demo-skenario.md) | Step-by-step walkthrough and narrative script for the video demo |
+| [produk-fitur-lengkap.md](docs/produk-fitur-lengkap.md) | Detailed functional requirements and priority matrices |
+| [produk-user-stories.md](docs/produk-user-stories.md) | User personas, journey maps, and exhaustive acceptance criteria |
+| [bisnis-dampak-model.md](docs/bisnis-dampak-model.md) | Market pain points, value propositions, and KPI impact metrics |
+| [bisnis-roadmap-backlog.md](docs/bisnis-roadmap-backlog.md) | Comprehensive development roadmap, backlog items, and risk matrix |
 
 ---
 
-## Vision
+## The Vision
 
-Web3 → Web4 transition primitive.  
-Users express intent. Agents execute autonomously. Blockchain enforces boundaries cryptographically.
+Most Web3 tools treat users like transaction-signing robots. We wanted to build something that feels like a natural step toward Web4. You express your investment intent once, AI coordinates the strategy and drafts the boundaries, and parallel worker agents carry it out. 
+
+Blockchain shouldn't be the interface; it is the cryptographic boundary that keeps the agents completely honest.
