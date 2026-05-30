@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="frontend/public/vibing_farmer.logo.svg" alt="Vibing Farmer Logo" width="100%" />
+  <img src="frontend/public/vibing_farmer.logo.png" alt="Vibing Farmer Logo" width="100%" />
 </p>
 
 # Vibing Farmer
