@@ -1,7 +1,7 @@
 # GETTING_STARTED.md — Vibing Farmer MVP Plan
 
 **"Set once. Vibe forever."**  
-Deadline: **15 Juni 2026** · Prize: $11,000 · Solo · Platform: HackQuest
+Purpose: **Indie Open-Source Project** · Scope: Parallel Yield Farming Automation Swarm
 
 ---
 
@@ -65,7 +65,7 @@ vibing-farmer/
 │   ├── memory.js                   # Memory file reader/writer + UI renderer
 │   ├── graph.js                    # vis.js Network controller: nodes, edges, real-time update
 │   ├── wallet.js                   # EIP-7702 upgrade + ERC-7715 per-agent permission
-│   ├── relay.js                    # 1Shot relay request builder + submission
+│   ├── relay.js                    # 1Shot relay request builder + execution
 │   ├── venice.js                   # Venice AI: strategy generation + skill auto-generation
 │   ├── ui.js                       # DOM helpers, step tracker, status badges
 │   └── style.css                   # Port from design/styles.css
@@ -279,7 +279,7 @@ Security invariants (revert, never silent fail):
 | Venice AI | `venice_parameters.include_venice_system_prompt: false` required for clean JSON output. |
 | Parallel Workers | Use `Promise.allSettled()` — not `Promise.all()`. One failure must not abort others. |
 | vis.js events | `contract.on(eventName, ...)` via ethers.js v6. Update node data with `nodes.update({id, color})`. |
-| Skill files | Write to `agents/` directory. For hackathon demo, pre-populate with Venice AI output. |
+| Skill files | Write to `agents/` directory. For live demo, pre-populate with Venice AI output. |
 | Memory files | Append-only JSON array. Read entire file, push new entry, write back. |
 | AgentId | Use `ethers.keccak256(ethers.toUtf8Bytes("agent-1"))` to generate bytes32 agentId. |
 
@@ -356,8 +356,8 @@ Before recording demo video:
 - [ ] Memory entries shown in agent node
 - [ ] Success: both vaults deposited
 
-**Hackathon Tracks**
-- [ ] Best Agent ($3,000) — skill system + memory visible
-- [ ] Best Venice AI ($3,000) — strategy + skill generation shown
-- [ ] Best A2A Coordination ($3,000) — parallel Orchestrator→Worker dispatch shown
-- [ ] Best 1Shot Relayer ($1,000 USDC) — gas abstraction evidenced on Etherscan
+**Architecture Pillars Demonstrated**
+- [ ] Secure Smart Swarm — skill system + memory visible
+- [ ] Privacy-First AI Recommendation — strategy + skill generation shown
+- [ ] Autonomous Parallel Orchestration — parallel Orchestrator→Worker dispatch shown
+- [ ] Complete Gas Abstraction — 1Shot relayer gas sponsoring evidenced on Etherscan

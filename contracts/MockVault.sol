@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 /// @title MockVault
-/// @notice Minimal mock vault for hackathon demo. Shares = assets 1:1.
+/// @notice Minimal mock vault for live demo. Shares = assets 1:1.
 ///         Pure-accounting (no real ERC20 transfers). Simulates time-based
 ///         yield, reward claiming, and withdrawal for Background Agents.
 contract MockVault {

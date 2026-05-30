@@ -170,17 +170,17 @@ Vibing Farmer is engineered around the principle of **per-agent permission-bound
 | Personal data (PII) | No PII is collected or stored by the developer |
 | GDPR & Privacy | Venice AI's no-retention policy aligns with data minimization. Skill and memory files remain purely local. |
 | KYC/AML | N/A — testnet only, not a mainnet financial product |
-| Smart contract audit | Unaudited — hackathon project scope, not suitable for mainnet |
+| Smart contract audit | Unaudited — indie prototype scope, not suitable for mainnet |
 | Agent memory privacy | Memory files are stored locally — never uploaded to external servers |
 
-**Warning:** This project is a hackathon demonstration on the Sepolia testnet. It is not suitable for deployment with real assets on mainnet without:
+**Warning:** This project is an open-source prototype running on the Sepolia testnet. It is not suitable for deployment with real assets on mainnet without:
 1. A comprehensive, independent smart contract audit.
 2. Formal verification of the permission and logic scope.
 3. A production-grade security review of the agent systems.
 
 ---
 
-## 6. Pre-Demo Security Checklist
+## 6. Pre-Deployment Security Checklist
 
 **Smart Contract**
 - [ ] No private keys or API keys are hardcoded in the codebase.
@@ -198,7 +198,7 @@ Vibing Farmer is engineered around the principle of **per-agent permission-bound
 - [ ] The permissionContext for each agent is stored in `sessionStorage` (never in `localStorage`).
 - [ ] Worker agents operate in complete isolation (never sharing permissionContexts).
 
-**Demo Environment**
+**Live Testing Sandbox Environment**
 - [ ] The demo wallet contains only testnet USDC (no real mainnet assets).
 - [ ] Permission revocation flows work flawlessly.
 - [ ] MetaMask Flask (rather than regular MetaMask) is actively used.

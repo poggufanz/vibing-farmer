@@ -2,7 +2,7 @@
 
 > **Skill Reference:** mobile-developer + blockchain-developer + cognitive-fluency-psychology
 > **Version:** 2.0 | **Date:** May 27, 2026
-> **Purpose:** End-to-end demo flow guide for the hackathon video submission
+> **Purpose:** End-to-end sandbox walkthrough and demonstration guide
 
 ---
 
@@ -20,7 +20,7 @@ To demonstrate that Vibing Farmer successfully automates a multi-vault deposit f
 | Persona | Name | Profile |
 |---------|------|--------|
 | Active Yield Farmer | Arya | Has 100 USDC, wants efficient multi-vault yield farming, wishes to avoid repeating 8 popups per vault |
-| Observer (Video Viewer) | Judge / Developer | Evaluating the integration of MetaMask, 1Shot, Venice AI, and agent coordination |
+| Observer / Developer | External Reviewer | Evaluating the integration of MetaMask, 1Shot, Venice AI, and agent coordination |
 
 ---
 
@@ -154,7 +154,7 @@ To demonstrate that Vibing Farmer successfully automates a multi-vault deposit f
   - "Venice AI generates the strategy and skills, which the user reviews once."
   - "2 parallel agents, 0 gas, 0 manual transactions."
   - "Set once. Vibe forever."
-- Display the 4 prize tracks achieved.
+- Emphasize the modular open-source design.
 
 ---
 
@@ -190,13 +190,13 @@ To demonstrate that Vibing Farmer successfully automates a multi-vault deposit f
 | Outcome | Target |
 |---------|--------|
 | Full flow finishes without errors | ✓ (Mandatory) |
-| Venice AI strategy & skill generation visible | ✓ (Venice Track) |
-| Skill review & edit step visible | ✓ (Agent Track) |
-| 2 Workers running in parallel on the graph | ✓ (A2A Track) |
-| EIP-7702 upgrade visible in MetaMask Flask | ✓ (Qualification) |
-| ERC-7715 permission dialog displayed per agent | ✓ (Qualification) |
-| 1Shot relay transactions visible on Etherscan | ✓ (1Shot Track) |
-| Agent memory visible in node details | ✓ (Agent Track) |
+| Venice AI strategy & skill generation visible | ✓ (Privacy AI Integration) |
+| Skill review & edit step visible | ✓ (Granular Agent Control) |
+| 2 Workers running in parallel on the graph | ✓ (A2A Swarm Parallelization) |
+| EIP-7702 upgrade visible in MetaMask Flask | ✓ (Smart Account Foundations) |
+| ERC-7715 permission dialog displayed per agent | ✓ (Scoped Boundary Security) |
+| 1Shot relay transactions visible on Etherscan | ✓ (Complete Gas Abstraction) |
+| Agent memory visible in node details | ✓ (Traceable Swarm State) |
 | Demo duration | ≤ 5 minutes |
 | User interactions (clicks) during the demo | ≤ 8 clicks |
 

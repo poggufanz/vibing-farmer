@@ -14,9 +14,9 @@ tags: ["technical-spike", "api-integration", "venice-ai", "llm", "vault-recommen
 
 ## Summary
 
-**Spike Objective:** Determine Venice AI's API interface, privacy model, available models, and how to build a vault recommendation feature (risk preference → recommended vault + human-readable summary) that qualifies for the "Best Use of Venice AI" prize track.
+**Spike Objective:** Determine Venice AI's API interface, privacy model, available models, and how to build a vault recommendation feature (risk preference → recommended vault + human-readable summary) that aligns with privacy-first standards.
 
-**Why This Matters:** Venice AI is a separate $3,000 prize track. Integration must be non-trivial — a real recommendation flow, not just a hello-world call. Need to know API format, response structure, and what "privacy-first" means for the demo story.
+**Why This Matters:** Venice AI integration must be non-trivial — a real recommendation flow, not just a hello-world call. Need to know API format, response structure, and what "privacy-first" means for the overall product design.
 
 **Timebox:** 2 days
 
@@ -124,7 +124,7 @@ Recommend the best yield vault for a user's risk profile.
 Respond ONLY with valid JSON — no explanation outside the JSON object.`
 
 function buildRecommendationPrompt(amountUsdc, riskLevel) {
-  // Available vaults hardcoded for hackathon (MockVault on Sepolia)
+  // Available vaults hardcoded for sandbox testing (MockVault on Sepolia)
   const vaults = [
     {
       name: "Conservative Yield Vault",
@@ -289,7 +289,7 @@ Use `llama-3.3-70b` via OpenAI SDK with Venice base URL. Disable Venice default 
 - [ ] Build frontend AI panel (risk row segmented + amount → recommendation card)
 - [ ] Test Venice call in browser devtools before full integration
 - [ ] Record demo showing Venice AI panel → vault recommendation → "Powered by Venice AI — No data retention" badge
-- [ ] Include privacy story in hackathon submission text
+- [ ] Include privacy story in release documentation
 
 ---
 

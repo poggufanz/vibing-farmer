@@ -5,25 +5,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project: Vibing Farmer
 
 **Tagline:** "Set once. Vibe forever."  
-**Hackathon:** MetaMask Smart Accounts Kit × 1Shot API × Venice AI Dev Cook Off  
-**Deadline:** 15 Juni 2026 | **Prize:** $11,000 | **Solo**
+**Motivation:** Built out of frustration with complex, click-heavy sequential yield farming workflows.
+**Goal:** Empower users with autonomous, parallel multi-vault deposits governed by secure cryptographic boundaries.
 
 **Core product:** AI-coordinated agent swarm for automated multi-vault yield farming. Venice AI generates strategy + per-agent skill sets. User approves skills once. Orchestrator Agent dispatches Worker Agents in parallel — each executing Swap → Approve → Deposit for one vault. All transactions via ERC-7715 scoped permission + 1Shot Permissionless Relayer. Real-time vis.js graph monitors agent network and memory.
 
 **Vision:** Web3 → Web4 transition primitive. Users express intent, agents execute autonomously, blockchain enforces boundaries cryptographically.
 
-> **Note:** All docs in `docs/` are written in Indonesian (Bahasa Indonesia).
+> **Note:** All docs in `docs/` are written in English.
 
 ---
 
-## Hackathon Tracks
+## Core Architecture Focus
 
-| Track | Prize | Our Approach |
-|-------|-------|-------------|
-| Best Agent | $3,000 | Agent swarm with skill system + persistent memory |
-| Best Venice AI | $3,000 | Coordinator + per-agent skill auto-generation |
-| Best A2A Coordination | $3,000 | Orchestrator → parallel Worker Agent dispatch |
-| Best Use of 1Shot | $1,000 | All agent transactions via 1Shot relay |
+| Component | Technical Choice | Purpose |
+|-----------|------------------|---------|
+| Smart Swarm | Multi-agent skill system | Granular agent delegation + local memory |
+| Privacy-First AI | Venice AI (Llama-3.3-70b) | Strategy and per-agent skill auto-generation |
+| Agent-to-Agent | Orchestrator & parallel Workers | Parallel execution for optimal DeFi UX |
+| Gas Abstraction | 1Shot Relayer & EIP-7702 | Zero-gas transactions under ERC-7715 scoped boundaries |
 
 ---
 
@@ -37,7 +37,7 @@ Timeline: 20 days total (26 Mei – 15 Juni 2026)
 | 2 — Smart Contract | 4–8 | ✅ Done | AgentVaultDepositor.sol + tests |
 | 3 — Integration | 9–13 | ✅ Done | 1Shot + Orchestrator/Worker agents + vis.js graph + Sepolia test |
 | 4 — Polish | 14–17 | ✅ Done | Bug fix, Venice AI skill gen, memory UI, demo video |
-| 5 — Buffer | 18–20 | ⬜ | Submission |
+| 5 — Publish | 18–20 | ⬜ | Open source publishing |
 
 **All 4 spikes resolved. ✅ See `docs/spikes/` for full findings. Key decisions below.**
 
@@ -179,7 +179,7 @@ frontend/
   memory.js                          # Memory file reader/writer + UI
   graph.js                           # vis.js Network graph controller
   wallet.js                          # EIP-7702 + ERC-7715 + MetaMask SAK
-  relay.js                           # 1Shot API relay builder + submission
+  relay.js                           # 1Shot API relay builder + execution
   venice.js                          # Venice AI: strategy + skill generation
   ui.js                              # DOM helpers, step tracker
   style.css                          # Port from design/styles.css
@@ -311,7 +311,7 @@ function revokeAgentPermission(bytes32 agentId) external;
 | Contract framework | Foundry | Hardhat | Native Solidity tests, fast, DeFi standard |
 | Frontend vis library | vis.js Network | D3.js, Neo4j | Simpler force-directed graph, no backend needed |
 | Agent execution | Parallel (Promise.all) | Sequential | Demo value: showcase A2A coordination |
-| AI layer | Venice AI | OpenAI/Anthropic | Required prize track, privacy-first |
+| AI layer | Venice AI | OpenAI/Anthropic | Privacy-first, open-source model, OpenAI-compatible |
 | Vault | MockVault.sol (ERC-4626) | Real protocol | Full demo control, no external deps |
 
 ---

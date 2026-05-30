@@ -158,7 +158,7 @@ Frontend → calls delegationManager.redeemDelegations(
 
 **Two options for VaultDepositor:**
 
-**Option A (Simpler for hackathon):** VaultDepositor is a standalone contract. DelegationManager routes execution to it. VaultDepositor does NOT validate permissions itself — the DelegationManager already enforced scope.
+**Option A (Simpler for initial release):** VaultDepositor is a standalone contract. DelegationManager routes execution to it. VaultDepositor does NOT validate permissions itself — the DelegationManager already enforced scope.
 
 ```solidity
 // VaultDepositor.sol — simplified, DelegationManager handles scope
@@ -176,15 +176,15 @@ contract VaultDepositor is ReentrancyGuard {
 }
 ```
 
-**Option B (Demo-friendly, self-contained):** Keep permission storage in VaultDepositor, manually validate via stored permissions. Skip DelegationManager for the hackathon demo and call VaultDepositor directly from 1Shot relay.
+**Option B (Demo-friendly, self-contained):** Keep permission storage in VaultDepositor, manually validate via stored permissions. Skip DelegationManager for the live demo and call VaultDepositor directly from 1Shot relay.
 
-For hackathon, **Option B is better** — it's self-contained, doesn't need DelegationManager deployed, and is easier to demo. Store permissions on-chain in VaultDepositor and validate there.
+For the MVP, **Option B is better** — it's self-contained, doesn't need DelegationManager deployed, and is easier to demo. Store permissions on-chain in VaultDepositor and validate there.
 
 ---
 
 ### Revised VaultDepositor Permission Model (Option B)
 
-For hackathon: store permissions in contract, bypass DelegationManager complexity.
+For MVP: store permissions in contract, bypass DelegationManager complexity.
 
 ```solidity
 struct Permission {
@@ -225,7 +225,7 @@ function revokePermission() external {
 }
 ```
 
-**This is the viable hackathon approach.** ERC-7715 is shown in the FRONTEND (permission UI) but the on-chain enforcement uses VaultDepositor's own storage. The `context` from ERC-7715 response is displayed to user and stored for demo evidence, but the actual enforcement is VaultDepositor's `permissions` mapping.
+**This is the viable MVP approach.** ERC-7715 is shown in the FRONTEND (permission UI) but the on-chain enforcement uses VaultDepositor's own storage. The `context` from ERC-7715 response is displayed to user and stored for demo evidence, but the actual enforcement is VaultDepositor's `permissions` mapping.
 
 ---
 
@@ -274,11 +274,11 @@ sessionStorage.setItem('delegationManager', grantedPermission.delegationManager)
 3. `grantPermission()` is called via a separate tx (can be combined with 1Shot relay or direct)
 4. `executeDeposit()` called by 1Shot relayer with user address + amount + vault
 
-This shows ERC-7715 in the demo (satisfies "Best Agent" track + MetaMask SAK requirement) while keeping on-chain logic self-contained and testable.
+This shows ERC-7715 in the demo (satisfies MetaMask SAK integration requirements) while keeping on-chain logic self-contained and testable.
 
 ### Rationale
 
-ERC-7715 is DRAFT and DelegationManager adds complexity not worth handling solo in 20 days. Self-contained permission storage in VaultDepositor is auditable, testable, and demonstrable. ERC-7715 frontend flow still qualifies for all prize tracks.
+ERC-7715 is DRAFT and DelegationManager adds complexity not worth handling solo in 20 days. Self-contained permission storage in VaultDepositor is auditable, testable, and demonstrable. ERC-7715 frontend flow fits the modular, extensible architecture perfectly.
 
 ### Follow-up Actions
 

@@ -143,9 +143,9 @@ Vibing Farmer is a web-based DeFi platform that automates multi-vault yield farm
 
 **Decision:** Use Foundry (via WSL) for development and testing.
 
-**Rationale:** Native Solidity testing, built-in fuzz testing, fast execution, and standard industry practice for DeFi hackathons.
+**Rationale:** Native Solidity testing, built-in fuzz testing, fast execution, and industry standard for DeFi protocol development.
 
-**Rejected:** Hardhat — too much boilerplate for a solo hackathon.
+**Rejected:** Hardhat — too much boilerplate and slower feedback loop.
 
 **Note:** Foundry must run via WSL on Windows — always use `wsl -e bash -c "..."`.
 
@@ -157,7 +157,7 @@ Vibing Farmer is a web-based DeFi platform that automates multi-vault yield farm
 
 **Rationale:** Faster setup, no build pipeline required, allowing total focus on Web3 and agent logic. The vis.js force-directed graph is perfect for agent network visualization.
 
-**Rejected:** React (overkill for a 5-minute demo video) and D3.js (too low-level for a network graph).
+**Rejected:** React (overkill for the interactive dashboard prototype) and D3.js (too low-level for a network graph).
 
 ---
 
@@ -165,9 +165,9 @@ Vibing Farmer is a web-based DeFi platform that automates multi-vault yield farm
 
 **Decision:** Leverage Venice AI not just as a recommendation engine, but as a strategy coordinator that automatically generates skill sets per agent.
 
-**Rationale:** Required for the $3,000 Venice AI prize track. Highly private (no data retention). Adds significant value: instead of just "AI suggesting a vault", we get "AI generating an executable agent configuration."
+**Rationale:** Highly private (no data retention), open-source philosophy, and OpenAI-compatible. Adds significant value: instead of just "AI suggesting a vault", we get "AI generating an executable agent configuration."
 
-**Rejected:** OpenAI/Anthropic and Groq (neither qualifies for the Venice track).
+**Rejected:** OpenAI/Anthropic and Groq (due to data-logging policies and lack of built-in privacy guardrails).
 
 ---
 
@@ -175,9 +175,9 @@ Vibing Farmer is a web-based DeFi platform that automates multi-vault yield farm
 
 **Decision:** The Orchestrator uses `Promise.allSettled()` to dispatch all Workers in parallel.
 
-**Rationale:** Demonstrates genuine agent-to-agent coordination for the $3,000 A2A track. Sequential execution offers no real coordination showcase. `allSettled` is chosen over `all` so that a single worker failure does not abort other workers.
+**Rationale:** Demonstrates genuine parallel agent-to-agent coordination. Sequential execution offers no real concurrent scalability. `allSettled` is chosen over `all` so that a single worker failure does not abort other workers.
 
-**Rejected:** Sequential dispatch (fails to qualify for the A2A coordination track).
+**Rejected:** Sequential dispatch (which fails to demonstrate parallel multi-agent swarm efficiency).
 
 ---
 
@@ -210,7 +210,7 @@ Vibing Farmer is a web-based DeFi platform that automates multi-vault yield farm
 | Browser support | Latest Chrome / Brave |
 | Smart contract test coverage | ≥ 80% |
 | Worker Agent failure isolation | One worker failure does not abort other workers |
-| Minimum parallel Workers in demo | ≥ 2 (for A2A track) |
+| Minimum parallel Workers in demo | ≥ 2 (for parallel swarm validation) |
 
 ---
 
