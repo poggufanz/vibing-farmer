@@ -98,7 +98,7 @@ const ThinkingCard = ({ phase }) => {
     <section className="thinking enter">
       <div className="eyebrow">
         <span className="num">01</span>
-        <span>Venice AI · llama-3.3-70b · orchestrator planning</span>
+        <span>Venice AI · claude-opus-4-8 · orchestrator planning</span>
       </div>
       <h2 className="thinking-title">Lagi nyusun multi-agent strategy…</h2>
 

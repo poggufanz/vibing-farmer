@@ -100,14 +100,23 @@ const STEPS = [
   { id: "done", label: "Complete" },
 ];
 
-const StepRail = ({ stage }) => {
+const StepRail = ({ stage, furthest = 0, onStepClick }) => {
   const idx = STEPS.findIndex((s) => s.id === stage);
   return (
     <div className="step-rail" role="progressbar" aria-valuenow={idx + 1} aria-valuemax={STEPS.length}>
       {STEPS.map((s, i) => {
         const state = i < idx ? "done" : i === idx ? "active" : "idle";
+        const clickable = i !== idx && i <= furthest; // navigate to any reached step (back/forward); never beyond
         return (
-          <div key={s.id} className={`step-rail-item ${state}`}>
+          <div
+            key={s.id}
+            className={`step-rail-item ${state}${clickable ? " clickable" : ""}`}
+            onClick={clickable ? () => onStepClick?.(s.id) : undefined}
+            role={clickable ? "button" : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onStepClick?.(s.id); } } : undefined}
+            title={clickable ? `Ke ${s.label}` : undefined}
+          >
             <span className="num">{String(i + 1).padStart(2, "0")}</span>
             <span>{s.label}</span>
           </div>

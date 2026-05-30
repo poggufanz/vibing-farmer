@@ -353,6 +353,35 @@ input, select, textarea {
 .step-rail-item.done { color: var(--text-muted); }
 .step-rail-item.done .num { color: var(--text-muted); }
 
+.step-rail-item.clickable { cursor: pointer; }
+.step-rail-item.clickable:hover { color: var(--text); }
+.step-rail-item.clickable:hover .num { color: var(--accent); }
+
+/* thinking-step live spinner */
+@keyframes think-spin-rot { to { transform: rotate(360deg); } }
+.think-spin {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-left: 7px;
+  border: 1.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: think-spin-rot 0.7s linear infinite;
+}
+@keyframes think-msg-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.thinking-status {
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  letter-spacing: -0.01em;
+  animation: think-msg-up 0.4s ease;
+}
+
 .step-rail-item.active { color: var(--text); }
 .step-rail-item.active .num { color: var(--accent); }
 

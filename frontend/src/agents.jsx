@@ -449,8 +449,11 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
   const pct = totalSteps ? (doneSteps / totalSteps) * 100 : 0;
   const allDone = doneSteps === totalSteps;
 
+  // Auto-advance to "done" only when execution finishes while viewing — NOT when the user
+  // navigates back to an already-completed run via the step rail (would bounce to done).
+  const wasDoneOnMount = useRAg(allDone);
   useEAg(() => {
-    if (allDone) {
+    if (allDone && !wasDoneOnMount.current) {
       const t = setTimeout(onDone, 900);
       return () => clearTimeout(t);
     }

@@ -71,7 +71,7 @@ function resolveProvider(veniceAuth, devApiKey) {
  * @param {string|null} params.veniceAuth - base64 SIWE header from signSiweForVenice()
  * @param {string|null} params.devApiKey - DeepSeek API key for dev mode
  */
-export async function generateStrategy({ amount, riskLevel, numVaults, veniceAuth, devApiKey }) {
+export async function generateStrategy({ amount, riskLevel, numVaults, veniceAuth, devApiKey, signal }) {
   // Load skill (user override or default) and inject the live vault catalog
   const skill = await loadVaultSkill()
   const systemPrompt = skill.content.replace('[VAULT_CATALOG_JSON]', JSON.stringify(VAULT_CATALOG, null, 2))
@@ -90,8 +90,10 @@ export async function generateStrategy({ amount, riskLevel, numVaults, veniceAut
 
 Select the optimal vault(s). Apply your expert framework. Respond in JSON only.`
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS)
+  // Caller may pass a signal (app-managed 1-min timeout + confirm); else use an internal timeout
+  const controller = signal ? null : new AbortController()
+  const timeout = controller ? setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS) : null
+  const sig = signal || controller.signal
 
   try {
     const content = await callChatCompletions(
@@ -101,7 +103,7 @@ Select the optimal vault(s). Apply your expert framework. Respond in JSON only.`
         { role: 'user', content: userPrompt }
       ],
       provider.isVenice,
-      controller.signal
+      sig
     )
     const parsed = validateVeniceResponse(JSON.parse(content))
     console.log(`[ai] Strategy via ${provider.name} · skill: ${skill.source}`)
@@ -110,7 +112,7 @@ Select the optimal vault(s). Apply your expert framework. Respond in JSON only.`
     console.warn(`[ai] Strategy failed (${provider.name}), using fallback:`, err.message)
     return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source }
   } finally {
-    clearTimeout(timeout)
+    if (timeout) clearTimeout(timeout)
   }
 }
 

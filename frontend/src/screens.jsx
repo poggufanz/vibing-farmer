@@ -88,32 +88,62 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
    01b — AI Thinking (strategy generation)
    ============================================ */
 const THINK_STEPS = [
-  { label: "Memindai 24 vault aktif di Sepolia", time: "0.4s" },
-  { label: "Menyusun allocation per risk profile", time: "1.6s" },
-  { label: "Generate skill JSON per worker agent", time: "0.9s" },
+  { label: "Memindai 24 vault aktif di Sepolia" },
+  { label: "Menyusun allocation per risk profile" },
+  { label: "Generate strategy via Venice/DeepSeek" },
 ];
 
-const ThinkingCard = ({ phase }) => {
+const THINK_MSGS = [
+  "AI sedang menganalisis vault strategy…",
+  "Menentukan yang terbaik untuk vault strategy kali ini…",
+  "Menghitung alokasi optimal per risk profile…",
+  "Memvalidasi alamat vault & expected APY…",
+];
+
+const ThinkingCard = ({ phase, times = [] }) => {
+  // Live count-up for the active step — the AI step keeps ticking until generateStrategy resolves
+  const [live, setLive] = React.useState(0);
+  React.useEffect(() => {
+    setLive(0);
+    const start = performance.now();
+    const iv = setInterval(() => setLive((performance.now() - start) / 1000), 80);
+    return () => clearInterval(iv);
+  }, [phase]);
+
+  const [msgI, setMsgI] = React.useState(0);
+  React.useEffect(() => {
+    if (phase !== 2) return;            // only while strategy generation is running
+    setMsgI(0);
+    const iv = setInterval(() => setMsgI((i) => (i + 1) % THINK_MSGS.length), 2500);
+    return () => clearInterval(iv);
+  }, [phase]);
+
   return (
     <section className="thinking enter">
       <div className="eyebrow">
         <span className="num">01</span>
-        <span>Venice AI · llama-3.3-70b · orchestrator planning</span>
+        <span>Venice AI · claude-opus-4-8 · orchestrator planning</span>
       </div>
       <h2 className="thinking-title">Lagi nyusun multi-agent strategy…</h2>
 
       <div className="thinking-list">
         {THINK_STEPS.map((s, i) => {
           const state = i < phase ? "done" : i === phase ? "active" : "idle";
+          const t = i === phase ? live : times[i];
           return (
             <div key={i} className={`think-step ${state}`}>
               <span className="marker" />
               <span>{s.label}</span>
-              <span className="time">{state === "idle" ? "—" : s.time}</span>
+              <span className="time">
+                {state === "idle" ? "—" : `${(t ?? 0).toFixed(1)}s`}
+                {state === "active" && <span className="think-spin" aria-hidden="true" />}
+              </span>
             </div>
           );
         })}
       </div>
+
+      {phase === 2 && <div key={msgI} className="thinking-status">{THINK_MSGS[msgI]}</div>}
     </section>
   );
 };

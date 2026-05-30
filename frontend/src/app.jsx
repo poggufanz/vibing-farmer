@@ -22,7 +22,7 @@ import { connectWallet, requestERC7715Permission, signSiweForVenice } from './wa
 import { generateStrategy } from './venice.js';
 import { OrchestratorAgent } from './orchestrator.js';
 import { makeAgentId } from './worker.js';
-import { VAULT_CATALOG } from './config.js';
+import { VAULT_CATALOG, VENICE_TIMEOUT_MS } from './config.js';
 import SkillDrawer from './components/SkillDrawer.jsx';
 
 /* ---------- Right rail panels ---------- */
@@ -291,6 +291,7 @@ const App = () => {
 
   // stage: 'strategy' | 'connect' | 'skills' | 'permission' | 'execute' | 'done'
   const [stage, setStage] = useS("strategy");
+  const [furthest, setFurthest] = useS(0); // furthest step index reached → rail can navigate to visited steps
   const [amount, setAmount] = useS("100");
   const [risk, setRisk] = useS("med");
   const [devApiKey, setDevApiKey] = useS("");
@@ -298,6 +299,10 @@ const App = () => {
   // strategy sub-state
   const [strategyPhase, setStrategyPhase] = useS("input"); // input | thinking | ready
   const [thinkingPhase, setThinkingPhase] = useS(0);
+  const [thinkTimes, setThinkTimes] = useS([]); // real measured per-step durations (seconds)
+  const [slowConfirm, setSlowConfirm] = useS(false); // AI exceeded timeout → ask keep waiting / fallback
+  const genAbortRef = useR(null);
+  const slowTimerRef = useR(null);
   const [strategy, setStrategy] = useS(null);
   const [skillSource, setSkillSource] = useS("default");
   const [skillDrawerOpen, setSkillDrawerOpen] = useS(false);
@@ -329,6 +334,9 @@ const App = () => {
     document.documentElement.dataset.density = tweaks.density;
   }, [tweaks.palette, tweaks.density]);
 
+  // Record the furthest step reached so the rail can navigate to visited steps (and only those)
+  useE(() => { setFurthest((f) => Math.max(f, STEPS.findIndex((s) => s.id === stage))); }, [stage]);
+
   const paletteIsLight = tweaks.palette === "bone-paper";
   const speed = SPEED_MS[tweaks.speed] || SPEED_MS.medium;
 
@@ -347,13 +355,29 @@ const App = () => {
 
   useE(() => {
     if (stage !== "strategy" || strategyPhase !== "thinking") return;
-    if (thinkingPhase < 2) {
-      const t = setTimeout(() => setThinkingPhase((p) => p + 1), speed * 1.2);
-      return () => clearTimeout(t);
-    }
-    // All 3 thinking steps animated — now call real AI or fallback
-    const t = setTimeout(async () => {
+    let cancelled = false;
+    setThinkTimes([]);
+    setThinkingPhase(0);
+    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+    const freeze = (i, st) => setThinkTimes((a) => { const n = [...a]; n[i] = (performance.now() - st) / 1000; return n; });
+
+    (async () => {
+      let st = performance.now();
+      await delay(speed * 0.6);                 // step 0: scan vaults
+      if (cancelled) return;
+      freeze(0, st); setThinkingPhase(1);
+
+      st = performance.now();
+      await delay(speed * 1.1);                 // step 1: allocation
+      if (cancelled) return;
+      freeze(1, st); setThinkingPhase(2);
+
+      // step 2: real AI call — ThinkingCard ticks a live timer + spinner until this resolves.
+      // App owns the timeout: after VENICE_TIMEOUT_MS, ask the user to keep waiting or fall back.
       let s = null;
+      const ctrl = new AbortController();
+      genAbortRef.current = ctrl;
+      slowTimerRef.current = setTimeout(() => { if (!cancelled) setSlowConfirm(true); }, VENICE_TIMEOUT_MS);
       try {
         const numVaults = { low: 1, med: 2, high: 3 }[risk] || 2;
         const riskLevel = risk === "med" ? "medium" : risk;
@@ -363,6 +387,7 @@ const App = () => {
           numVaults,
           veniceAuth: null, // wallet not connected yet at step 1
           devApiKey: devApiKey || null,
+          signal: ctrl.signal,
         });
         setSkillSource(veniceResult.skillSource || "default");
         if (veniceResult.generatedBy !== "fallback") {          s = mapVeniceToStrategy(veniceResult, amount, risk);
@@ -371,6 +396,9 @@ const App = () => {
       } catch (e) {
         console.warn("[app] Strategy AI failed:", e);
       }
+      clearTimeout(slowTimerRef.current);
+      setSlowConfirm(false);
+      if (cancelled) return;
       if (!s) s = buildStrategy(amount, risk);
       setStrategy(s);
       setStrategyPhase("ready");
@@ -378,9 +406,10 @@ const App = () => {
       s.agents.forEach((a) => { sk[a.id] = { state: "pending", skill: null }; });
       setSkillStates(sk);
       addLog({ event: "OrchestratorPlanned", meta: `${s.agents.length} worker spawned · ${s.blendedApy}% blended apy` });
-    }, speed * 1.5);
-    return () => clearTimeout(t);
-  }, [stage, strategyPhase, thinkingPhase, speed]);
+    })();
+
+    return () => { cancelled = true; };
+  }, [stage, strategyPhase]);
 
   const handleAcceptStrategy = () => setStage("connect");
 
@@ -390,6 +419,16 @@ const App = () => {
     setStrategyPhase("thinking");
     setThinkingPhase(0);
     addLog({ event: "OrchestratorPlanned", meta: `re-planning · ${amount} usdc · ${risk} risk` });
+  };
+
+  const handleKeepWaiting = () => {
+    setSlowConfirm(false);
+    slowTimerRef.current = setTimeout(() => setSlowConfirm(true), VENICE_TIMEOUT_MS); // ask again next minute
+  };
+  const handleStopWaiting = () => {
+    setSlowConfirm(false);
+    clearTimeout(slowTimerRef.current);
+    genAbortRef.current?.abort(); // → generateStrategy returns fallback → default strategy
   };
 
   /* ----- CONNECT (step 02) ----- */
@@ -679,6 +718,7 @@ const App = () => {
 
   const handleAgain = () => {
     setStage("strategy");
+    setFurthest(0);
     setStrategyPhase("input");
     setThinkingPhase(0);
     setStrategy(null);
@@ -698,6 +738,12 @@ const App = () => {
     (strategy?.agents || []).forEach((a) =>
       addLog({ event: "PermissionRevoked", agent: a.id, meta: "agent halted · scope cleared" })
     );
+  };
+
+  /* ----- Step rail: navigate back to a completed step (state preserved) ----- */
+  const goBack = (id) => {
+    if (id === "strategy") setStrategyPhase("ready");
+    setStage(id);
   };
 
   /* ----- Jump to step (tweaks panel) ----- */
@@ -749,7 +795,7 @@ const App = () => {
         if (strategyPhase === "input")
           return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} onSubmit={handleSubmitPreference} />;
         if (strategyPhase === "thinking")
-          return <ThinkingCard phase={thinkingPhase} />;
+          return <ThinkingCard phase={thinkingPhase} times={thinkTimes} />;
         return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} />;
       case "connect":
         return <ConnectCard phase={connectPhase} onConnect={handleConnect} onUpgrade={handleUpgrade} onDone={handleConnectDone} onCancel={() => { setConnectPhase("idle"); setStage("strategy"); }} />;
@@ -796,7 +842,7 @@ const App = () => {
       <Sidebar />
       <main className="main">
         <TopBar walletConnected={walletPhase !== "none"} onReset={handleAgain} />
-        <StepRail stage={stage} />
+        <StepRail stage={stage} furthest={furthest} onStepClick={goBack} />
         <div className="stage" key={`${stage}-${strategyPhase}`}>
           {renderStage()}
         </div>
@@ -822,6 +868,22 @@ const App = () => {
           execMap={execMap}
           onClose={() => setOpenAgentId(null)}
         />
+      )}
+
+      {slowConfirm && (
+        <div className="modal-backdrop">
+          <div className="modal" role="dialog" aria-modal="true">
+            <div className="modal-eyebrow">venice ai · timeout</div>
+            <h3 className="modal-title">AI masih memproses — lanjut nunggu?</h3>
+            <p className="lede" style={{ marginTop: 8 }}>
+              Generation udah lewat {Math.round(VENICE_TIMEOUT_MS / 1000)} detik. Mau tunggu lebih lama, atau pakai strategy default aja?
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={handleStopWaiting}>Pakai default</button>
+              <button className="btn btn-primary" onClick={handleKeepWaiting}>Lanjut nunggu</button>
+            </div>
+          </div>
+        </div>
       )}
 
       <TweaksPanel title="Tweaks">
