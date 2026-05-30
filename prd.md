@@ -1,7 +1,7 @@
 # Vibing Farmer — Product Requirements Document
 
-**Hackathon:** MetaMask Smart Accounts Kit × 1Shot API × Venice AI Dev Cook Off  
-**Deadline:** 15 Juni 2026 | **Prize:** $11,000 | **Mode:** Solo | **Platform:** HackQuest  
+**Type:** Indie Open-Source Project  
+**Motivation:** Built out of frustration with sequential, click-heavy DeFi yield farming.
 **Tagline:** "Set once. Vibe forever."
 
 ---
@@ -49,7 +49,7 @@ Yield farmers must execute **8+ manual transactions** per rebalance cycle:
 | AI coordinator (strategy + skills) | Venice AI | Groq (no Venice track) | ❌ | ❌ |
 | Gas-free relay | 1Shot (active) | Skips 1Shot | User pays | Depends on bot |
 | Wallet control | Bounded ERC-7715 | Unknown | Full manual | Full access (risky) |
-| A2A coordination track | ✅ | ❌ | ❌ | ❌ |
+| A2A parallel execution | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -178,16 +178,16 @@ Next execution reads memory for context (feeds back to Venice AI prompt).
 
 ---
 
-## Hackathon Qualification Checklist
+## Core Deliverables Checklist
 
 - [ ] Uses MetaMask Smart Accounts Kit (EIP-7702 + ERC-7715) in main flow
-- [ ] Demo video shows EIP-7702 upgrade + ERC-7715 permission grant
-- [ ] 1Shot API relays agent deposit txs — demo shows `from` = relayer on Sepolia Etherscan
+- [ ] Interactive UI displays EIP-7702 upgrade + ERC-7715 permission grant
+- [ ] 1Shot API relays agent deposit txs — shown as sponsored `from` = relayer on Sepolia Etherscan
 - [ ] Venice AI generates strategy + skill sets — shown before execution
-- [ ] Skill review UI visible in demo
+- [ ] Skill review UI allows manual adjustment of agent bounds
 - [ ] Agent swarm (≥2 parallel Workers) visible in vis.js graph
-- [ ] Agent memory displayed in node detail
-- [ ] All 4 prize tracks demonstrable in ≤ 5 min video
+- [ ] Agent memory persistent and displayed in node detail
+- [ ] All primary features fully functional in parallel on Sepolia
 
 ---
 

@@ -1,22 +1,21 @@
 Created At: 2026-05-30T13:59:04Z
 Completed At: 2026-05-30T13:59:04Z
-File Path: `file:///c:/SharredData/project/competition/yield-vibing/docs/bisnis-roadmap-backlog.md`
+File Path: `file:///c:/SharredData/project/competition/yield-vibing/docs/business-roadmap-backlog.md`
 
 # Roadmap & Backlog — Vibing Farmer
 
 > **Skill Reference:** architecture-designer + finance-expert
 > **Version:** 2.0 | **Date:** May 27, 2026
-> **Purpose:** 20-day hackathon roadmap, feature prioritization, and risk management
+> **Purpose:** MVP timeline roadmap, feature prioritization, and risk management
 
 ---
 
 ## 1. Roadmap Summary
 
-Deadline: **June 15, 2026** (20 days from May 26).  
-Submission platform: HackQuest.  
-Target: End-to-end multi-vault deposit automation demo with an agent swarm on Sepolia + a 3–5 minute video.
+Project Duration: **20-day sprint setup** (from concept to fully working Sepolia MVP).
+Target: End-to-end parallel multi-vault deposit automation with a secure agent swarm on Sepolia, integrated with standard wallet/permission libraries.
 
-**4 target tracks:** Best Agent ($3,000) + Best Venice AI ($3,000) + Best A2A Coordination ($3,000) + Best 1Shot ($1,000 USDC) = **$10,000 out of a $11,000 prize pool.**
+**Core Technological Highlights:** Multi-Agent Skill Boundaries + Venice AI Strategy Generation + Parallel A2A Coordination + 1Shot Gasless Relay.
 
 ---
 
@@ -24,47 +23,47 @@ Target: End-to-end multi-vault deposit automation demo with an agent swarm on Se
 
 ### Must Have
 
-| ID | Feature | Track |
+| ID | Feature | Category |
 |----|-------|-------|
-| M1 | Wallet connect + EIP-7702 account upgrade | Qualification |
-| M2 | ERC-7715 permission grant UI per agent | Qualification |
-| M3 | AgentVaultDepositor.sol (per-agent permission + execution) | Core |
-| M4 | 1Shot API relay for all agent transactions | 1Shot Track |
-| M5 | Venice AI: strategy generation + skill auto-generation per agent | Venice Track |
-| M6 | Skill review + edit UI (user approves prior to execution) | Agent Track |
-| M7 | Orchestrator Agent: parallel Worker dispatch | A2A Track |
-| M8 | Worker Agent: single vault Swap→Approve→Deposit | Agent Track |
-| M9 | Agent memory files: write + display | Agent Track |
-| M10 | vis.js Network graph: real-time agent visualization | Agent Track |
-| M11 | End-to-end flow on Sepolia testnet | Demo |
-| M12 | Demo video (3–5 minutes) | Submission |
+| M1 | Wallet connect + EIP-7702 account upgrade | Smart Account Foundations |
+| M2 | ERC-7715 permission grant UI per agent | Smart Account Foundations |
+| M3 | AgentVaultDepositor.sol (per-agent permission + execution) | Core Logic |
+| M4 | 1Shot API relay for all agent transactions | Gas Abstraction Layer |
+| M5 | Venice AI: strategy generation + skill auto-generation per agent | AI Strategy Orchestration |
+| M6 | Skill review + edit UI (user approves prior to execution) | User Agency |
+| M7 | Orchestrator Agent: parallel Worker dispatch | Multi-Agent Parallel Swarm |
+| M8 | Worker Agent: single vault Swap→Approve→Deposit | Worker Autonomy |
+| M9 | Agent memory files: write + display | Traceability |
+| M10 | vis.js Network graph: real-time agent visualization | Traceability |
+| M11 | End-to-end flow on Sepolia testnet | E2E Live Environment |
+| M12 | Codebase publication & setup guides | Documentation |
 
 ### Should Have
 
 | ID | Feature | Rationale |
 |----|-------|--------|
-| S1 | Agent memory displayed in vis.js node details | Strengthens the Agent track |
-| S2 | Permission boundary enforcement (revert on exceed) per agent | Security & judging quality |
-| S3 | MockVault × 2 instances for demo of 2 parallel Workers | Demo completeness |
-| S4 | Skill edit capability (user modifies slippage, amount) | UX for judging |
+| S1 | Agent memory displayed in vis.js node details | Improves system traceability |
+| S2 | Permission boundary enforcement (revert on exceed) per agent | Security & robust cryptographic enforcement |
+| S3 | MockVault × 2 instances for demo of 2 parallel Workers | Validates parallel swarm scaling |
+| S4 | Skill edit capability (user modifies slippage, amount) | Enables granular user-defined boundaries |
 
 ### Could Have
 
 | ID | Feature | Rationale |
 |----|-------|--------|
-| C1 | Memory-aware Venice AI re-prompting | Added value for the Agent track |
-| C2 | APY comparison UI across vaults | More compelling for the demo |
-| C3 | ≥ 3 parallel Workers (expandable N) | Strengthens the A2A track |
+| C1 | Memory-aware Venice AI re-prompting | Feedback loop for smarter future strategies |
+| C2 | APY comparison UI across vaults | Compelling visual statistics |
+| C3 | ≥ 3 parallel Workers (expandable N) | Validates wide parallel orchestration |
 
 ### Won't Have (Explicitly Out of Scope)
 
 | Feature | Reason for Exclusion |
 |-------|-------------------|
-| Cross-chain bridging | Too complex, adds no value for judging |
-| Remove liquidity automation | High-stakes, timing-sensitive, out of scope |
-| Custom AMM/DEX | Reinventing the wheel, not aligned with hackathon value |
-| Mainnet deployment | Unsafe for demo, testnet is sufficient |
-| Mobile breakpoints | Not a judging requirement |
+| Cross-chain bridging | Extremely high latency, high security surface, out of initial scope |
+| Remove liquidity automation | Requires active market monitoring and complex rebalancing rules |
+| Custom AMM/DEX | Reinventing the wheel, should use production DEX aggregates like Uniswap |
+| Mainnet deployment | Needs extensive auditing, testnet is safe for initial sandbox release |
+| Mobile breakpoints | Core focus is desktop-first power user dashboard UX |
 
 ---
 
@@ -119,16 +118,16 @@ Target: End-to-end multi-vault deposit automation demo with an agent swarm on Se
 | Day 14 | Bug fixes: edge cases, error handling, UX polish | [ ] |
 | Day 15 | Memory UI in node details, skill edit capability | [ ] |
 | Day 16 | README, comprehensive documentation, architecture diagram updates | [ ] |
-| Day 17 | Demo video recording (3–5 minutes) | [ ] |
+| Day 17 | Finalize deployment playbooks | [ ] |
 
-**Milestone gate:** Video uploaded, all qualification checklists successfully completed.
+**Milestone gate:** Code finalized and ready for release.
 
-### Phase 5: Buffer (Days 18–20 | June 12–15)
+### Phase 5: Sandbox Deploy & Publish (Days 18–20 | June 12–15)
 
 | Day | Deliverable | Complete |
 |------|-------------|---------|
-| Day 18–19 | Buffer for unexpected issues | [ ] |
-| Day 20 | Final submission on HackQuest (deadline June 15) | [ ] |
+| Day 18–19 | End-to-end sandbox stress testing and security review | [ ] |
+| Day 20 | Publish code on GitHub with open-source guidelines | [ ] |
 
 ---
 
@@ -180,4 +179,4 @@ Target: End-to-end multi-vault deposit automation demo with an agent swarm on Se
 | MetaMask Flask version incompatibility | Low | High | Test in a clean browser profile, document the exact working Flask version |
 | 1Shot Permissionless Relayer down | Low | High | Verify relayer health on Day 9. Implement fallback: direct EOA transaction for the demo |
 | Venice AI response is slow (> 10 seconds) | Low | Low | Timeout + hardcoded fallback strategy |
-| Poor demo video quality | Low | Medium | Write script first, record last, max 5 minutes |
+| Poor documentation clarity | Low | Medium | Write guides first, keep README highly intuitive |

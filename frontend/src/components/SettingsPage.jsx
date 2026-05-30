@@ -166,7 +166,6 @@ export default function SettingsPage({
   const agentSet = !!localStorage.getItem('yv_agent_settings')
   const total = sum.transactions + sum.strategies + sum.reasoning + (agentSet ? 1 : 0) + (skillSet ? 1 : 0)
   const ghUrl = import.meta.env.VITE_GITHUB_URL || '#'
-  const hqUrl = import.meta.env.VITE_HACKQUEST_URL || '#'
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 28 }}>
@@ -328,7 +327,7 @@ export default function SettingsPage({
           <div className="brand" style={{ fontSize: 18 }}><span>vibing</span><span className="slash">/</span><span className="vibing">farmer</span></div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Autonomous DeFi yield farming agent</div>
           <div style={{ marginTop: 12 }}>
-            {[['Version', '1.0.0-hackathon'], ['Network', 'Ethereum Sepolia'], ['Contracts', 'verified on Sourcify']].map(([k, v]) => (
+            {[['Version', '1.0.0-beta'], ['Network', 'Ethereum Sepolia'], ['Contracts', 'verified on Sourcify']].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0' }}><span style={{ color: 'var(--text-muted)' }}>{k}</span><span className="mono">{v}</span></div>
             ))}
           </div>
@@ -340,19 +339,16 @@ export default function SettingsPage({
           <ContractRow name="MockVault D" addr={MOCK_VAULT_D_ADDRESS} />
           <Divider />
           <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-            Built for: MetaMask Smart Accounts Kit × 1Shot API × Venice AI Dev Cook-Off
+            Powered by: MetaMask Smart Accounts Kit × 1Shot API × Venice AI
           </div>
           <div style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.8 }}>
-            {['Best Use of 1Shot Permissionless Relayer', 'Best Use of Venice AI', 'Best Agent', 'Best A2A Coordination', 'Best x402 + ERC-7710'].map((p) => (
+            {['1Shot Gasless Gas Abstraction', 'Venice AI Strategy Generator', 'Multi-Agent Smart Swarm', 'Parallel Swarm Coordination', 'ERC-7715 Scoped Cryptographic Boundaries'].map((p) => (
               <div key={p}><span style={{ color: 'var(--ok)' }}>✓</span> {p}</div>
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
             {ghUrl !== '#' && (
               <a href={ghUrl} target="_blank" rel="noopener noreferrer" style={{ ...miniBtn, textDecoration: 'none' }}>View on GitHub</a>
-            )}
-            {hqUrl !== '#' && (
-              <a href={hqUrl} target="_blank" rel="noopener noreferrer" style={{ ...miniBtn, textDecoration: 'none' }}>HackQuest submission</a>
             )}
           </div>
         </Section>

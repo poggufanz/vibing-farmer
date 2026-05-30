@@ -1,6 +1,6 @@
 Created At: 2026-05-30T13:58:52Z
 Completed At: 2026-05-30T13:58:52Z
-File Path: `file:///c:/SharredData/project/competition/yield-vibing/docs/bisnis-dampak-model.md`
+File Path: `file:///c:/SharredData/project/competition/yield-vibing/docs/business-impact-model.md`
 
 # Business Impact & Value Model — Vibing Farmer
 
@@ -117,7 +117,7 @@ Yield farming currently requires:
 
 ## 5. KPIs & Impact Indicators
 
-| KPI | Baseline | Hackathon Demo Target |
+| KPI | Baseline | MVP Target |
 |-----|----------|----------------------|
 | Manual txs count per multi-vault cycle | 8+ × N vaults | 1 (skill approval) + N (permissions per agent) |
 | Full multi-vault workflow execution time | 15–30 minutes × N vaults | < 60 seconds total (parallel) |
@@ -126,7 +126,7 @@ Yield farming currently requires:
 | Agent memory entries per session | N/A | ≥ 1 entry per agent, displayed in graph |
 | Demo completion rate | N/A | 100% (controlled demo on Sepolia) |
 
-### Hackathon Demo Success Indicators
+### MVP Live Demo Success Indicators
 
 - Venice AI displays a meaningful strategy and skill set per agent
 - Users can review and edit skills before approval
@@ -135,7 +135,7 @@ Yield farming currently requires:
 - ERC-7715 permission grant is displayed in the MetaMask UI (per agent)
 - 1Shot relayer executes transactions with zero user-paid gas
 - Agent memory is displayed in node details post-execution
-- All 4 prize track targets are fully demonstrated within ≤ 5 minutes
+- All core visual and structural components demonstrate flawless coordination
 
 ---
 

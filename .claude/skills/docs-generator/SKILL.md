@@ -36,59 +36,59 @@ Generate all docs listed in the manifest with full content, overwriting existing
 ## Blockchain Rule (Optional)
 - Blockchain is optional by default.
 - If the plan includes building a new web3 app:
-  - Make docs/teknis-blockchain-penggunaan.md fully technical and detailed.
+  - Make docs/technical-blockchain-usage.md fully technical and detailed.
   - Add or reinforce blockchain integration where relevant in other docs.
 - If the plan does not include a new web3 app:
-  - Still generate docs/teknis-blockchain-penggunaan.md.
+  - Still generate docs/technical-blockchain-usage.md.
   - Mark it as optional and out of scope for the current plan.
 
 ## Manifest (Overwrite These Files)
-- docs/bisnis-dampak-model.md
-- docs/bisnis-roadmap-backlog.md
-- docs/produk-demo-skenario.md
-- docs/produk-fitur-lengkap.md
-- docs/produk-user-stories.md
-- docs/teknis-api-events.md
-- docs/teknis-arsitektur.md
-- docs/teknis-blockchain-penggunaan.md
-- docs/teknis-database.md
-- docs/teknis-keamanan-privasi.md
+- docs/business-impact-model.md
+- docs/business-roadmap-backlog.md
+- docs/product-demo-scenario.md
+- docs/product-features-complete.md
+- docs/product-user-stories.md
+- docs/technical-api-events.md
+- docs/technical-architecture.md
+- docs/technical-blockchain-usage.md
+- docs/technical-database.md
+- docs/technical-security-privacy.md
 
 ## Skill Referensi Mapping (Use These)
-- docs/bisnis-dampak-model.md: finance-expert + senior-data-scientist
-- docs/bisnis-roadmap-backlog.md: architecture-designer + finance-expert
-- docs/produk-demo-skenario.md: mobile-developer + blockchain-developer + cognitive-fluency-psychology
-- docs/produk-fitur-lengkap.md: mobile-developer + blockchain-developer
-- docs/produk-user-stories.md: cognitive-fluency-psychology
-- docs/teknis-api-events.md: api-integration-specialist
-- docs/teknis-arsitektur.md: architecture-designer
-- docs/teknis-blockchain-penggunaan.md: blockchain-developer + web3-expert
-- docs/teknis-database.md: database-schema-designer
-- docs/teknis-keamanan-privasi.md: security-review + data-privacy-compliance
+- docs/business-impact-model.md: finance-expert + senior-data-scientist
+- docs/business-roadmap-backlog.md: architecture-designer + finance-expert
+- docs/product-demo-scenario.md: mobile-developer + blockchain-developer + cognitive-fluency-psychology
+- docs/product-features-complete.md: mobile-developer + blockchain-developer
+- docs/product-user-stories.md: cognitive-fluency-psychology
+- docs/technical-api-events.md: api-integration-specialist
+- docs/technical-architecture.md: architecture-designer
+- docs/technical-blockchain-usage.md: blockchain-developer + web3-expert
+- docs/technical-database.md: database-schema-designer
+- docs/technical-security-privacy.md: security-review + data-privacy-compliance
 
 ## Per-File Blueprints (Kisi-kisi)
-1) docs/bisnis-dampak-model.md
+1) docs/business-impact-model.md
 - Ringkasan dampak bisnis
 - Problem dan market pain
 - Model nilai dan manfaat
 - Dampak untuk stakeholder utama
 - KPI dan indikator dampak
 
-2) docs/bisnis-roadmap-backlog.md
+2) docs/business-roadmap-backlog.md
 - Ringkasan roadmap
 - MoSCoW atau priority matrix
 - Milestone per fase
 - Backlog fitur utama
 - Risiko dan mitigasi
 
-3) docs/produk-demo-skenario.md
+3) docs/product-demo-scenario.md
 - Tujuan demo
 - Persona atau aktor demo
 - Alur demo langkah demi langkah
 - Checklist kesiapan demo
 - Expected outcomes
 
-4) docs/produk-fitur-lengkap.md
+4) docs/product-features-complete.md
 - Ringkasan
 - Daftar functional requirements (FR)
 - Prioritas (MoSCoW)
@@ -96,20 +96,20 @@ Generate all docs listed in the manifest with full content, overwriting existing
 - Integrasi dan dependensi
 - Referensi
 
-5) docs/produk-user-stories.md
+5) docs/product-user-stories.md
 - Ringkasan persona
 - User stories per fitur
 - Acceptance criteria
 - Non-functional notes
 
-6) docs/teknis-api-events.md
+6) docs/technical-api-events.md
 - Ringkasan event model
 - Daftar event API
 - Payload schema ringkas
 - Alur publish dan subscribe
 - Error handling dan retry
 
-7) docs/teknis-arsitektur.md
+7) docs/technical-architecture.md
 - Ringkasan arsitektur
 - Prinsip desain
 - Diagram arsitektur (teks atau mermaid)
@@ -118,21 +118,21 @@ Generate all docs listed in the manifest with full content, overwriting existing
 - NFR
 - Failure modes
 
-8) docs/teknis-blockchain-penggunaan.md
+8) docs/technical-blockchain-usage.md
 - Ringkasan peran blockchain
 - Komponen on-chain dan off-chain
 - Smart contract scope
 - Audit trail dan verifikasi
 - Risiko dan mitigasi
 
-9) docs/teknis-database.md
+9) docs/technical-database.md
 - Ringkasan data model
 - Entitas atau collections inti
 - Relasi utama
 - Indexing dan query penting
 - Retensi data dan keamanan
 
-10) docs/teknis-keamanan-privasi.md
+10) docs/technical-security-privacy.md
 - Ringkasan keamanan dan privasi
 - Data classification
 - Threat model ringkas
@@ -148,7 +148,7 @@ Generate all docs listed in the manifest with full content, overwriting existing
 | Blockchain not in scope | Still generate the blockchain doc and mark it optional. |
 | Avoid placeholders | No TODO/TBD anywhere. |
 
-## Example: docs/produk-demo-skenario.md
+## Example: docs/product-demo-scenario.md
 ```markdown
 # Skenario Demo Produk BISA
 
@@ -209,6 +209,6 @@ Menjelaskan bagaimana pengguna UMKM mendaftar, menghubungkan data, menghasilkan 
 
 ## Red Flags
 - Ada file selain manifest yang ikut dihasilkan.
-- docs/teknis-blockchain-penggunaan.md tidak dibuat.
+- docs/technical-blockchain-usage.md tidak dibuat.
 - "Skill Referensi" hilang atau berubah.
 - Ada TODO, TBD, atau placeholder.

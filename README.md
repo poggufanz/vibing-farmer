@@ -76,16 +76,16 @@ All core design decisions, requirements, and guides are fully documented in Engl
 
 | Document | Focus |
 |-----|-----|
-| [teknis-arsitektur.md](docs/teknis-arsitektur.md) | High-level system architecture, design principles, ADRs, and NFRs |
-| [teknis-blockchain-penggunaan.md](docs/teknis-blockchain-penggunaan.md) | On-chain contract boundaries, audit trails, and delegation scope |
-| [teknis-keamanan-privasi.md](docs/teknis-keamanan-privasi.md) | Threat modeling, security controls, and regulatory compliance |
-| [teknis-api-events.md](docs/teknis-api-events.md) | Core event schemas, API request/response structures, and error routing |
-| [teknis-database.md](docs/teknis-database.md) | Local storage, agent memory structures, and data retention guidelines |
-| [produk-demo-skenario.md](docs/produk-demo-skenario.md) | Step-by-step walkthrough and narrative script for the video demo |
-| [produk-fitur-lengkap.md](docs/produk-fitur-lengkap.md) | Detailed functional requirements and priority matrices |
-| [produk-user-stories.md](docs/produk-user-stories.md) | User personas, journey maps, and exhaustive acceptance criteria |
-| [bisnis-dampak-model.md](docs/bisnis-dampak-model.md) | Market pain points, value propositions, and KPI impact metrics |
-| [bisnis-roadmap-backlog.md](docs/bisnis-roadmap-backlog.md) | Comprehensive development roadmap, backlog items, and risk matrix |
+| [technical-architecture.md](docs/technical-architecture.md) | High-level system architecture, design principles, ADRs, and NFRs |
+| [technical-blockchain-usage.md](docs/technical-blockchain-usage.md) | On-chain contract boundaries, audit trails, and delegation scope |
+| [technical-security-privacy.md](docs/technical-security-privacy.md) | Threat modeling, security controls, and regulatory compliance |
+| [technical-api-events.md](docs/technical-api-events.md) | Core event schemas, API request/response structures, and error routing |
+| [technical-database.md](docs/technical-database.md) | Local storage, agent memory structures, and data retention guidelines |
+| [product-demo-scenario.md](docs/product-demo-scenario.md) | Step-by-step walkthrough and narrative script for the video demo |
+| [product-features-complete.md](docs/product-features-complete.md) | Detailed functional requirements and priority matrices |
+| [product-user-stories.md](docs/product-user-stories.md) | User personas, journey maps, and exhaustive acceptance criteria |
+| [business-impact-model.md](docs/business-impact-model.md) | Market pain points, value propositions, and KPI impact metrics |
+| [business-roadmap-backlog.md](docs/business-roadmap-backlog.md) | Comprehensive development roadmap, backlog items, and risk matrix |
 
 ---
 
