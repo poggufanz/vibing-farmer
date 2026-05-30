@@ -24,28 +24,28 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
         <span className="num">01</span>
         <span>AI Strategy · venice ai · multi-agent</span>
         <span className="rule" />
-        <span>06 langkah</span>
+        <span>06 steps</span>
       </div>
 
       <h1 className="h-display">
-        Set deposit kamu — biar orchestrator yang spawn agent-nya.
+        Set your deposit — let the orchestrator spawn the agents.
       </h1>
       <p className="lede">
-        Venice AI nge-generate strategy: berapa worker agent yang dibutuhin, vault apa yang masing-masing handle,
-        dan skill apa yang dia run. Semua relay lewat 1Shot, kamu nggak bayar gas. Permission yang kamu kasih nanti
-        scoped per-agent — gak ada agent yang bisa keluar batas vault-nya.
+        Venice AI generates the strategy: how many worker agents are needed, which vault each agent handles,
+        and which skills they run. All transactions are relayed via 1Shot, so you pay zero gas. The permissions you grant
+        are scoped per agent—no agent can act outside its designated vault boundaries.
       </p>
 
       <div className="amount-block">
         <div>
-          <div className="amount-label">Jumlah deposit</div>
+          <div className="amount-label">Deposit amount</div>
           <div className="amount-input-row">
             <input
               type="number"
               placeholder="0"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              aria-label="Jumlah USDC"
+              aria-label="USDC Amount"
               inputMode="decimal"
             />
             <span className="ticker">USDC</span>
@@ -53,7 +53,7 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
         </div>
 
         <div>
-          <div className="amount-label">Risk profile · juga nentuin jumlah agent</div>
+          <div className="amount-label">Risk profile · also determines agent count</div>
           <div className="risk-row" role="radiogroup">
             {RISK_OPTIONS.map((r) => (
               <button
@@ -77,7 +77,7 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
           Venice AI · privacy-first · <b>no data retention</b>
         </div>
         <button className="btn btn-primary btn-lg" disabled={!valid} onClick={onSubmit}>
-          Cari strategy <Icon name="arrow" size={14} />
+          Get Recommendation <Icon name="arrow" size={14} />
         </button>
       </div>
     </section>
@@ -88,9 +88,9 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
    01b — AI Thinking (strategy generation)
    ============================================ */
 const THINK_STEPS = [
-  { label: "Memindai 24 vault aktif di Sepolia", time: "0.4s" },
-  { label: "Menyusun allocation per risk profile", time: "1.6s" },
-  { label: "Generate skill JSON per worker agent", time: "0.9s" },
+  { label: "Scanning 24 active vaults on Sepolia", time: "0.4s" },
+  { label: "Compiling allocation per risk profile", time: "1.6s" },
+  { label: "Generating skill JSON per worker agent", time: "0.9s" },
 ];
 
 const ThinkingCard = ({ phase }) => {
@@ -100,7 +100,7 @@ const ThinkingCard = ({ phase }) => {
         <span className="num">01</span>
         <span>Venice AI · claude-opus-4-8 · orchestrator planning</span>
       </div>
-      <h2 className="thinking-title">Lagi nyusun multi-agent strategy…</h2>
+      <h2 className="thinking-title">Formulating multi-agent strategy…</h2>
 
       <div className="thinking-list">
         {THINK_STEPS.map((s, i) => {
@@ -132,17 +132,17 @@ const ConnectCard = ({ phase, onConnect, onUpgrade, onDone }) => {
       </div>
 
       <h1 className="h-display">
-        Upgrade akun kamu jadi smart account — satu signature, reversible.
+        Upgrade your account to a smart account — single signature, reversible.
       </h1>
       <p className="lede">
-        MetaMask kamu masih EOA biasa. EIP-7702 nge-set kode delegasi di akun yang sama,
-        jadi smart account aktif tanpa pindah wallet. Setelah ini, orchestrator bisa nge-spawn worker
-        agents yang masing-masing punya scoped permission.
+        Your MetaMask account is currently a standard EOA. EIP-7702 sets delegation code on your existing account,
+        activating it as a smart account without changing wallets. Afterwards, the orchestrator can spawn worker
+        agents, each with scoped permissions.
       </p>
 
       {phase === "idle" && (
         <div className="action-row">
-          <div className="foot-note">Pastikan MetaMask kamu di network <b>Sepolia</b> testnet.</div>
+          <div className="foot-note">Ensure MetaMask Flask is connected to the <b>Sepolia</b> testnet.</div>
           <button className="btn btn-primary btn-lg" onClick={onConnect}>
             Connect MetaMask <Icon name="arrow" size={14} />
           </button>
@@ -175,7 +175,7 @@ const ConnectCard = ({ phase, onConnect, onUpgrade, onDone }) => {
             ]}
           />
           <div className="action-row">
-            <div className="foot-note">Authorization tx bakal di-relay sama 1Shot · gas <b>0</b>.</div>
+            <div className="foot-note">Authorization transaction will be relayed via 1Shot · gas <b>0</b>.</div>
             <div className="flex gap-2">
               <button className="btn btn-ghost">Cancel</button>
               <button className="btn btn-primary" onClick={onUpgrade}>
@@ -245,13 +245,13 @@ const UpgradedCallout = ({ onDone }) => (
         <div className="mono" style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "-0.01em", marginBottom: 8 }}>
           ✓ smart account active
         </div>
-        <div className="h-sub">EOA berhasil di-upgrade. Authorization tx confirmed.</div>
+        <div className="h-sub">EOA successfully upgraded. EIP-7702 is active via MetaMask SAK.</div>
         <div className="mono" style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6, letterSpacing: "-0.01em" }}>
-          tx · 0x9f3a8b…a124 · relayed by 1Shot
+          eip-7702 · handled internally by MetaMask Flask · gas 0
         </div>
       </div>
       <button className="btn btn-primary" onClick={onDone}>
-        Lanjut · review skills <Icon name="arrow" size={14} />
+        Next · review skills <Icon name="arrow" size={14} />
       </button>
     </div>
   </div>
@@ -262,7 +262,7 @@ const UpgradedCallout = ({ onDone }) => (
    ============================================ */
 const PermissionCard = ({ strategy, onGrant, phase, onConfirm }) => {
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  const expiresFmt = expiresAt.toLocaleString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const expiresFmt = expiresAt.toLocaleString("en-US", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const agents = strategy?.agents || [];
   const totalMax = agents.reduce((s, a) => s + a.allocation, 0);
 
@@ -276,11 +276,11 @@ const PermissionCard = ({ strategy, onGrant, phase, onConfirm }) => {
       </div>
 
       <h1 className="h-display">
-        Izinkan {agents.length} agent — masing-masing scoped ke vault sendiri.
+        Authorize {agents.length} agents — each scoped to their own vault.
       </h1>
       <p className="lede">
-        Permission ini di-batch dalam satu signature, tapi tiap worker dapat scope sendiri: vault tertentu,
-        max amount tertentu, kadaluarsa otomatis. Di luar scope, kontrak <span className="mono">VaultDepositor.sol</span> bakal <b>revert</b>.
+        These permissions are batched in a single signature, but each worker receives its own scope: a specific vault,
+        a maximum amount, and automatic expiration. Outside this scope, the <span className="mono">VaultDepositor.sol</span> contract will <b>revert</b>.
       </p>
 
       <div className="perm-doc">
@@ -312,25 +312,25 @@ const PermissionCard = ({ strategy, onGrant, phase, onConfirm }) => {
           <div className="perm-doc-k">expires.at</div>
           <div className="perm-doc-v">
             {expiresFmt}
-            <span className="annot">86 400 detik dari sekarang</span>
+            <span className="annot">86,400 seconds from now</span>
           </div>
         </div>
         <div className="perm-doc-row">
           <div className="perm-doc-k">revocable</div>
           <div className="perm-doc-v">
-            yes · per-agent atau batch
-            <span className="annot">kapanpun · satu klik · onchain</span>
+            yes · per-agent or batched
+            <span className="annot">anytime · single click · on-chain</span>
           </div>
         </div>
       </div>
 
       <div className="action-row">
         <div className="foot-note">
-          Tiap agent <b>tidak punya akses</b> ke vault agent lain. Kontrak validasi tiap call.
+          Each agent <b>has no access</b> to other agents' vaults. The contract validates every call.
         </div>
         {phase === "idle" && (
           <button className="btn btn-primary btn-lg" onClick={onGrant}>
-            Grant {agents.length} permission{agents.length === 1 ? "" : "s"} <Icon name="arrow" size={14} />
+            Authorize {agents.length} agents <Icon name="arrow" size={14} />
           </button>
         )}
         {phase === "prompting" && (
@@ -387,7 +387,7 @@ const MmPermissionModal = ({ strategy, onConfirm }) => {
 /* ============================================
    06 — Success (multi-agent summary)
    ============================================ */
-const SuccessCard = ({ strategy, onAgain }) => {
+const SuccessCard = ({ strategy, onAgain, address }) => {
   const total = strategy?.total ?? 100;
   const apy = strategy?.blendedApy ?? "8.2";
   const monthly = (total * (Number(apy) / 100) / 12).toFixed(2);
@@ -398,11 +398,11 @@ const SuccessCard = ({ strategy, onAgain }) => {
         <span className="num">06</span>
         <span>{agents.length} agent · {agents.length * 3} tx confirmed</span>
         <span className="rule" />
-        <span>≈ 42 detik total</span>
+        <span>≈ 42s total</span>
       </div>
 
       <h1 className="success-title">
-        Multi-agent deployment confirmed. {agents.length} worker sekarang earning {apy}% blended APY.
+        Multi-agent deployment confirmed. {agents.length} workers are now earning {apy}% blended APY.
       </h1>
 
       <div className="success-numbers">
@@ -411,7 +411,7 @@ const SuccessCard = ({ strategy, onAgain }) => {
           <span className="figure tnum">{total}<span className="unit">USDC</span></span>
         </div>
         <div className="success-num-cell">
-          <span className="label">est. yield /bulan</span>
+          <span className="label">est. yield /month</span>
           <span className="figure tnum" style={{ color: "var(--accent)" }}>
             +{monthly}<span className="unit">USDC</span>
           </span>
@@ -439,16 +439,17 @@ const SuccessCard = ({ strategy, onAgain }) => {
       </div>
 
       <div className="action-row" style={{ marginTop: 36 }}>
-        <div className="foot-note">
-          Etherscan · <span style={{ color: "var(--text)" }}>{agents.length * 3} tx confirmed</span> ·
-          gas paid by <b>1Shot relayer</b>
-        </div>
         <div className="flex gap-2">
-          <button className="btn btn-ghost">
-            Lihat di Etherscan <Icon name="external" size={13} />
-          </button>
+          <a
+            className="btn btn-ghost"
+            href={address ? `https://sepolia.etherscan.io/address/${address}` : "https://sepolia.etherscan.io"}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View on Etherscan <Icon name="external" size={13} />
+          </a>
           <button className="btn btn-primary" onClick={onAgain}>
-            Deposit lagi <Icon name="plus" size={14} />
+            Deposit again <Icon name="plus" size={14} />
           </button>
         </div>
       </div>

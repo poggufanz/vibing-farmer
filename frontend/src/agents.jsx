@@ -473,11 +473,11 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
       <div className="exec-header">
         <div>
           <h1 className="h-display" style={{ fontSize: 30, marginTop: 6 }}>
-            {strategy.agents.length} agent berjalan paralel — orchestrator yang nyetir.
+            {strategy.agents.length} agents running in parallel — orchestrated seamlessly.
           </h1>
           <p className="lede" style={{ marginTop: 10, maxWidth: 540 }}>
-            Tiap worker ngerjain skill yang udah kamu approve: <span className="mono">swap → approve → deposit</span>.
-            Klik node agent di graph atau tile di bawah buat buka memory panel-nya.
+            Each worker executes the skills you approved: <span className="mono">swap → approve → deposit</span>.
+            Click an agent node on the graph or a card below to open its memory panel.
           </p>
         </div>
         <div className="exec-progress">

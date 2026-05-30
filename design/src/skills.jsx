@@ -170,12 +170,12 @@ const SkillReviewCard = ({ agents, riskProfile, skillStates, onApprove, onEdit, 
       </div>
 
       <h1 className="h-display">
-        Cek skill yang bakal dijalanin tiap agent — sebelum kamu kasih permission.
+        Review the skills each agent will run — before you grant permissions.
       </h1>
       <p className="lede">
-        Orchestrator nge-generate skill JSON buat tiap worker — itu kontrak action-level yang dia run pas eksekusi.
-        Kamu bisa baca tiap step, ubah guard-nya, atau approve apa adanya. Skill yang udah approved bakal dipakai
-        verbatim di runtime; gak ada hidden logic.
+        The orchestrator generates a skill JSON for each worker—this is the action-level contract it executes.
+        You can inspect each step, adjust guards, or approve as is. Approved skills are used
+        verbatim at runtime; there is no hidden logic.
       </p>
 
       <div className="skill-stack">
@@ -196,7 +196,7 @@ const SkillReviewCard = ({ agents, riskProfile, skillStates, onApprove, onEdit, 
 
       <div className="action-row">
         <div className="foot-note">
-          Skill di-sign sama smart account kamu. Edit JSON dengan hati-hati — schema validation jalan tiap save.
+          Skills are signed by your smart account. Edit the JSON carefully — schema validation runs on every save.
         </div>
         <div className="flex gap-2">
           {!allApproved && (
@@ -205,7 +205,7 @@ const SkillReviewCard = ({ agents, riskProfile, skillStates, onApprove, onEdit, 
             </button>
           )}
           <button className="btn btn-primary" disabled={!allApproved} onClick={onContinue}>
-            Lanjut · grant permission <Icon name="arrow" size={14} />
+            Next · grant permission <Icon name="arrow" size={14} />
           </button>
         </div>
       </div>

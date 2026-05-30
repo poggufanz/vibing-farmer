@@ -317,27 +317,27 @@ export const VAULT_CATALOG = [
 
 ## What This Fixes vs Before
 
-| Sebelum | Sesudah |
+| Before | After |
 |---------|---------|
-| AI cuma split 2 vault yang sama | AI pilih dari 4 vault dengan karakteristik berbeda |
-| Reasoning: tidak ada | Reasoning: spesifik per user amount + risk |
-| Protocol label hardcoded by index | Protocol label dari AI decision |
-| numVaults=3 → always fallback | Capped ke catalog.length → Venice AI selalu dipake |
-| Yield source tidak disebutkan | Yield source type explicit di output |
-| Tidak ada capital size awareness | AI wajib comment soal gas/network untuk <1000 USDC |
+| AI only splits into 2 identical vaults | AI selects from 4 vaults with distinct characteristics |
+| Reasoning: None | Reasoning: Specific to user amount + risk |
+| Protocol label hardcoded by index | Protocol label from AI decision |
+| numVaults=3 → always fallback | Capped to catalog.length → Venice AI always used |
+| Yield source not specified | Yield source type explicit in output |
+| No capital size awareness | AI must comment on gas/network for <1000 USDC |
 
 ---
 
 ## Judging Defensibility
 
-Kalau juri nanya: *"Kenapa AI rekomendasiin Morpho bukan Aave?"*
+If judges ask: *"Why did the AI recommend Morpho instead of Aave?"*
 
-AI bisa jawab dari reasoning-nya sendiri:
-> "Morpho Blue menggunakan isolated market architecture yang mencegah 
-> systemic contagion — suitable untuk medium risk user yang mau yield 
-> lebih tinggi dari Aave tanpa expose diri ke pooled-risk model. 
-> Trade-off-nya adalah curator dependency dan potential utilization lock."
+The AI can answer from its own reasoning:
+> "Morpho Blue utilizes an isolated market architecture that prevents 
+> systemic contagion — suitable for medium risk users who want higher yield 
+> than Aave without exposing themselves to a pooled-risk model. 
+> The trade-offs are curator dependency and potential utilization lock."
 
-Itu bukan if-else. Itu genuine expert reasoning dalam bounded execution-safe universe.
+This is not an if-else. It is genuine expert reasoning within a bounded execution-safe universe.
 
 

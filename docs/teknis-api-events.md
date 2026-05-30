@@ -1,38 +1,38 @@
 # API & Events — Vibing Farmer
 
-> **Skill Referensi:** api-integration-specialist
-> **Versi:** 2.0 | **Tanggal:** 27 Mei 2026
-> **Tujuan:** Dokumentasi event model, API endpoints, payload schema, dan error handling
+> **Skill Reference:** api-integration-specialist
+> **Version:** 2.0 | **Date:** May 27, 2026
+> **Purpose:** Documentation of event models, API endpoints, payload schemas, and error handling
 
 ---
 
-## 1. Ringkasan Event Model
+## 1. Event Model Summary
 
-Vibing Farmer menggunakan empat sumber API eksternal dan satu sumber event on-chain:
+Vibing Farmer utilizes four external API sources and one on-chain event source:
 
-| Sumber | Tipe | Tujuan |
+| Source | Type | Purpose |
 |--------|------|--------|
 | Venice AI API | REST (OpenAI-compatible) | Strategy generation + skill auto-generation per agent |
-| 1Shot Permissionless Relayer | REST (JSON-RPC) | Gas-free relay untuk semua agent transactions |
+| 1Shot Permissionless Relayer | REST (JSON-RPC) | Gas-free relay for all agent transactions |
 | MetaMask Smart Accounts Kit | JSON-RPC via MetaMask Flask | EIP-7702 + ERC-7715 per-agent permission |
 | AgentVaultDepositor Events | On-chain (Ethereum logs) | Real-time agent state updates → vis.js graph |
 
 ---
 
-## 2. Daftar API & Events
+## 2. API & Event Reference
 
 ### Venice AI API
 
 **Base URL:** `https://api.venice.ai/api/v1`
 
-| Method | Endpoint | Deskripsi |
+| Method | Endpoint | Description |
 |--------|----------|-----------|
 | POST | `/chat/completions` | Generate multi-vault strategy + skill sets per agent |
-| GET | `/models` | Daftar model tersedia |
+| GET | `/models` | List available models |
 
-**Auth:** Bearer token di header `Authorization: Bearer {VENICE_API_KEY}`.
+**Auth:** Bearer token in the `Authorization` header: `Authorization: Bearer {VENICE_API_KEY}`.
 
-**Headers wajib:**
+**Required Headers:**
 ```
 Content-Type: application/json
 Authorization: Bearer {VENICE_API_KEY}
@@ -43,24 +43,24 @@ Authorization: Bearer {VENICE_API_KEY}
 ### 1Shot Permissionless Relayer
 
 **Base URL:** `https://relayer.1shotapi.com`  
-**Auth:** Tidak ada API key — Permissionless Relayer.
+**Auth:** No API key required — Permissionless Relayer.
 
-| Method | Endpoint | Deskripsi |
+| Method | Endpoint | Description |
 |--------|----------|-----------|
-| POST | `/relayers` | Submit relay request (JSON-RPC) untuk satu agent tx |
+| POST | `/relayers` | Submit relay request (JSON-RPC) for a single agent transaction |
 
-**Catatan:** Setiap Worker Agent mengirim relay request sendiri. Relay tidak bisa di-batch untuk multiple agents karena permissionContext berbeda per agent.
+**Note:** Each Worker Agent submits its own relay request. Relays cannot be batched for multiple agents because each agent has a unique permissionContext.
 
 ---
 
 ### MetaMask Smart Accounts Kit (JSON-RPC via window.ethereum)
 
-| Method | Deskripsi |
+| Method | Description |
 |--------|-----------|
 | `eth_requestAccounts` | Connect wallet + get EOA address |
 | `wallet_requestExecutionPermissions` | ERC-7715: request scoped permission per agent |
-| `wallet_revokePermissions` | Cabut permission yang sudah di-grant |
-| EIP-7702 authorization | Set code untuk EOA via Viem + MetaMask Flask |
+| `wallet_revokePermissions` | Revoke granted permissions |
+| EIP-7702 authorization | Authorize code for the EOA via Viem + MetaMask Flask |
 
 ---
 
@@ -68,16 +68,16 @@ Authorization: Bearer {VENICE_API_KEY}
 
 | Event | Parameters | Trigger | vis.js Update |
 |-------|-----------|---------|--------------|
-| `AgentStarted` | `agentId`, `user`, `vault` | Agent mulai eksekusi | Node: gray → blue |
-| `SwapExecuted` | `agentId`, `user`, `amountIn`, `amountOut` | Swap berhasil | Edge swap confirmed |
-| `ApproveExecuted` | `agentId`, `user`, `vault`, `amount` | Approve vault berhasil | Edge approve confirmed |
-| `DepositExecuted` | `agentId`, `user`, `vault`, `amount`, `shares` | Deposit berhasil | Edge deposit confirmed |
-| `AgentCompleted` | `agentId`, `user`, `vault`, `shares` | Agent selesai semua steps | Node: blue → green |
-| `AgentFailed` | `agentId`, `user`, `reason` | Agent gagal (scope violation atau tx error) | Node: any → red |
+| `AgentStarted` | `agentId`, `user`, `vault` | Agent begins execution | Node: gray → blue |
+| `SwapExecuted` | `agentId`, `user`, `amountIn`, `amountOut` | Swap succeeded | Edge swap confirmed |
+| `ApproveExecuted` | `agentId`, `user`, `vault`, `amount` | Approve vault succeeded | Edge approve confirmed |
+| `DepositExecuted` | `agentId`, `user`, `vault`, `amount`, `shares` | Deposit succeeded | Edge deposit confirmed |
+| `AgentCompleted` | `agentId`, `user`, `vault`, `shares` | Agent completed all steps | Node: blue → green |
+| `AgentFailed` | `agentId`, `user`, `reason` | Agent failed (scope violation or transaction error) | Node: any → red |
 
 ---
 
-## 3. Payload Schema Lengkap
+## 3. Complete Payload Schemas
 
 ### Venice AI — Strategy + Skill Generation Request
 
@@ -89,11 +89,11 @@ Authorization: Bearer {VENICE_API_KEY}
   "messages": [
     {
       "role": "system",
-      "content": "Kamu adalah DeFi strategy coordinator. Generate multi-vault yield farming strategy dan skill configuration untuk setiap agent. Output harus valid JSON sesuai schema yang diberikan. Privacy-first: jangan simpan data user."
+      "content": "You are a DeFi strategy coordinator. Generate a multi-vault yield farming strategy and skill configurations for each agent. The output must be valid JSON matching the provided schema. Privacy-first: do not store user data."
     },
     {
       "role": "user",
-      "content": "Total: 100 USDC. Risk: Low. Vault count: 2. Memory context dari sesi sebelumnya: [{\"lesson\": \"MockVault A reliable dengan 0.5% slippage\"}]. Generate strategy dan agent skills."
+      "content": "Total: 100 USDC. Risk: Low. Vault count: 2. Memory context from previous sessions: [{\"lesson\": \"MockVault A is reliable with 0.5% slippage\"}]. Generate strategy and agent skills."
     }
   ],
   "max_tokens": 800
@@ -110,14 +110,14 @@ Authorization: Bearer {VENICE_API_KEY}
       "vaultName": "MockVault USDC-A",
       "amount": "50000000",
       "estimatedAPY": 7.8,
-      "reasoning": "Vault A menggunakan strategi lending konservatif. Risk profile sesuai."
+      "reasoning": "Vault A uses a conservative lending strategy. The risk profile is appropriate."
     },
     {
       "vaultAddress": "0xMockVaultB",
       "vaultName": "MockVault USDC-B",
       "amount": "50000000",
       "estimatedAPY": 8.2,
-      "reasoning": "Vault B historical stable dengan APY lebih tinggi. Risk masih acceptable."
+      "reasoning": "Vault B is historically stable with a higher APY. Risk is still acceptable."
     }
   ],
   "agents": [
@@ -181,7 +181,7 @@ Authorization: Bearer {VENICE_API_KEY}
 }
 ```
 
-*Note: Panggil 2x — satu per agent. Atau jika MetaMask Flask support batch: kirim array permissions.*
+*Note: Call twice — once per agent. If MetaMask Flask supports batching, send an array of permissions.*
 
 ---
 
@@ -192,8 +192,8 @@ Authorization: Bearer {VENICE_API_KEY}
   "jsonrpc": "2.0",
   "method": "relay",
   "params": {
-    "permissionContext": "<ERC-7715 context dari MetaMask Flask untuk agentId>",
-    "delegationManager": "<address dari MetaMask SAK>",
+    "permissionContext": "<ERC-7715 context from MetaMask Flask for the agentId>",
+    "delegationManager": "<address from MetaMask SAK>",
     "calls": [
       {
         "to": "0xAgentVaultDepositorAddress",
@@ -223,7 +223,7 @@ Authorization: Bearer {VENICE_API_KEY}
 
 ---
 
-## 4. Sequence Diagram (Lengkap)
+## 4. Complete Sequence Diagram
 
 ```mermaid
 sequenceDiagram
@@ -279,20 +279,20 @@ sequenceDiagram
 
 ## 5. Error Handling & Retry
 
-| Skenario | Handling |
+| Scenario | Handling |
 |----------|---------|
-| Venice AI timeout (> 10 detik) | Tampilkan hardcoded fallback strategy + skill template. User di-notify. |
-| Venice AI JSON malformed | Validasi schema → tampilkan error "Strategy generation failed. Using fallback." |
-| MetaMask Flask tidak terinstall | "Install MetaMask Flask 13.9+ untuk melanjutkan." |
-| User reject MetaMask popup | Reset UI ke state sebelumnya. |
-| 1Shot relay gagal (Worker N) | Worker N: retry 1x sesuai skill maxRetries. Jika masih gagal: Worker N marks failed. Workers lain tidak terdampak. |
-| Contract revert (permission exceeded) | Worker marks AgentFailed. Graph node merah. Error detail di memory + node panel. Tidak retry. |
-| Worker Agent 1 gagal | Workers 2..N tetap berjalan (Promise.allSettled). Hanya Worker 1 yang failed. |
-| Network bukan Sepolia | "Ganti ke Sepolia testnet." |
-| vis.js graph tidak load | Fallback ke text-based step tracker list. |
+| Venice AI timeout (> 10 seconds) | Display hardcoded fallback strategy and skill template. Notify user. |
+| Venice AI JSON malformed | Validate schema → display error "Strategy generation failed. Using fallback." |
+| MetaMask Flask not installed | Display "Install MetaMask Flask 13.9+ to continue." |
+| User rejects MetaMask popup | Reset UI to the previous state. |
+| 1Shot relay fails (Worker N) | Worker N: retry once based on maxRetries skill. If it still fails, mark Worker N as failed. Other workers are unaffected. |
+| Contract revert (permission exceeded) | Worker marks AgentFailed. Graph node turns red. Error details logged in memory and shown in node panel. No retry. |
+| Worker Agent 1 fails | Workers 2 to N keep running (using Promise.allSettled). Only Worker 1 is marked as failed. |
+| Network is not Sepolia | Display "Switch to Sepolia testnet." |
+| vis.js graph fails to load | Fallback to a text-based step tracker list. |
 
 **Retry Policy:**
-- Venice AI: tidak ada auto-retry (user trigger manual)
-- 1Shot relay per Worker: retry 1x setelah 5 detik jika network error (sesuai skill `maxRetries`)
-- Contract revert: tidak ada retry (revert = definitif)
-- Worker Agent failure: tidak memengaruhi Workers lain (Promise.allSettled)
+- Venice AI: No auto-retry (user triggers retry manually)
+- 1Shot relay per Worker: Retry once after 5 seconds on network error (guided by `maxRetries` skill)
+- Contract revert: No retry (revert is final)
+- Worker Agent failure: Does not affect other workers (handled via Promise.allSettled)

@@ -1,47 +1,47 @@
 # Blockchain — Vibing Farmer
 
-> **Skill Referensi:** blockchain-developer + web3-expert
-> **Versi:** 2.0 | **Tanggal:** 27 Mei 2026
-> **Tujuan:** Dokumentasi teknis penggunaan blockchain: on-chain vs off-chain, smart contract scope, audit trail, risiko
+> **Skill Reference:** blockchain-developer + web3-expert
+> **Version:** 2.0 | **Date:** May 27, 2026
+> **Purpose:** Technical documentation of blockchain integration: on-chain vs. off-chain components, smart contract scopes, audit trails, and risk analysis
 
 ---
 
-## 1. Ringkasan Peran Blockchain
+## 1. Role of the Blockchain
 
-Blockchain digunakan sebagai **execution layer** dan **per-agent permission enforcer** — bukan sebagai data store. Semua validasi permission dan eksekusi deposit terjadi on-chain sehingga tamper-proof dan dapat diverifikasi per agent.
+The blockchain serves as the **execution layer** and the **per-agent permission enforcer** — not as a data store. All permission validations and deposit executions occur on-chain, ensuring they are tamper-proof and fully verifiable per agent.
 
 **Network:** Sepolia testnet (Ethereum)  
-**EIP yang digunakan:**
-- **EIP-7702:** Set code for EOA — upgrade EOA ke smart account secara persistent (Pectra, Mar 5 2025)
+**EIPs Utilized:**
+- **EIP-7702:** Set code for EOA — persistently upgrades an EOA to a smart account (Pectra, Mar 5, 2025)
 - **ERC-7715:** Scoped permission request via `wallet_requestExecutionPermissions` (per agent)
-- **ERC-7710:** Smart contract delegation — interface untuk relay permissioned transactions via 1Shot
+- **ERC-7710:** Smart contract delegation — interface to relay permissioned transactions via 1Shot
 
 ---
 
-## 2. Komponen On-Chain vs Off-Chain
+## 2. On-Chain vs. Off-Chain Components
 
 ### On-Chain
 
-| Komponen | Kontrak | Deskripsi |
-|----------|---------|-----------|
-| Per-agent permission validation | `AgentVaultDepositor.sol` | Cek scope per agentId sebelum eksekusi |
-| Swap execution | `AgentVaultDepositor.sol` | Interface ke DEX (mock untuk testnet) |
-| Vault deposit | `AgentVaultDepositor.sol` | Deposit ke ERC-4626 vault per agent |
-| Mock vault A + B | `MockVault.sol` × 2 | Simulasi vault ERC-4626, 2 instance |
-| EOA upgrade | EIP-7702 (via MetaMask Flask) | Set code untuk smart account behavior |
+| Component | Contract | Description |
+|-----------|----------|-------------|
+| Per-agent permission validation | `AgentVaultDepositor.sol` | Checks scope per agentId prior to execution |
+| Swap execution | `AgentVaultDepositor.sol` | Interface to DEX (mocked for testnet) |
+| Vault deposit | `AgentVaultDepositor.sol` | Deposits into the ERC-4626 vault designated for the agent |
+| Mock vaults A + B | `MockVault.sol` × 2 | Simulates two ERC-4626 vault instances |
+| EOA upgrade | EIP-7702 (via MetaMask Flask) | Sets code for smart account behavior |
 
 ### Off-Chain
 
-| Komponen | Teknologi | Deskripsi |
-|----------|-----------|-----------|
+| Component | Technology | Description |
+|-----------|------------|-------------|
 | AI coordinator | Venice AI API | Strategy generation + skill auto-generation per agent |
-| Gas relay | 1Shot Permissionless Relayer | Submit tx on-chain tanpa user bayar gas |
-| Orchestrator Agent | JavaScript (frontend) | Terima plan, dispatch Workers paralel |
-| Worker Agents | JavaScript (frontend) | Single vault Swap→Approve→Deposit per agent |
+| Gas relay | 1Shot Permissionless Relayer | Submits transactions on-chain without the user paying gas |
+| Orchestrator Agent | JavaScript (frontend) | Receives the plan, dispatches Worker Agents in parallel |
+| Worker Agents | JavaScript (frontend) | Single-vault Swap → Approve → Deposit sequence per agent |
 | Skill files | JSON (local) | Per-agent skill configuration, user-approved |
-| Memory files | JSON (local) | Per-agent execution log, append-only |
-| UI + graph | HTML/JS + vis.js | Frontend trigger semua flow + real-time visualization |
-| Permission UI | MetaMask Flask | User approve/revoke ERC-7715 per agent |
+| Memory files | JSON (local) | Per-agent execution logs, append-only |
+| UI + graph | HTML/JS + vis.js | Frontend triggering all flows + real-time visualization |
+| Permission UI | MetaMask Flask | User approves/revokes ERC-7715 permissions per agent |
 
 ---
 
@@ -53,21 +53,21 @@ Blockchain digunakan sebagai **execution layer** dan **per-agent permission enfo
 
 ```solidity
 struct AgentPermission {
-    address allowedVault;   // vault spesifik per agent
-    uint256 maxAmount;      // batas jumlah USDC
-    uint256 usedAmount;     // jumlah yang sudah dieksekusi
-    uint256 expiresAt;      // timestamp expiry
-    bool isActive;          // status permission
+    address allowedVault;   // specific vault per agent
+    uint256 maxAmount;      // USDC limit amount
+    uint256 usedAmount;     // amount already executed
+    uint256 expiresAt;      // expiry timestamp
+    bool isActive;          // permission status
 }
 
 // Per-user, per-agent permission (nested mapping)
 mapping(address user => mapping(bytes32 agentId => AgentPermission)) public agentPermissions;
 ```
 
-**Fungsi utama:**
+**Core Functions:**
 
 ```solidity
-// Grant permission untuk satu agent (dipanggil oleh user, sebelum eksekusi)
+// Grants permission for a single agent (called by user before execution)
 function grantAgentPermission(
     bytes32 agentId,
     address vault,
@@ -75,7 +75,7 @@ function grantAgentPermission(
     uint256 expiresAt
 ) external;
 
-// Eksekusi deposit untuk satu agent (CEI pattern, dipanggil via 1Shot relay)
+// Executes deposit for a single agent (CEI pattern, called via 1Shot relay)
 function executeAgentDeposit(
     bytes32 agentId,
     address user,
@@ -83,10 +83,10 @@ function executeAgentDeposit(
     uint256 amount
 ) external nonReentrant;
 
-// Revoke permission untuk satu agent
+// Revokes permission for a single agent
 function revokeAgentPermission(bytes32 agentId) external;
 
-// View: cek apakah permission valid
+// View: checks if permission is valid
 function validateAgentPermission(
     bytes32 agentId,
     address user,
@@ -95,7 +95,7 @@ function validateAgentPermission(
 ) external view returns (bool);
 ```
 
-**Events (semua di-listen oleh frontend + vis.js graph):**
+**Events (all of which are tracked by the frontend and vis.js graph):**
 
 ```solidity
 event AgentStarted(bytes32 indexed agentId, address indexed user, address vault);
@@ -107,13 +107,13 @@ event AgentFailed(bytes32 indexed agentId, address indexed user, string reason);
 ```
 
 **Security constraints:**
-- CEI pattern (Checks → Effects → Interactions) di `executeAgentDeposit`
-- `require(amount <= agentPermissions[user][agentId].maxAmount - usedAmount)` — revert jika exceed
-- `require(vault == agentPermissions[user][agentId].allowedVault)` — revert jika vault berbeda
-- `require(block.timestamp < agentPermissions[user][agentId].expiresAt)` — revert jika expired
-- `require(agentPermissions[user][agentId].isActive)` — revert jika permission tidak aktif
+- CEI pattern (Checks → Effects → Interactions) in `executeAgentDeposit`
+- `require(amount <= agentPermissions[user][agentId].maxAmount - usedAmount)` — reverts if limit exceeded
+- `require(vault == agentPermissions[user][agentId].allowedVault)` — reverts if vault differs
+- `require(block.timestamp < agentPermissions[user][agentId].expiresAt)` — reverts if expired
+- `require(agentPermissions[user][agentId].isActive)` — reverts if permission is inactive
 - `nonReentrant` modifier (OpenZeppelin ReentrancyGuard)
-- Tidak ada admin key atau privileged role
+- No admin keys or privileged roles
 
 ---
 
@@ -121,20 +121,20 @@ event AgentFailed(bytes32 indexed agentId, address indexed user, string reason);
 
 **Interface:** ERC-4626 (Tokenized Vault Standard)
 
-**Fungsi yang diimplementasikan:**
+**Implemented Functions:**
 - `deposit(uint256 assets, address receiver) returns (uint256 shares)`
 - `balanceOf(address account) returns (uint256)`
 - `totalAssets() returns (uint256)`
 - `asset() returns (address)` — mock USDC address
 
-**Deploy:** 2 instances untuk demo (MockVault USDC-A dan MockVault USDC-B)  
-APY dan vault metadata disimpan off-chain (frontend mock), bukan on-chain.
+**Deployment:** 2 instances for demo purposes (MockVault USDC-A and MockVault USDC-B)  
+APY and vault metadata are stored off-chain (mocked in the frontend), not on-chain.
 
 ---
 
 ## 4. AgentId Generation
 
-AgentId adalah `bytes32` yang digunakan sebagai key di `agentPermissions` mapping.
+The `agentId` is a `bytes32` value used as the key in the `agentPermissions` mapping.
 
 ```javascript
 // Frontend — generate agentId
@@ -142,55 +142,55 @@ const agentId = ethers.keccak256(ethers.toUtf8Bytes("worker-agent-1"));
 // Result: 0x<32 bytes hash>
 ```
 
-AgentId deterministic dari session: sama agentId string = sama bytes32 = bisa re-use permission jika belum expired.
+The agentId is deterministic from the session: same agentId string = same bytes32 = permissions can be reused if they haven't expired.
 
 ---
 
-## 5. Audit Trail & Verifikasi
+## 5. Audit Trail & Verification
 
-Setiap langkah eksekusi menghasilkan on-chain evidence yang bisa diverifikasi di Sepolia Etherscan:
+Each execution step leaves on-chain evidence that can be audited and verified using Sepolia Etherscan:
 
-| Langkah | Evidence On-Chain |
-|---------|------------------|
-| EOA upgrade | EIP-7702 authorization di transaction |
-| Permission grant per agent | `agentPermissions` mapping ter-update (readable via `contract.agentPermissions(user, agentId)`) |
-| Agent started | `AgentStarted` event dengan agentId |
-| Swap execution | `SwapExecuted` event |
-| Approve | `ApproveExecuted` event |
+| Step | On-Chain Evidence |
+|------|-------------------|
+| EOA upgrade | EIP-7702 authorization in transaction payload |
+| Permission grant per agent | `agentPermissions` mapping updated (readable via `contract.agentPermissions(user, agentId)`) |
+| Agent started | `AgentStarted` event emitted with `agentId` |
+| Swap execution | `SwapExecuted` event emitted |
+| Approve | `ApproveExecuted` event emitted |
 | Vault deposit | `DepositExecuted` event + MockVault balance change |
-| Gas relayed by 1Shot | `from` address = 1Shot relayer (bukan user wallet) |
-| Agent completed | `AgentCompleted` event dengan shares minted |
+| Gas relayed by 1Shot | `from` address is the 1Shot relayer (not the user's wallet) |
+| Agent completed | `AgentCompleted` event emitted with shares minted |
 
-**Cara verifikasi di demo:**
-1. Buka Sepolia Etherscan dengan TX hash dari agent
-2. Tunjukkan `from` = 1Shot relayer address (BUKAN user wallet)
-3. Tunjukkan events: `AgentStarted` → `SwapExecuted` → `ApproveExecuted` → `DepositExecuted` → `AgentCompleted`
-4. Tunjukkan MockVault balance bertambah untuk 2 vault (2 TX hashes)
-5. Tunjukkan `agentId` berbeda untuk setiap Worker Agent → konfirmasi parallel execution
-
----
-
-## 6. Risiko & Mitigasi
-
-| Risiko | Probabilitas | Mitigasi |
-|--------|-------------|---------|
-| agentId collision antara agents | Low | Gunakan `keccak256(agentId_string)` — deterministic, collision-resistant |
-| ERC-7715 di MetaMask Flask belum stabil | Medium | Gunakan versi Flask yang direkomendasikan docs. Test early (Day 3). |
-| Reentrancy di AgentVaultDepositor | Low | CEI pattern + ReentrancyGuard dari OpenZeppelin |
-| Permission bypass via crafted calldata | Low | Validasi ketat: vault == allowedVault, amount <= maxAmount - usedAmount |
-| 1Shot relay tidak kompatibel EIP-7710 | Medium | Test relay di Day 9 sebelum frontend integration |
-| Multiple Workers race condition on-chain | Low | Per-agent permission mapping — tidak ada shared state antar agents |
-| MockVault A dan B address tertukar | Low | Hardcode address per agentId di skill file setelah deploy |
+**How to verify in the demo:**
+1. Open Sepolia Etherscan using the transaction hash generated by the agent.
+2. Show that the `from` address is the 1Shot relayer address (NOT the user's wallet).
+3. Show the events order: `AgentStarted` → `SwapExecuted` → `ApproveExecuted` → `DepositExecuted` → `AgentCompleted`.
+4. Show that the MockVault balance increases for both vaults (across 2 separate transaction hashes).
+5. Show different `agentId` values for each Worker Agent, confirming parallel execution.
 
 ---
 
-## 7. Kenapa Blockchain Adalah Inti Solusi
+## 6. Risks & Mitigations
 
-EIP-7702 + ERC-7715 + per-agent permission adalah cryptographic primitive yang memecahkan masalah nyata:
+| Risk | Probability | Mitigation |
+|------|-------------|------------|
+| agentId collision between agents | Low | Generate using `keccak256(agentId_string)` — deterministic, collision-resistant |
+| ERC-7715 in MetaMask Flask is not yet stable | Medium | Use the recommended Flask version. Test early (Day 3). |
+| Reentrancy in AgentVaultDepositor | Low | CEI pattern + ReentrancyGuard from OpenZeppelin |
+| Permission bypass via crafted calldata | Low | Rigorous validation: vault == allowedVault, amount <= maxAmount - usedAmount |
+| 1Shot relay incompatible with EIP-7710 | Medium | Test the relay workflow on Day 9 before starting frontend integration |
+| Multiple Workers race condition on-chain | Low | Per-agent permission mapping — no shared state between agents |
+| MockVault A and B addresses swapped | Low | Hardcode the correct address per agentId in the skill file post-deployment |
 
-- **EIP-7702:** EOA bertindak seperti smart contract tanpa migrasi wallet. User tetap pakai MetaMask yang sama.
-- **ERC-7715:** Scoped permission yang user-controlled, granular per agent. Agent 1 tidak bisa akses vault Agent 2. Bukan full wallet access.
-- **Per-agent agentPermissions:** Setiap Worker Agent dibatasi vault-nya sendiri, amount-nya sendiri, expiry-nya sendiri. Boundary enforced on-chain, bukan hanya di frontend.
-- **ERC-7710 (via 1Shot):** Gas abstraction permissioned. Relay tidak bisa bertindak di luar scope yang diizinkan.
+---
 
-Kombinasi ketiganya + parallel agent dispatch adalah solusi teknis yang genuine untuk masalah DeFi UX + agent trust yang sudah divalidasi dari data pasar.
+## 7. Why the Blockchain is Core to the Solution
+
+EIP-7702 + ERC-7715 + per-agent permissions are cryptographic primitives that solve real problems:
+
+- **EIP-7702:** Enables the EOA to act as a smart contract without migrating wallets. The user continues to use their familiar MetaMask wallet.
+- **ERC-7715:** Scoped, user-controlled, fine-grained permissions per agent. Agent 1 cannot access Agent 2's vault. Far safer than full wallet access.
+- **Per-agent agentPermissions:** Every Worker Agent is strictly limited to its own vault, maximum deposit amount, and expiry time. These boundaries are cryptographically enforced on-chain, not just on the frontend.
+- **ERC-7710 (via 1Shot):** Permissioned gas abstraction. Relayers cannot act outside the permitted scope.
+
+Combining all three with parallel agent dispatch offers a genuine technical solution to DeFi UX and agent trust issues, validated by real-world market observations.
