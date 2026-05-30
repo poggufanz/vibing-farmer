@@ -1,126 +1,187 @@
-# Skenario Demo — YIELD VIBING
+# Demo Scenario — Vibing Farmer
 
-> **Skill Referensi:** mobile-developer + blockchain-developer + cognitive-fluency-psychology
-> **Versi:** 1.0 | **Tanggal:** 26 Mei 2026
-> **Tujuan:** Panduan alur demo end-to-end untuk video submission hackathon
-
----
-
-## 1. Tujuan Demo
-
-Menunjukkan bahwa YIELD VIBING berhasil mengotomatisasi full vault deposit flow — dari connect wallet hingga deposit terkonfirmasi di Sepolia — dengan hanya satu interaksi permission dari user.
-
-**Narasi inti demo:**
-> "Kamu punya 100 USDC. Biasanya butuh 8 popup MetaMask dan 15 menit. Dengan YIELD VIBING: Venice AI rekomendasiin vault, kamu set permission sekali, agent eksekusi otomatis — tanpa bayar gas."
+> **Skill Reference:** mobile-developer + blockchain-developer + cognitive-fluency-psychology
+> **Version:** 2.0 | **Date:** May 27, 2026
+> **Purpose:** End-to-end demo flow guide for the hackathon video submission
 
 ---
 
-## 2. Persona Demo
+## 1. Demo Objectives
 
-| Persona | Nama | Profil |
+To demonstrate that Vibing Farmer successfully automates a multi-vault deposit flow using an agent swarm—from intent input to confirmation of all vaults on Sepolia. This workflow features Venice AI as the coordinator, a user-reviewable skill system, and real-time visualization on a vis.js graph.
+
+**Core Demo Narrative:**
+> "You have 100 USDC. Typically, this requires 8 MetaMask popups per vault and 15 minutes of your time. With Vibing Farmer, Venice AI automatically generates the strategy and agent skill sets. You review and approve them once, and the agent swarm executes two parallel vaults—completely gasless. Set once. Vibe forever."
+
+---
+
+## 2. Demo Personas
+
+| Persona | Name | Profile |
 |---------|------|--------|
-| Yield Farmer Pemula | Arya | Punya 100 USDC, ingin mulai farming, tidak mau ribet multi-step |
-| Observer (penonton video) | Juri / Developer | Mengevaluasi integrasi MetaMask + 1Shot + Venice AI |
+| Active Yield Farmer | Arya | Has 100 USDC, wants efficient multi-vault yield farming, wishes to avoid repeating 8 popups per vault |
+| Observer (Video Viewer) | Judge / Developer | Evaluating the integration of MetaMask, 1Shot, Venice AI, and agent coordination |
 
 ---
 
-## 3. Alur Demo Langkah Demi Langkah
+## 3. Step-by-Step Demo Flow
 
-### Step 0: Persiapan (Sebelum Record)
+### Step 0: Preparation (Pre-Recording)
 
-- MetaMask extension terinstall + akun Sepolia dengan sedikit ETH (untuk testnet, gas tetap 0 dari sisi user)
-- Kontrak VaultDepositor + MockVault sudah deploy di Sepolia
-- 100 USDC testnet sudah tersedia di wallet demo
-- Venice AI API key sudah dikonfigurasi
-
----
-
-### Step 1: Input Preferensi ke Venice AI (0:00–0:45)
-
-1. Buka YIELD VIBING di browser
-2. Tampilkan form input: "Berapa USDC kamu? Pilih risk level: Low / Medium / High"
-3. Isi: 100 USDC, Low risk
-4. Klik "Dapatkan Rekomendasi"
-5. Venice AI memberikan respons:
-   - **Vault terpilih:** MockVault USDC (APY: 8.2%)
-   - **Reasoning:** "Vault ini menggunakan strategi lending konservatif. Cocok untuk risk profile kamu."
-   - **Privacy note:** "Analisis ini berjalan di Venice AI — data kamu tidak disimpan."
-
-**Visual yang ditampilkan:** Kartu rekomendasi vault + reasoning text + badge "Private by Venice AI"
+- MetaMask Flask installed (not regular MetaMask) with a Sepolia account ready.
+- AgentVaultDepositor and 2x MockVault deployed on Sepolia.
+- 100 testnet USDC available in the demo wallet.
+- Venice AI API key configured.
+- `agents/memory/` contains at least one memory entry from a previous session (optional, but highly recommended to showcase memory capability).
 
 ---
 
-### Step 2: Connect Wallet + EIP-7702 Upgrade (0:45–1:30)
+### Step 1: Input Intent into Venice AI (0:00–0:45)
 
-1. Klik tombol "Connect Wallet"
-2. MetaMask popup muncul — pilih akun
-3. Aplikasi mendeteksi akun sebagai EOA biasa
-4. Tampilkan info: "Akun kamu akan di-upgrade ke Smart Account via EIP-7702"
-5. MetaMask menampilkan authorization request (EIP-7702 signature)
-6. User sign → akun sekarang bertindak sebagai smart account
-7. UI update: badge "Smart Account Active" ✓
+1. Open Vibing Farmer in the browser.
+2. Show the input form:
+   - "How much USDC do you have?" → 100 USDC
+   - "Risk level?" → Low
+   - "How many vaults?" → 2
+3. Click "Generate Strategy".
+4. Venice AI returns a response:
+   - **Strategy:** 50 USDC to MockVault USDC-A (APY: 7.8%), 50 USDC to MockVault USDC-B (APY: 8.2%).
+   - **Agent 1 skills:** `{ swap: { maxSlippage: 0.5, dexPreference: "uniswap-v3" }, deposit: { maxAmount: 50000000, vault: "0xVaultA" } }`
+   - **Agent 2 skills:** `{ swap: { maxSlippage: 0.5, dexPreference: "uniswap-v3" }, deposit: { maxAmount: 50000000, vault: "0xVaultB" } }`
+   - **Privacy note:** "This strategy is processed via Venice AI — no data is retained."
 
-**Visual yang ditampilkan:** MetaMask authorization dialog + status badge berubah dari "EOA" → "Smart Account"
-
----
-
-### Step 3: Set Permission via ERC-7715 (1:30–2:15)
-
-1. UI menampilkan permission request modal:
-   - "Izinkan agent untuk: Swap maksimum **100 USDC** dan deposit ke vault **MockVault (0xABCD...)**"
-   - "Permission ini bisa kamu cabut kapanpun"
-2. User review: scope jelas, batas jelas
-3. Klik "Grant Permission"
-4. MetaMask menampilkan `wallet_requestExecutionPermissions` — user approve
-5. UI update: "Permission aktif — agent siap eksekusi" ✓
-
-**Visual yang ditampilkan:** Permission modal dengan detail scope + MetaMask permission dialog
+**Visuals shown:** Strategy card + 2 skill cards (Agent 1 and Agent 2).
 
 ---
 
-### Step 4: Agent Eksekusi Otomatis via 1Shot (2:15–3:00)
+### Step 2: Review & Approve Skill Sets (0:45–1:15)
 
-1. Status dashboard muncul secara otomatis
-2. Agent mulai eksekusi:
-   - Step 1: "Swap 100 USDC → USDC (via DEX)" — pending → ✓
-   - Step 2: "Approve vault" — pending → ✓
-   - Step 3: "Deposit ke MockVault" — pending → ✓
-3. Semua transaksi relay via 1Shot API (user tidak bayar gas)
-4. Konfirmasi final: "Deposit berhasil! 100 USDC earning 8.2% APY"
+1. The UI displays two editable Skill Cards:
+   - **Agent 1:** maxSlippage: 0.5% | vault: MockVault USDC-A | maxAmount: 50 USDC
+   - **Agent 2:** maxSlippage: 0.5% | vault: MockVault USDC-B | maxAmount: 50 USDC
+2. Demo action: change Agent 2 maxSlippage to 0.3% (to showcase editability).
+3. Click "Approve Skill Sets".
+4. UI updates: "Skills approved — agents ready" ✓
 
-**Visual yang ditampilkan:** Progress tracker 3 steps + status per step + Sepolia Etherscan link
-
----
-
-### Step 5: Verifikasi di Sepolia Etherscan (3:00–3:30)
-
-1. Klik link Etherscan yang muncul di UI
-2. Tampilkan transaction hash di Sepolia
-3. Tunjukkan:
-   - Transaksi dari smart account (bukan EOA biasa)
-   - Gas dibayar oleh 1Shot relayer (bukan user)
-   - Vault balance bertambah
+**Visuals shown:** Editable skill form + approve button.
 
 ---
 
-### Step 6: Closing (3:30–4:00)
+### Step 3: Connect Wallet + EIP-7702 Upgrade (1:15–2:00)
 
-- Ringkas: "Dari input preferensi hingga deposit terkonfirmasi: 1 permission, 0 gas, 4 menit."
-- Tunjukkan qualification checklist terpenuhi semua
+1. Click the "Connect Wallet" button.
+2. MetaMask Flask popup appears → select account.
+3. The app detects the account as an EOA.
+4. Information displayed: "Your account will be upgraded to a Smart Account via EIP-7702".
+5. MetaMask Flask displays the authorization request.
+6. The user signs the transaction → the account now functions as a smart account.
+7. UI updates: "Smart Account Active" badge ✓
+
+**Visuals:** MetaMask Flask authorization dialog + status badge (EOA → Smart Account).
 
 ---
 
-## 4. Checklist Kesiapan Demo
+### Step 4: Grant ERC-7715 Permissions (2:00–2:30)
 
-- [ ] VaultDepositor + MockVault sudah deploy di Sepolia (catat address)
-- [ ] 100 USDC testnet tersedia di wallet demo
-- [ ] MetaMask extension up-to-date + Smart Accounts Kit kompatibel
-- [ ] Venice AI API key valid + respons teruji
-- [ ] 1Shot relayer terkonfigurasi + relay test Sepolia berhasil
-- [ ] Semua mock data vault (APY, TVL) sudah diset di frontend
-- [ ] Koneksi internet stabil selama recording
-- [ ] Script narasi sudah disiapkan
-- [ ] Screen recorder siap (resolusi ≥ 1080p)
+1. The UI displays two permission request cards (one per agent):
+   - **Agent 1:** "Authorize swap max **50 USDC** and deposit into vault **MockVault USDC-A (0xVaultA)**. Expiry: 24 hours."
+   - **Agent 2:** "Authorize swap max **50 USDC** and deposit into vault **MockVault USDC-B (0xVaultB)**. Expiry: 24 hours."
+2. The user clicks "Grant Permissions for All Agents".
+3. MetaMask Flask displays the `wallet_requestExecutionPermissions` dialog (either twice or batched).
+4. The user approves → UI updates: "2 agent permissions active" ✓
+
+**Visuals:** Permission cards per agent + MetaMask dialog.
+
+---
+
+### Step 5: Agent Swarm Parallel Execution (2:30–3:30)
+
+1. The vis.js Network graph appears:
+   - Center node: **Orchestrator Agent** (blue, running)
+   - Edges connecting to: **Worker Agent 1** (grey) + **Worker Agent 2** (grey)
+   - Edges from Workers to: **MockVault A** + **MockVault B**
+
+2. Click "Launch Agent Swarm" → Orchestrator dispatches Workers in parallel.
+
+3. **Worker Agent 1** (left):
+   - `AgentStarted` event → node changes from grey to blue (running)
+   - `SwapExecuted` → "Swap 50 USDC ✓"
+   - `ApproveExecuted` → "Approve VaultA ✓"
+   - `DepositExecuted` → node changes from blue to green (confirmed) ✓
+
+4. **Worker Agent 2** (right, running simultaneously):
+   - Performs the exact same steps as Agent 1 but targeted at VaultB.
+   - Both agents run **simultaneously on the graph**.
+
+5. `AgentCompleted` events → all nodes turn green.
+6. No MetaMask popups appear during execution (all actions occur via 1Shot relay).
+
+**Visuals:** A vis.js graph showing two Workers running in parallel with nodes changing color in real-time.
+
+---
+
+### Step 6: Memory in Node Details (3:30–3:50)
+
+1. Click the **Worker Agent 1** node on the graph.
+2. The details panel appears:
+   - Skills utilized: `{ swap: { maxSlippage: 0.5 }, deposit: { maxAmount: 50000000 } }`
+   - Memory entries:
+     ```
+     step: swap | status: success | executionTime: 4.2s | slippage: 0.12%
+     step: deposit | status: success | shares: 50023456 | executionTime: 3.8s
+     lesson: "MockVault A reliable with 0.5% slippage"
+     ```
+3. Explain that this memory will be read by Venice AI in subsequent executions.
+
+**Visuals:** Node details panel with the skill JSON and memory entries.
+
+---
+
+### Step 7: Verification on Sepolia Etherscan (3:50–4:20)
+
+1. Click the Etherscan link on one of the Agent nodes.
+2. Show the transaction on Sepolia:
+   - `from` = 1Shot relayer address (NOT the user's wallet) → verifying gas abstraction.
+   - Events: `AgentStarted`, `SwapExecuted`, `ApproveExecuted`, `DepositExecuted`, `AgentCompleted`.
+   - MockVault balance increases.
+
+---
+
+### Step 8: Closing (4:20–4:45)
+
+- Summary:
+  - "100 USDC → deposited into 2 vaults in < 60 seconds."
+  - "Venice AI generates the strategy and skills, which the user reviews once."
+  - "2 parallel agents, 0 gas, 0 manual transactions."
+  - "Set once. Vibe forever."
+- Display the 4 prize tracks achieved.
+
+---
+
+## 4. Demo Readiness Checklist
+
+**Smart Contracts**
+- [ ] AgentVaultDepositor + 2x MockVault deployed on Sepolia.
+- [ ] Contract addresses hardcoded in the frontend or `.env`.
+- [ ] All `forge` tests pass.
+
+**Frontend**
+- [ ] Venice AI strategy and skill generation function with a valid API key.
+- [ ] Editable skill review UI and approval flow functional.
+- [ ] vis.js graph initialized and visualizing 2 Workers.
+- [ ] Graph nodes update in real-time based on on-chain events.
+- [ ] Memory panel displays when clicking nodes.
+- [ ] 1Shot relay configured and successfully tested on Sepolia.
+- [ ] EIP-7702 upgrade visible in MetaMask Flask.
+- [ ] ERC-7715 permission dialog displayed (per agent or batched).
+
+**Demo Environment**
+- [ ] MetaMask Flask (not regular MetaMask) installed in the demo browser.
+- [ ] 100 testnet USDC available in the demo wallet.
+- [ ] Venice AI API key is valid and response has been tested.
+- [ ] Stable internet connection during recording.
+- [ ] Screen recorder ready (resolution ≥ 1080p).
+- [ ] Narration script prepared.
 
 ---
 
@@ -128,10 +189,54 @@ Menunjukkan bahwa YIELD VIBING berhasil mengotomatisasi full vault deposit flow 
 
 | Outcome | Target |
 |---------|--------|
-| Full flow selesai tanpa error | ✓ (mandatory) |
-| EIP-7702 upgrade visible di MetaMask | ✓ (qualification requirement) |
-| ERC-7715 permission dialog tampil | ✓ (qualification requirement) |
-| 1Shot relay tx visible di Etherscan | ✓ (qualification requirement) |
-| Venice AI rekomendasi meaningful | ✓ (prize track requirement) |
-| Durasi demo | ≤ 5 menit |
-| User interactions (klik) selama demo | ≤ 5 klik |
+| Full flow finishes without errors | ✓ (Mandatory) |
+| Venice AI strategy & skill generation visible | ✓ (Venice Track) |
+| Skill review & edit step visible | ✓ (Agent Track) |
+| 2 Workers running in parallel on the graph | ✓ (A2A Track) |
+| EIP-7702 upgrade visible in MetaMask Flask | ✓ (Qualification) |
+| ERC-7715 permission dialog displayed per agent | ✓ (Qualification) |
+| 1Shot relay transactions visible on Etherscan | ✓ (1Shot Track) |
+| Agent memory visible in node details | ✓ (Agent Track) |
+| Demo duration | ≤ 5 minutes |
+| User interactions (clicks) during the demo | ≤ 8 clicks |
+
+---
+
+## 6. Demo Flow (Final — Phase 4)
+
+### Scene 1: Load App (30s)
+- Open http://localhost:3000.
+- Show the dark 3-column layout.
+- Console: "Vibing Farmer ready. Connect wallet to start."
+
+### Scene 2: Connect Wallet (30s)
+- Click "Connect Wallet" → MetaMask Flask popup appears.
+- After connecting: step dot "01 Connect" turns green, right rail displays address + "eip-7702 ready".
+
+### Scene 3: Venice AI Strategy (60s)
+- Input: Amount 10 USDC, Risk Medium, Vaults 2, Venice API Key.
+- Click "Generate Strategy".
+- Show: Graph appears — Orchestrator (yellow) + 2 Workers (grey) + 2 Vaults (purple).
+- Activity log displays Venice AI rationale (not the fallback).
+
+### Scene 4: Node Details (30s)
+- Click the Orchestrator node → right rail shows agent counts.
+- Click Worker 1 → displays Agent ID, Vault address, and Skills (Venice-generated JSON).
+
+### Scene 5: ERC-7715 Permission (60s)
+- Click "Approve & Execute".
+- MetaMask Flask popup displays: erc20-token-periodic, USDC, 24h expiry.
+- Approve → "Permission granted. Dispatching agents..."
+
+### Scene 6: Agent Execution (60s)
+- Workers turn blue (active).
+- Workers turn green (completed).
+- Activity log displays: "Done — 2 deposited, 0 failed".
+- Step "04 Execute" turns green.
+
+### Scene 7: Memory Entries (30s)
+- Click the Worker node AFTER execution.
+- Memory entries display: step names, ✓ status, timestamps, and lesson text.
+
+### Scene 8: Reset (15s)
+- Click "Reset" → clears state and localStorage.

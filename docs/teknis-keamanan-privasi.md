@@ -1,132 +1,205 @@
-# Keamanan & Privasi — YIELD VIBING
+# Security & Privacy — Vibing Farmer
 
-> **Skill Referensi:** security-review + data-privacy-compliance
-> **Versi:** 1.0 | **Tanggal:** 26 Mei 2026
-> **Tujuan:** Dokumentasi threat model, kontrol keamanan, privasi data, dan compliance
+> **Skill Reference:** security-review + data-privacy-compliance
+> **Version:** 2.0 | **Date:** May 27, 2026
+> **Purpose:** Technical documentation of the threat model, security controls, data privacy, and compliance frameworks
 
 ---
 
-## 1. Ringkasan Keamanan & Privasi
+## 1. Security & Privacy Overview
 
-YIELD VIBING dirancang dengan prinsip **permission-bounded execution** — agent tidak pernah memiliki akses penuh ke wallet user. Semua eksekusi dibatasi oleh ERC-7715 scoped permission yang user tentukan sendiri.
+Vibing Farmer is engineered around the principle of **per-agent permission-bounded execution** — each agent is strictly confined to a specific vault with a predefined allocation. No single agent ever receives full access to the user's wallet. All execution is strictly bounded by ERC-7715 scoped permissions per `agentId`, which the user specifies and controls directly.
 
-**Prinsip keamanan utama:**
-- Tidak ada admin key atau privileged role di smart contract
-- Permission scope di-enforce on-chain (revert, bukan silent fail)
-- Venice AI tidak menyimpan data user (no data retention)
-- Tidak ada server backend yang menyimpan credential atau private key
+**Core security principles:**
+- No admin keys or privileged roles exist in the smart contract
+- Permission scopes are enforced on-chain per `agentId` (reverts on violation, never failing silently)
+- A single worker agent failure cannot compromise other agents or execute actions outside its defined permission scope
+- Venice AI does not retain user data (no data retention policy)
+- Skill files can only be read after user approval — they cannot be modified mid-execution
+- Memory files are append-only — they cannot be overwritten or deleted by agents
+- No backend server stores credentials or private keys
 
 ---
 
 ## 2. Data Classification
 
-| Data | Klasifikasi | Lokasi | Sensitif? |
-|------|-------------|--------|-----------|
-| Wallet address | Public (on-chain) | Blockchain | Tidak |
-| Permission context (ERC-7715) | Semi-private | Browser session + 1Shot relay | Ya |
-| USDC amount + risk preference | Input user | Venice AI API (ephemeral) | Rendah |
-| Private key / seed phrase | Secret | Tidak pernah diakses aplikasi | Sangat sensitif |
-| Venice AI conversation | N/A | Tidak disimpan Venice AI | N/A |
+| Data Type | Classification | Location | Sensitive? |
+|-----------|----------------|----------|------------|
+| Wallet address | Public (on-chain) | Blockchain | No |
+| Per-agent permission context (ERC-7715) | Semi-private | Browser session + 1Shot relay | Yes |
+| USDC amount + risk preference | User input | Venice AI API (ephemeral) | Low |
+| AgentId + vault target | Operational | Local skill file + on-chain | Low |
+| Skill files (agent parameters) | Operational | Local (`agents/session-{id}/`) | Low |
+| Memory files (execution logs) | Operational | Local (`agents/memory/`) | Low |
+| Private key / seed phrase | Secret | Never accessed by the application | Extremely sensitive |
+| Venice AI conversation | N/A | Not retained by Venice AI | N/A |
 
 ---
 
-## 3. Threat Model Ringkas
+## 3. Threat Model
 
-### Threat 1: Agent Exceed Permission
+### Threat 1: Agent Exceeding Permission
 
-**Deskripsi:** Agent mencoba swap atau deposit melebihi batas yang user set.
+**Description:** A Worker Agent attempts to swap or deposit an amount exceeding the limit specified by the user for its `agentId`.
 
-**Mitigasi:**
-- Smart contract revert jika `amount > maxAmount`
-- Smart contract revert jika `vault != allowedVault`
-- Smart contract revert jika `block.timestamp >= expiresAt`
-- Tidak ada silent fail — semua violation = revert + event `ExecutionFailed`
-
----
-
-### Threat 2: Permission Context Leak
-
-**Deskripsi:** ERC-7715 permission context yang dicuri bisa digunakan pihak ketiga.
-
-**Mitigasi:**
-- Permission context hanya di `sessionStorage` (hilang saat tab ditutup)
-- Tidak dikirim ke server developer
-- User bisa revoke permission kapanpun
+**Mitigation:**
+- `require(amount <= agentPermissions[user][agentId].maxAmount - usedAmount)` — reverts on violation
+- `require(vault == agentPermissions[user][agentId].allowedVault)` — reverts if the vault is different
+- `require(block.timestamp < agentPermissions[user][agentId].expiresAt)` — reverts if expired
+- `require(agentPermissions[user][agentId].isActive)` — reverts if the permission is inactive
+- No silent failures — any scope violation triggers a contract revert and emits the `AgentFailed(agentId, user, reason)` event
+- `usedAmount` is tracked on-chain per `agentId` — cumulative limits are strictly enforced
 
 ---
 
-### Threat 3: Smart Contract Reentrancy
+### Threat 2: Agent 1 Accessing Agent 2's Vault
 
-**Deskripsi:** Vault deposit callback bisa memicu re-entry ke `VaultDepositor`.
+**Description:** Worker Agent 1 attempts to deposit into the vault designated for Worker Agent 2 (a different vault).
 
-**Mitigasi:**
-- CEI pattern (Checks → Effects → Interactions) di semua fungsi state-changing
-- `ReentrancyGuard` dari OpenZeppelin sebagai defense-in-depth
-
----
-
-### Threat 4: Frontend Injection / XSS
-
-**Deskripsi:** Script injection bisa mencuri permission context dari sessionStorage.
-
-**Mitigasi:**
-- Tidak ada user-generated content yang di-render sebagai HTML
-- Venice AI response di-sanitize sebelum ditampilkan
+**Mitigation:**
+- `agentPermissions[user][agentId].allowedVault` is uniquely mapped per `agentId`
+- Smart contract reverts: `require(vault == agentPermissions[user][agentId].allowedVault)`
+- Per-agent permissions offer per-vault isolation — Agent 1 cannot access Agent 2's vault
 
 ---
 
-## 4. Kontrol Keamanan
+### Threat 3: Permission Context Leak
+
+**Description:** An ERC-7715 permission context per `agentId` is stolen and used by a third party.
+
+**Mitigation:**
+- The permission context for each `agentId` is stored exclusively in `sessionStorage` (automatically cleared when the tab is closed)
+- The `sessionStorage` keys are namespaced and non-trivial (e.g., `vf_permission_context_agent{n}`)
+- The context is never transmitted to the developer's server
+- Users can revoke permissions at any time via `revokeAgentPermission(agentId)`
+- An expiry timestamp in the ERC-7715 scope narrows the window of exposure
+
+---
+
+### Threat 4: Smart Contract Reentrancy
+
+**Description:** A vault deposit callback triggers re-entry into the `AgentVaultDepositor` contract.
+
+**Mitigation:**
+- The CEI pattern (Checks → Effects → Interactions) is strictly applied in `executeAgentDeposit`:
+  - CHECKS: validate all permission constraints
+  - EFFECTS: `usedAmount += amount` (state updated before any external contract call)
+  - INTERACTIONS: swap → approve → MockVault.deposit()
+- The `nonReentrant` modifier from OpenZeppelin's `ReentrancyGuard` is applied
+
+---
+
+### Threat 5: Frontend Injection / XSS
+
+**Description:** A script injection attack attempts to steal permission contexts from `sessionStorage` or modify skill files.
+
+**Mitigation:**
+- No user-generated content is ever rendered directly as raw HTML
+- Venice AI responses are parsed strictly as JSON (avoiding `eval`/`innerHTML`)
+- Skill file content is validated against a schema prior to usage
+- Memory file contents are sanitized before being displayed in the vis.js node details panel
+
+---
+
+### Threat 6: Skill File Tampering (After Approval)
+
+**Description:** A third party modifies the local skill file after user approval to alter execution parameters.
+
+**Mitigation:**
+- The skill file is hashed upon approval — the Worker Agent validates this hash before reading the parameters
+- The skill file is locked: once approved, editing via the UI is disabled
+- Skill parameters are also verified by the smart contract (vault and amount limits are enforced on-chain)
+
+---
+
+### Threat 7: Orchestrator Abuse (One Worker Overriding Others)
+
+**Description:** A compromised Worker Agent attempts to cancel or interfere with other concurrent Worker Agents.
+
+**Mitigation:**
+- Workers run independently using `Promise.allSettled()` — there is no cross-worker communication channel
+- Each Worker is isolated and only has access to its own unique `permissionContext`
+- The failure or compromise of one worker cannot trigger revocation of other workers' permissions
+
+---
+
+## 4. Security Controls
 
 ### Smart Contract
 
-| Kontrol | Implementasi |
-|---------|-------------|
-| Permission scope validation | `require(vault == allowedVault)` + `require(amount <= maxAmount)` |
+| Control | Implementation |
+|---------|----------------|
+| Per-agent permission validation | `agentPermissions[user][agentId]` — nested mapping |
+| Vault scope check | `require(vault == agentPermissions[user][agentId].allowedVault)` |
+| Amount check (cumulative) | `require(amount <= maxAmount - usedAmount)` |
 | Expiry check | `require(block.timestamp < expiresAt)` |
-| Reentrancy guard | `ReentrancyGuard` OpenZeppelin |
-| No admin key | Tidak ada `onlyOwner` di fungsi kritis |
-| CEI pattern | Checks → Effects → Interactions di semua fungsi |
-| Event logging | Semua aksi penting emit event |
+| Active check | `require(agentPermissions[user][agentId].isActive)` |
+| Reentrancy guard | `nonReentrant` — OpenZeppelin ReentrancyGuard |
+| No admin key | No `onlyOwner` modifiers on critical functions |
+| CEI pattern | Checks → Effects → Interactions in `executeAgentDeposit` |
+| Event logging | All critical actions emit events (including `AgentFailed`) |
 
 ### Frontend
 
-| Kontrol | Implementasi |
-|---------|-------------|
-| Input sanitization | Sanitize Venice AI response sebelum render |
-| No private key handling | Aplikasi tidak pernah minta private key |
-| Network check | Verifikasi user di Sepolia sebelum eksekusi |
-| Permission review | Tampilkan detail scope sebelum user approve |
+| Control | Implementation |
+|---------|----------------|
+| Input sanitization | Venice AI responses are parsed strictly as JSON, avoiding `eval` |
+| Skill schema validation | Validates JSON schema before writing to files and prior to execution |
+| Memory XSS prevention | Sanitizes memory entries before rendering them to the DOM |
+| No private key handling | The application never requests or handles private keys or seed phrases |
+| Network check | Verifies that the user is connected to Sepolia before initiating execution |
+| Permission review | Renders detailed scope parameters per agent before the user approves |
+| Worker isolation | Workers do not share state and run in completely isolated environments |
+| permissionContext namespacing | Uses unique keys (`vf_permission_context_agent{n}`) to avoid collision |
 
 ### API Security
 
-| Kontrol | Implementasi |
-|---------|-------------|
-| Venice AI API key | Environment variable, tidak di-hardcode |
-| HTTPS only | Semua API call via HTTPS |
-| Input validation | Validasi amount (positif, ≤ balance) sebelum kirim ke contract |
+| Control | Implementation |
+|---------|----------------|
+| Venice AI API key | Stored as an environment variable — never hardcoded |
+| HTTPS only | All API calls are executed strictly over HTTPS |
+| Input validation | Validates amount parameters (must be positive and ≤ balance) prior to contract invocation |
+| Skill parameter validation | Restricts `maxSlippage` (0–2%), `maxAmount` (≤ strategy allocation), and `expiresAt` (must be in the future) |
 
 ---
 
 ## 5. Compliance
 
-| Aspek | Status |
-|-------|--------|
-| Data personal (PII) | Tidak ada PII yang dikumpulkan atau disimpan |
-| GDPR / privasi | Venice AI no-retention align dengan data minimization |
-| KYC/AML | N/A — testnet, bukan mainnet financial product |
-| Smart contract audit | Belum diaudit — hackathon scope, bukan untuk mainnet |
+| Aspect | Status |
+|--------|--------|
+| Personal data (PII) | No PII is collected or stored by the developer |
+| GDPR & Privacy | Venice AI's no-retention policy aligns with data minimization. Skill and memory files remain purely local. |
+| KYC/AML | N/A — testnet only, not a mainnet financial product |
+| Smart contract audit | Unaudited — hackathon project scope, not suitable for mainnet |
+| Agent memory privacy | Memory files are stored locally — never uploaded to external servers |
 
-**Peringatan:** Proyek ini adalah demo hackathon di Sepolia testnet. Tidak untuk digunakan dengan aset nyata di mainnet tanpa audit smart contract yang komprehensif.
+**Warning:** This project is a hackathon demonstration on the Sepolia testnet. It is not suitable for deployment with real assets on mainnet without:
+1. A comprehensive, independent smart contract audit.
+2. Formal verification of the permission and logic scope.
+3. A production-grade security review of the agent systems.
 
 ---
 
-## 6. Checklist Keamanan Pre-Demo
+## 6. Pre-Demo Security Checklist
 
-- [ ] Tidak ada private key atau API key yang ter-hardcode di kode
-- [ ] Venice AI API key disimpan di `.env` yang di-gitignore
-- [ ] Semua fungsi state-changing di kontrak pakai CEI pattern
-- [ ] `require` statements terpasang: vault, amount, expiry
-- [ ] Venice AI response di-sanitize sebelum render ke DOM
-- [ ] `forge test` semua pass, coverage ≥ 80%
-- [ ] Demo wallet hanya berisi USDC testnet (tidak ada aset mainnet)
-- [ ] Permission revocation berjalan dengan benar
+**Smart Contract**
+- [ ] No private keys or API keys are hardcoded in the codebase.
+- [ ] All state-changing functions apply the CEI pattern.
+- [ ] Vital `require` validation checks are fully implemented (vault, cumulative amount, expiry, isActive).
+- [ ] The `nonReentrant` modifier is applied to `executeAgentDeposit`.
+- [ ] No admin keys or `onlyOwner` modifiers exist on critical functions.
+- [ ] All `forge test` suites pass successfully, with coverage ≥ 80%.
+
+**Frontend + API**
+- [ ] The Venice AI API key is safely configured in `.env`.
+- [ ] Venice AI responses are parsed strictly as JSON (avoiding eval/innerHTML).
+- [ ] The skill schema is validated before writing files and prior to execution.
+- [ ] Memory logs are sanitized before rendering to the DOM.
+- [ ] The permissionContext for each agent is stored in `sessionStorage` (never in `localStorage`).
+- [ ] Worker agents operate in complete isolation (never sharing permissionContexts).
+
+**Demo Environment**
+- [ ] The demo wallet contains only testnet USDC (no real mainnet assets).
+- [ ] Permission revocation flows work flawlessly.
+- [ ] MetaMask Flask (rather than regular MetaMask) is actively used.
+- [ ] The browser runs in a clean profile (no extensions that might interfere).

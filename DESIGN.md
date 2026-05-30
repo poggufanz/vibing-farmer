@@ -1,14 +1,14 @@
-# YIELD VIBING — Design System
+# VIBING FARMER — Design System
 
-> **Versi:** 2.0 (post-redesign) · **Tanggal:** 26 Mei 2026  
-> **Tujuan:** Base design system buat YIELD VIBING prototype + handoff ke implementasi React/Solidity.  
+> **Versi:** 3.0 (Vibing Farmer · multi-agent) · **Tanggal:** 27 Mei 2026  
+> **Tujuan:** Base design system buat VIBING FARMER prototype + handoff ke implementasi React/Solidity.  
 > **Aesthetic:** *Editorial financial-document* — restrained, data-forward, trust-first.
 
 ---
 
 ## 0. Bacaan singkat
 
-YIELD VIBING adalah produk DeFi yang ngebiarin agent eksekusi transaksi atas nama user (`swap → approve → deposit`) dalam scoped permission. Karena user nge-trust agent untuk move money, **design-nya harus serius secara visual** — bukan crypto-bro vibey, bukan generic AI-dashboard, tapi document-grade yang ngebuat user yakin batasan permission-nya dihormati.
+VIBING FARMER adalah produk DeFi multi-agent. Sebuah **Orchestrator** nge-spawn beberapa **Worker Agent**, masing-masing dengan **skill JSON** yang user review sebelum execution. Tiap worker punya scoped permission (ERC-7715) ke satu vault, dan ngerjain `swap → approve → deposit` paralel. Karena user nge-trust agent multi-step untuk move money lewat banyak vault sekaligus, **design-nya harus serius secara visual** — bukan crypto-bro vibey, bukan generic AI-dashboard, tapi document-grade yang ngebuat user yakin batasan permission-nya dihormati.
 
 ---
 
@@ -297,17 +297,27 @@ Satu card per stage. Card adalah satu-satunya container yang punya bg-card, semu
 
 Action row selalu di-divide dari content via `border-top: 1px solid var(--border)`.
 
-### Step rail
+### Step rail (6 langkah · Vibing Farmer)
 
 Numeric, subtle, underline-on-active. Bukan circle-with-line wizard.
 
 ```
-┌──────────────────────────────────────┐
-│ 01 Preferensi  02 AI  03 Connect ... │
-│ ─────                                │
-│  ↑ accent underline on active only   │
-└──────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│ 01 AI Strategy  02 Connect & Upgrade  03 Review Skills  04 Grant       │
+│ ─────                                                                  │
+│ 05 Auto-Execute  06 Complete                                           │
+└────────────────────────────────────────────────────────────────────────┘
 ```
+
+| # | Stage id | Label | Yang terjadi di stage |
+|---|---|---|---|
+| 01 | `strategy` | AI Strategy | Input + thinking + orchestrator-generated multi-agent strategy |
+| 02 | `connect` | Connect & Upgrade | MetaMask connect + EIP-7702 smart account upgrade |
+| 03 | `skills` | Review Skills | User reviews/edits skill JSON per worker agent |
+| 04 | `permission` | Grant Permission | Batched ERC-7715 permissions, satu signature, N grants |
+| 05 | `execute` | Auto-Execute | Agent Graph live · parallel workers · click node for Memory |
+| 06 | `done` | Complete | Multi-agent deployment summary |
+
 
 - 14px vertical padding per item
 - 18px horizontal padding per item
@@ -331,7 +341,7 @@ Sizes: default `padding: 11px 18px`, large `padding: 14px 22px`. Radius `--radiu
 
 ### Amount input (signature pattern)
 
-Pattern khusus YIELD VIBING — input numerik dengan font raksasa sebagai visual anchor:
+Pattern khusus VIBING FARMER — input numerik dengan font raksasa sebagai visual anchor:
 
 ```html
 <div class="amount-input-row">
@@ -363,7 +373,7 @@ Document-grade dev-tool feel. Tidak ada fox emoji.
 
 ```
 ┌─────────────────────────────────────────┐
-│ [MM] MetaMask         yield-vibing.app  │ ← header
+│ [MM] MetaMask         vibing-farmer.app │ ← header
 │ ──────────────────────────────────────  │
 │ title…                                  │
 │ key       value                         │
@@ -481,23 +491,24 @@ Tambah icon baru hanya kalau truly dibutuhkan — kebanyakan UI element bisa pak
 
 ### Brand marks
 
-- **Sidebar logo:** `y/` — mono 14px, di dalam 32×32 box dengan border. Bukan filled tile, bukan colored gradient.
+- **Sidebar logo:** `v/` — mono 14px, di dalam 32×32 box dengan border. Bukan filled tile, bukan colored gradient.
 - **MetaMask mark:** `MM` — mono 9px, 22×22 box. Replacement untuk fox emoji.
-- **Brand wordmark:** `yield/vibing` — mix Geist 500 untuk "yield", `--text-faint` slash, Instrument Serif italic 19px untuk "vibing". *Satu-satunya pakai serif italic di seluruh app.*
+- **Brand wordmark:** `vibing/farmer` — mix Geist 500 untuk "vibing", `--text-faint` slash, Instrument Serif italic 19px untuk "farmer". *Satu-satunya pakai serif italic di seluruh app.*
 
 ---
 
 ## 9. Per-Screen Signatures
 
-Tiap screen di flow harus punya **satu angka besar** sebagai visual anchor. Ini brand signature YIELD VIBING.
+Tiap screen di flow harus punya **satu angka besar** sebagai visual anchor. Ini brand signature VIBING FARMER.
 
 | Screen | Signature number | Source data |
 |---|---|---|
-| 01 Input | Amount input (`clamp(40px, 7.2vw, 72px)`) | User-typed amount |
-| 02 Recommend | APY (`figure-md`) | AI recommendation |
-| 03 Connect | — (transitional, no anchor needed; eyebrow + lede do the work) | — |
-| 04 Permission | Max amount in scope row (accent color, inline) | User's max |
-| 05 Execute | `done/total` count (40px tabular) + progress bar | Real-time |
+| 01a Input | Amount input (`clamp(40px, 7.2vw, 72px)`) | User-typed amount |
+| 01b Strategy | Blended APY (`figure-md`) | Weighted across agents |
+| 02 Connect | — (transitional; eyebrow + lede do the work) | — |
+| 03 Skills | — (the **skill cards** are the anchor — JSON itself is the data) | N skill JSONs |
+| 04 Permission | Total max amount in batch row (accent color, inline) | User's total |
+| 05 Execute | `done/total` step count + agent graph (the graph IS the signature) | Real-time |
 | 06 Success | 3 cells: deposited / yield / signatures (`clamp(28, 4vw, 48)`) | Final state |
 
 ---
@@ -519,7 +530,30 @@ Tiap screen di flow harus punya **satu angka besar** sebagai visual anchor. Ini 
 | Lede prose | Explainer, no jargon dump (tapi technical term DI-tulis literal: "EIP-7702", "ERC-7715") |
 | Foot note | Reassurance + technical fact ("Agent **tidak punya akses** ke saldo wallet di luar scope ini.") |
 | Eyebrow | Telegraphic — `nn · section · meta` |
-| Activity log | Past-tense fact, mono ("ERC-7715 permission granted") |
+| Activity log | Event-name first (mono, structured), then meta (mono) — see §10b |
+
+### 10b. Activity event vocabulary (agent-level)
+
+Activity feed gak nge-mix narrative + technical lagi — sekarang **event-name first**, structured. Tiap entry: `[marker] [EventName] [agent-id?] [meta]`.
+
+| Event | Marker | Color | Meta example |
+|---|---|---|---|
+| `OrchestratorPlanned` | `·` | muted | `3 worker spawned · 11.8% blended apy` |
+| `Connected` | `·` | muted | `0xA36f3c…26a4` |
+| `Authorized` | `·` | muted | `eip-7702 · tx 0x9f3…a124` |
+| `SkillApproved` | `·` | muted | `skill JSON approved · ready to bind` |
+| `PermissionGranted` | `·` | muted | `vault 0xABCD…aBcDe · 50 usdc max` |
+| `PermissionRevoked` | `·` | danger | `agent halted · scope cleared` |
+| `AgentStarted` | `●` | warn (amber) | `aave-v3 · 50 usdc` |
+| `SwapExecuted` | `↻` | info | `tx 0x9f3…a124` |
+| `ApproveExecuted` | `✓` | info | `tx 0x9f3…a124` |
+| `DepositExecuted` | `↓` | info | `tx 0x9f3…a124` |
+| `AgentCompleted` | `✓` | ok (green) | `50 usdc → MockVault USDC` |
+| `AgentFailed` | `✕` | danger | `swap reverted · slippage exceeded` |
+
+- Marker char is mono, colored via `EVENT_STYLES` map in `app.jsx`.
+- `agent` id (e.g. `worker-1`) rendered as 1px-bordered chip after event name.
+- Newest at top; auto-scroll disabled (don't fight the user).
 
 ### Number formatting
 
@@ -552,21 +586,38 @@ Tweaks persisted via host protocol di `EDITMODE-BEGIN`/`EDITMODE-END` block — 
 ### File structure
 
 ```
-YIELD VIBING Prototype.html   — entrypoint, fonts, react/babel scripts
-styles.css                    — all tokens + components
+Vibing Farmer Prototype.html   — entrypoint, fonts, react/babel/vis-network scripts
+styles.css                    — all tokens + components + multi-agent additions
 src/
   tweaks-panel.jsx            — host protocol + Tweak* form controls (vendored starter)
-  components.jsx              — Icon, Sidebar, TopBar, StepRail
-  screens.jsx                 — 6 screen components + RECOMMENDATION data
+  components.jsx              — Icon, Sidebar, TopBar, StepRail (6 steps)
+  screens.jsx                 — Input, Thinking, Connect, Permission, Success
+  skills.jsx                  — SkillReviewCard, SkillCard, JsonView/Edit (step 03)
+  agents.jsx                  — AgentGraph (vis.js), AgentTiles, MemoryModal,
+                                StrategyCard, ExecuteCard, buildStrategy()
   app.jsx                     — state machine, right rail panels, Palette picker
 ```
 
 ### React patterns
 
 - React 18.3.1 + Babel inline (no build)
+- vis-network 9.1.9 loaded via UMD CDN (Agent Graph dependency)
 - Each `.jsx` file does `Object.assign(window, { ... })` at end to share scope between Babel script tags
-- State machine: `stage`, `aiPhase`, `connectPhase`, `permPhase`, `permActive`, `execState`, `logs`
+- State machine (in `app.jsx`):
+  - `stage`: `strategy` | `connect` | `skills` | `permission` | `execute` | `done`
+  - `strategyPhase`: `input` | `thinking` | `ready` (sub-state of stage=strategy)
+  - `thinkingPhase`: 0-2 — progress in checklist
+  - `strategy`: `{ agents, total, blendedApy, risk }` — generated by `buildStrategy()`
+  - `connectPhase`: `idle` | `connecting` | `connected` | `upgrading` | `upgraded`
+  - `skillStates`: `{ [agentId]: { state: 'pending'|'editing'|'approved', skill } }`
+  - `editingTexts`: `{ [agentId]: { text, error } }`
+  - `permPhase`: `idle` | `prompting`
+  - `permActive`: boolean
+  - `execMap`: `{ [agentId]: { status, activeStep, steps: {swap,approve,deposit}, hashes, memory[], metrics } }`
+  - `openAgentId`: which agent's Memory Modal is open (null = closed)
+  - `logs`: structured event entries `{ id, time, event, agent?, meta }`
 - All animations timer-based via `setTimeout(..., speed * multiplier)` — speed comes from tweaks
+- Agent execution staggered by `idx * speed * 0.6` so the graph reads sequentially even though workers run in parallel
 
 ### Naming conventions
 
@@ -605,10 +656,262 @@ Kalau bingung apakah suatu treatment qualify atau "AI-slop": tanya "apakah ini b
 
 | File | Status |
 |---|---|
-| `YIELD VIBING Prototype.html` | Current (v2) — base reference |
-| `YIELD VIBING Prototype v1.html` | Original — kept for compare (AI-slop baseline) |
+| `Vibing Farmer Prototype.html` | Current (v3 · Vibing Farmer) — base reference |
+| `Vibing Farmer Prototype v1.html` | Original — kept for compare (AI-slop baseline) |
 | `styles-v1.css`, `src/components-v1.jsx`, `src/screens-v1.jsx` | v1 snapshot |
-| `styles.css`, `src/*.jsx` (current) | v2 active design system |
+| `styles.css`, `src/{app,components,screens,skills,agents,tweaks-panel}.jsx` | v3 active design system |
+
+---
+
+## 16. Vibing Farmer — multi-agent architecture
+
+VIBING FARMER v3 ngubah arsitektur dari "satu user, satu agent, satu vault" jadi **orchestrator + N workers**. Design system reflects this lewat tiga komponen baru: **Strategy Card** (replaces RecommendCard), **Skill Review** (new step), **Agent Graph** (replaces flat exec log).
+
+### Hierarki
+
+```
+Orchestrator (1)
+    │
+    ├──► Worker Agent 01 ──► Swap → Approve → Deposit ──► Vault A
+    ├──► Worker Agent 02 ──► Swap → Approve → Deposit ──► Vault B
+    └──► Worker Agent 03 ──► Swap → Approve → Deposit ──► Vault C
+```
+
+### Risk profile → jumlah agent
+
+| Risk profile | # agents | Allocation split | Total skill JSON to review |
+|---|---|---|---|
+| **Low** | 1 | `[100%]` | 1 |
+| **Medium** | 2 | `[60%, 40%]` | 2 |
+| **High** | 3 | `[40%, 35%, 25%]` | 3 |
+
+Allocation di-derive di `buildStrategy(amount, risk)` di `agents.jsx`. AGENT_PROTOCOLS array ngandung pool data per-agent (vault address, protocol, APY, drawdown).
+
+### State model — `execMap`
+
+Per-agent execution state shape:
+```js
+{
+  status: 'idle' | 'running' | 'confirmed' | 'failed',
+  activeStep: 'swap' | 'approve' | 'deposit' | null,
+  steps: { swap: '...', approve: '...', deposit: '...' },  // same enum
+  hashes: { [stepId]: '0x...' },
+  memory: [{ status, title, meta, hash?, lesson?, t }],
+  metrics: { totalRuns, successRate, startedAt, completedAt }
+}
+```
+
+Orchestrator state di-derived dari aggregate worker states (`computeOrchestratorState`) — bukan separate state. Aturannya: any-failed → failed; all-confirmed → confirmed; any-running → running; else idle.
+
+---
+
+## 17. Agent Graph (vis.js Network)
+
+Hierarchical force-disabled graph yang nge-visualisasikan orchestrator → workers → steps → vaults sebagai live execution view.
+
+### Library
+
+`vis-network@9.1.9` (UMD CDN). Static — physics disabled, drag-view disabled, zoom-view disabled. Tujuannya bukan free exploration; tujuannya **trustworthy status display**.
+
+### Layout config
+
+```js
+layout: {
+  hierarchical: {
+    direction: 'UD',
+    sortMethod: 'directed',
+    levelSeparation: 110,
+    nodeSpacing: 130,
+    treeSpacing: 60,
+    parentCentralization: true,
+  }
+},
+physics: { enabled: false },
+```
+
+### Node levels & shapes
+
+| Level | Group | Shape | Label format |
+|---|---|---|---|
+| 0 | `orchestrator` | box | `Orchestrator` (bold) |
+| 1 | `worker` | box | `Worker N · Role\n50 USDC` |
+| 2 | `step` | box | `Swap` / `Approve` / `Deposit` |
+| 3 | `vault` | box | `MockVault USDC\naave-v3` |
+
+Border-radius 4px (`shapeProperties.borderRadius`). Mono 11px label. Edges = thin cubicBezier with small arrow.
+
+### Color mapping (`NODE_COLOR`)
+
+Status colors **don't use brand accent** — they use the semantic palette tokens (info/warn/danger/ok). Brand accent stays reserved for "current user action" (CTAs, current step rail underline) per §1.
+
+| State | bg | border | font (dark palette) |
+|---|---|---|---|
+| `idle` | `#22231d` | `#56564f` | `#95958a` |
+| `running` | `#3a2d12` (amber-tinted dark) | `#f0b54a` (warn) | `#ecebe1` |
+| `confirmed` | `#1a3322` (green-tinted dark) | `#6fe39a` (ok) | `#ecebe1` |
+| `failed` | `#3a1a1c` (red-tinted dark) | `#ff7479` (danger) | `#ecebe1` |
+
+Light palette (`bone-paper`) uses `NODE_COLOR_LIGHT` — separate map to maintain contrast.
+
+### "Pulsing" amber for running
+
+Single `setInterval(550ms)` di `AgentGraph` toggles `borderWidth` between 2 and 3 on running nodes only. This is the ONE place in v3 where we have a live decorative-feeling animation — but it expresses real ongoing operation (per §7 motion rules, this qualifies). Cleared on unmount.
+
+### Click → Memory Modal
+
+`network.on('click', ...)` — if clicked node id matches a worker agent id, call `onAgentClick(id)`. Step/vault/orchestrator clicks are ignored. Legend at the bottom hints `"click any agent node → open memory"`.
+
+### Vault node state derivation
+
+Vault node mirrors its agent's `steps.deposit` state — it only flips to confirmed when the deposit step confirms (because that's the moment the vault actually receives funds).
+
+---
+
+## 18. Skill Review (step 03)
+
+Sebelum permission granted, user lihat skill JSON yang Orchestrator auto-generate per worker. User bisa review, edit JSON, atau approve apa adanya. **All skills harus approved sebelum bisa lanjut ke step 04.**
+
+### Skill JSON schema
+
+Generated by `buildSkillForAgent(agent, riskProfile)`:
+
+```json
+{
+  "name": "yield_vault_deposit",
+  "version": "1.2.0",
+  "agent": "worker-1",
+  "description": "Conservative · lending · single-vault deposit via ERC-7715 scoped permission",
+  "target": {
+    "vault": "0xABCD...",
+    "protocol": "aave-v3",
+    "chain": "sepolia"
+  },
+  "steps": [
+    { "id": "swap",    "action": "uniswap_v3_swap", "params": { "tokenIn": "USDC", "tokenOut": "USDC", "maxSlippageBps": 5 } },
+    { "id": "approve", "action": "erc20_approve",   "params": { "spender": "0xABCD...", "amount": "exact" } },
+    { "id": "deposit", "action": "erc4626_deposit", "params": { "asset": "USDC", "shares": "auto" } }
+  ],
+  "guards": {
+    "maxAmount": "50 USDC",
+    "maxGas": "200000",
+    "expiresIn": "86400s",
+    "revocable": true,
+    "riskProfile": "med"
+  }
+}
+```
+
+### Skill card states
+
+| State | Visual | Actions available |
+|---|---|---|
+| `pending` | Default border | `edit JSON`, `approve` |
+| `editing` | Accent border | `cancel`, `save edits` (disabled if JSON invalid) |
+| `approved` | OK-green border, status chip | `re-open` |
+
+### Editor
+
+`<textarea>` styled as code editor (`var(--font-mono)`, 11.5px, tabular nums, line-height 1.55). **No syntax-highlighting** — anti-pattern per §1 (decoration without function); raw text is more honest about what's being signed. JSON parse error displayed in red as `.skill-json-err` strip below the textarea.
+
+### Batch action
+
+`Approve all` ghost button — only shown when at least one skill is not yet approved. Primary CTA (`Lanjut · grant permission`) disabled until **all** skills approved.
+
+### Foot note
+
+"Skill di-sign sama smart account kamu. Edit JSON dengan hati-hati — schema validation jalan tiap save."
+
+---
+
+## 19. Memory Panel (per-agent modal)
+
+Click an agent node in the Agent Graph (or an agent tile below) to open the Memory Modal — per-agent execution history dengan metrics + log + lessons.
+
+### Layout
+
+```
+┌─────────────────────────────────────────┐
+│  agent.memory · worker-1            [×] │  ← head
+│  Worker 1 · Conservative                │
+│  running · live execution               │
+├─────────────────────────────────────────┤
+│  runs   success  gas       vault apy    │  ← metrics (4 cells, divided)
+│  1      —        0 ETH    8.2%          │
+├─────────────────────────────────────────┤
+│  execution log                          │
+│  ● running   agent started              │
+│  ● running   swap → broadcasting        │
+│  ● confirmed swap confirmed   tx 0x...  │
+│              lesson · slippage ok       │
+│  ● confirmed approve confirmed          │
+│  ...                                    │
+├─────────────────────────────────────────┤
+│  Memory stored onchain ...  [Close]     │
+└─────────────────────────────────────────┘
+```
+
+### Sections
+
+1. **Head** — `agent.memory · <id>` (mono eyebrow) + agent name (modal-title) + status sublabel
+2. **Metrics** — 4-cell grid: runs, success rate, gas paid (user), vault APY. Border-divided, mono labels, tabular nums.
+3. **Section title** — "execution log" (mono, lowercase)
+4. **Log** — vertical list of memory rows
+5. **Foot** — note + Close button
+
+### Memory row structure
+
+```
+●  swap → usdc (slippage 0.05%)   [confirmed]
+   broadcasting via 1Shot · tx 0x9f3…a124
+   ╎ lesson · slippage within bounds — pool depth ok
+                                              02:14:38
+```
+
+- **Marker dot** — color-coded (idle/running/confirmed/failed), pulsing if running (`legend-pulse` 1.1s)
+- **Title** — Geist 13px medium + status tag chip (mono 10px)
+- **Meta** — mono 11.5px muted, includes tx hash with dashed underline if present
+- **Lesson** — optional, indented with left-border `var(--accent)`, mono 11.5px, `<key> lesson</key> <text>` pattern. Lessons di-derive dari STEP_FLOW config (per-step), e.g.:
+  - swap: `"slippage within bounds — pool depth ok"`
+  - approve: `"approval cached on smart account · reuse next run"`
+  - deposit: `"share price 1.0241 · vault healthy"`
+- **Time** — `HH:MM:SS` tabular
+
+### When the modal is open
+
+- Backdrop = solid `rgba(0, 0, 0, 0.6)` (no glass)
+- ESC / click-outside / Close button = dismiss (handled via `onClick` on backdrop)
+- Memory continues to update in real time even while modal is open (execMap updates flow through)
+
+---
+
+## 20. Right rail — multi-agent updates
+
+### Permission panel
+
+Switched from single-permission display to **multi-agent list**:
+
+```
+Active permissions             erc-7715 · batch
+● 3 permission · 23h 59m
+─────────────────────────────────────────
+01  worker-1                   40 USDC
+    0xABCD…aBcDe
+─────────────────────────────────────────
+02  worker-2                   35 USDC
+    0xDEF1…Ef12
+─────────────────────────────────────────
+03  worker-3                   25 USDC
+    0x9876…1234
+─────────────────────────────────────────
+[ revoke all permissions ]
+```
+
+- Each agent row: idx (mono, accent) + name + truncated vault + amount (mono, tabular)
+- `revoke all permissions` button — single action, halts all agents
+
+### Activity panel
+
+Now event-first (see §10b). `EVENT_STYLES` map controls marker char + color per event type. Agent ID rendered as small bordered chip after event name.
 
 ---
 

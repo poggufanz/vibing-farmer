@@ -36,6 +36,12 @@
       "sourceType": "github",
       "computedHash": "33849fd8d3dbc7e550c19b492f8e140118bd3a58b8c9fcb6389ff07d4b218549"
     },
+    "build-graph": {
+      "source": "tirth8205/code-review-graph",
+      "sourceType": "github",
+      "skillPath": "skills/build-graph/SKILL.md",
+      "computedHash": "ae4760f61632866c69df9bdf6ecf54d1444a3e6bea012310e122d9175f3bd813"
+    },
     "cognitive-fluency-psychology": {
       "source": "flpbalada/my-opencode-config",
       "sourceType": "github",
@@ -55,6 +61,12 @@
       "source": "softaworks/agent-toolkit",
       "sourceType": "github",
       "computedHash": "f23c909d45c6207e974dbce0db4c648de13d586abb37057cfec34d62f25bb526"
+    },
+    "docs-generator": {
+      "source": "poggufanz/docs-generator-skill",
+      "sourceType": "github",
+      "skillPath": "skills/docs-generator/SKILL.md",
+      "computedHash": "d1cbbf0a9e5b8c3e7a1e5b2c3a4f5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4"
     },
     "finance-expert": {
       "source": "personamanagmentlayer/pcl",
@@ -131,6 +143,12 @@
       "sourceType": "github",
       "computedHash": "6337038fe1fe6bbe1b9f252ab678ee575859190bab6f0f246f4061824eb40875"
     },
+    "ux-researcher": {
+      "source": "dylantarre/animation-principles",
+      "sourceType": "github",
+      "skillPath": "skills/03-by-role-persona/ux-researcher/SKILL.md",
+      "computedHash": "dec6c0fe23f39ba1b06c317c59425a890707e74665eec3896be1e185deb19579"
+    },
     "vercel-react-best-practices": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
@@ -151,12 +169,6 @@
       "sourceType": "github",
       "skillPath": "skills/writing-plans/SKILL.md",
       "computedHash": "2b986445454a025ca2c3839f8a2024747e8cce0517948437232cd113d2719060"
-    },
-    "docs-generator": {
-      "source": "poggufanz/docs-generator-skill",
-      "sourceType": "github",
-      "skillPath": "skills/docs-generator/SKILL.md",
-      "computedHash": "d1cbbf0a9e5b8c3e7a1e5b2c3a4f5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4"
     }
   }
 }

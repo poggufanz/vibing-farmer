@@ -1,77 +1,97 @@
-# Arsitektur Teknis — YIELD VIBING
+# Architectural Overview — Vibing Farmer
 
-> **Skill Referensi:** architecture-designer
-> **Versi:** 1.0 | **Tanggal:** 26 Mei 2026
-> **Tujuan:** Ringkasan arsitektur, prinsip desain, data flow, ADR, NFR, dan failure modes
-
----
-
-## 1. Ringkasan Arsitektur
-
-YIELD VIBING adalah aplikasi DeFi berbasis web yang mengotomatisasi vault deposit flow menggunakan:
-- **Smart Contract** sebagai execution engine + permission enforcer
-- **MetaMask Smart Accounts Kit** sebagai wallet layer (EIP-7702 + ERC-7715)
-- **1Shot API** sebagai gas abstraction layer (EIP-7710 relay)
-- **Venice AI** sebagai recommendation layer (off-chain, privacy-first)
-- **Frontend** sebagai orchestration layer
+> **Skill Reference:** architecture-designer
+> **Version:** 2.0 | **Date:** May 27, 2026
+> **Purpose:** Architectural overview, design principles, data flows, ADRs, NFRs, and failure modes
 
 ---
 
-## 2. Prinsip Desain
+## 1. Architectural Overview
 
-| Prinsip | Penerapan |
-|---------|-----------|
-| Permission-bounded execution | Agent hanya bertindak dalam batas ERC-7715 yang user set |
-| Gas abstraction | User tidak bayar gas — relay oleh 1Shot |
-| Privacy-first AI | Venice AI tidak menyimpan data user |
-| Fail-safe default | Contract revert (bukan silent fail) jika scope violation |
-| Minimal on-chain footprint | Logic sesederhana mungkin di contract |
-| No admin keys | Kontrak tidak punya privileged role setelah deploy |
+Vibing Farmer is a web-based DeFi platform that automates multi-vault yield farming using an **AI-coordinated agent swarm**. The architecture comprises 5 core layers:
+
+1. **Venice AI Coordinator** — strategy generation + per-agent skill auto-generation
+2. **Skill System** — user-reviewable JSON skills per agent per step
+3. **Agent Swarm** — Orchestrator + parallel Worker Agents (JavaScript, frontend)
+4. **Blockchain Layer** — AgentVaultDepositor.sol (permission enforcer) + MockVault.sol
+5. **Visualization Layer** — vis.js Network graph (real-time, browser)
+
+**Vision:** Web3 → Web4 transition primitive. Users express intent, agents execute autonomously, blockchain enforces boundaries cryptographically.
 
 ---
 
-## 3. Diagram Arsitektur
+## 2. Design Principles
+
+| Principle | Application |
+|-----------|-------------|
+| Intent-based execution | The user expresses intent; Venice AI translates it into an executable plan + skills |
+| Permission-bounded execution | Per-agent ERC-7715 scope — agents only act within the boundaries set by the user |
+| Parallel-first | Worker Agents run concurrently rather than sequentially |
+| Gas abstraction | The user does not pay gas — transactions are relayed via 1Shot Permissionless Relayer |
+| Privacy-first AI | Venice AI does not store user data |
+| Fail-safe default | The smart contract reverts (never fails silently) on any scope violation |
+| Observable execution | vis.js graph + agent memory = full visibility into agent activities |
+| Skill-governed agents | All agent actions are restricted by the skill sets approved by the user |
+
+---
+
+## 3. Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     USER BROWSER                        │
-│                                                         │
-│  ┌────────────┐    ┌────────────────────────────────┐  │
-│  │ Venice AI  │    │       YIELD VIBING UI           │  │
-│  │  (Input)   │◄───│  HTML/CSS/JS + ethers.js v6    │  │
-│  └──────┬─────┘    └──────────────┬─────────────────┘  │
-│         │                         │                     │
-│         ▼                         ▼                     │
-│  ┌────────────┐    ┌────────────────────────────────┐  │
-│  │ Venice AI  │    │     MetaMask Extension         │  │
-│  │  REST API  │    │  EIP-7702: EOA → Smart Account │  │
-│  └────────────┘    │  ERC-7715: Permission Grant    │  │
-│                    └──────────────┬─────────────────┘  │
-└───────────────────────────────────┼─────────────────────┘
-                                    │ permission context
-                                    ▼
-             ┌────────────────────────────────────┐
-             │        1Shot API Relayer           │
-             │  EIP-7710: Permissioned Relay      │
-             │  Gas dibayar relayer, bukan user   │
-             └───────────────┬────────────────────┘
-                             │
-                             ▼
-             ┌────────────────────────────────────┐
-             │         SEPOLIA TESTNET            │
-             │                                    │
-             │  ┌──────────────────────────────┐  │
-             │  │     VaultDepositor.sol        │  │
-             │  │  validatePermission()         │  │
-             │  │  executeSwap()                │  │
-             │  │  depositToVault()             │  │
-             │  └───────────────┬───────────────┘  │
-             │                  ▼                   │
-             │  ┌──────────────────────────────┐  │
-             │  │      MockVault.sol           │  │
-             │  │    (ERC-4626 mock)           │  │
-             │  └──────────────────────────────┘  │
-             └────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                         USER BROWSER                             │
+│                                                                  │
+│  ┌─────────────┐   ┌────────────────────────────────────────┐   │
+│  │  Venice AI  │   │          Vibing Farmer UI              │   │
+│  │ Coordinator │◄──│  HTML/CSS/JS + ethers.js v6 + vis.js  │   │
+│  │             │   └──────────────────┬─────────────────────┘   │
+│  │ Strategy +  │                      │                         │
+│  │ Skill Gen   │                      │                         │
+│  └──────┬──────┘         ┌────────────▼──────────────┐         │
+│         │                │   MetaMask Flask          │         │
+│         ▼                │   EIP-7702: EOA → SA      │         │
+│  ┌─────────────────┐     │   ERC-7715: Per-Agent     │         │
+│  │  Skill Review   │     │   Permission Grant        │         │
+│  │  & Edit UI      │     └────────────┬──────────────┘         │
+│  └────────┬────────┘                  │ permissionContext × N   │
+│           │                           │                         │
+│           ▼                           ▼                         │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │             ORCHESTRATOR AGENT                           │   │
+│  │  Receives plan → Dispatches Workers via Promise.allSettled│  │
+│  └─────────────────┬──────────────────┬──────────────────────┘  │
+│                    │                  │                          │
+│            ┌───────▼──────┐   ┌───────▼──────┐                 │
+│            │ Worker Agent │   │ Worker Agent │  (parallel)      │
+│            │     1        │   │     N        │                  │
+│            │ skill: JSON  │   │ skill: JSON  │                  │
+│            └───────┬──────┘   └───────┬──────┘                 │
+│                    │                  │                          │
+└────────────────────┼──────────────────┼──────────────────────────┘
+                     │ 1Shot Relay      │ 1Shot Relay
+                     ▼                  ▼
+         ┌────────────────────────────────────────┐
+         │          SEPOLIA TESTNET               │
+         │                                        │
+         │  ┌─────────────────────────────────┐   │
+         │  │   AgentVaultDepositor.sol       │   │
+         │  │   agentPermissions[user][agId]  │   │
+         │  │   executeAgentDeposit()         │   │
+         │  │   CEI pattern + ReentrancyGuard │   │
+         │  └──────────┬──────────────────────┘   │
+         │             ▼                           │
+         │  ┌──────────────┐  ┌──────────────┐   │
+         │  │ MockVault A  │  │ MockVault B  │   │
+         │  │ (ERC-4626)   │  │ (ERC-4626)   │   │
+         │  └──────────────┘  └──────────────┘   │
+         └────────────────────────────────────────┘
+                     │
+                     ▼
+         ┌────────────────────────────────────────┐
+         │   vis.js Network Graph (browser)       │
+         │   Real-time event updates              │
+         │   Agent memory in node detail          │
+         └────────────────────────────────────────┘
 ```
 
 ---
@@ -79,80 +99,132 @@ YIELD VIBING adalah aplikasi DeFi berbasis web yang mengotomatisasi vault deposi
 ## 4. Data Flow
 
 ```
-1. User input preference (amount, risk)
-   → Venice AI API → vault recommendation
-2. User connect MetaMask → EIP-7702 upgrade EOA ke smart account
-3. User grant ERC-7715 permission (vault, maxAmount, expiry)
-4. Frontend → 1Shot API relay request + permission context
-5. 1Shot → VaultDepositor:
-   a. validatePermission(user, vault, amount)
-   b. executeSwap(amount)
-   c. approve(vault, amount)
-   d. deposit(amount) → MockVault
-6. VaultDepositor emits: SwapExecuted, DepositExecuted
-7. Frontend listen events → update status dashboard
-8. User lihat: "Deposit berhasil — X USDC earning Y% APY"
+1. User inputs intent (amount, risk level, number of vaults)
+   → Venice AI API → strategy JSON + skill JSON per agent
+
+2. User reviews skill cards → edits if needed → approves
+   → Skill files are written to `agents/session-{id}/agent-{n}-skills.json`
+
+3. User connects MetaMask Flask
+   → EIP-7702: EOA is upgraded to a smart account
+
+4. User grants ERC-7715 permissions per agent
+   (specifying vault address, maxAmount, and expiry)
+   → permissionContext per agentId is stored in sessionStorage
+
+5. User clicks "Launch Swarm"
+   → Orchestrator dispatches N Worker Agents via Promise.allSettled()
+
+6. Each Worker Agent runs in parallel to:
+   a. Read its skill file (maxSlippage, dexPreference, etc.)
+   b. Construct calldata for swap → approve → deposit
+   c. POST to 1Shot Permissionless Relayer with permissionContext
+   d. 1Shot relays to AgentVaultDepositor.sol:
+      CHECKS: validateAgentPermission(agentId, user, vault, amount)
+      EFFECTS: usedAmount += amount
+      INTERACTIONS: executeSwap → approve → MockVault.deposit()
+   e. Contract emits: AgentStarted, SwapExecuted, ApproveExecuted,
+                      DepositExecuted, AgentCompleted (or AgentFailed)
+
+7. Frontend listens to events via ethers.js contract.on(...)
+   → vis.js graph updates node colors: idle → running → confirmed/failed
+   → Memory file is written to `agents/memory/agent-{n}-memory.json`
+
+8. User clicks an agent node to see details: skill used + memory entries
+
+9. Summary displayed: N vaults deposited, total shares, total estimated APY earned
 ```
 
 ---
 
 ## 5. ADR (Architecture Decision Records)
 
-### ADR-01: Foundry sebagai Smart Contract Framework
+### ADR-01: Foundry as Smart Contract Framework
 
-**Keputusan:** Gunakan Foundry untuk development dan testing.
+**Decision:** Use Foundry (via WSL) for development and testing.
 
-**Alasan:** Native Solidity testing, fuzz testing built-in, fast runner, standar industri DeFi hackathon.
+**Rationale:** Native Solidity testing, built-in fuzz testing, fast execution, and standard industry practice for DeFi hackathons.
 
-**Ditolak:** Hardhat — terlalu banyak boilerplate untuk solo hackathon.
+**Rejected:** Hardhat — too much boilerplate for a solo hackathon.
 
----
-
-### ADR-02: HTML/CSS/JS + ethers.js (bukan React)
-
-**Keputusan:** Plain HTML/CSS/JS dengan ethers.js v6.
-
-**Alasan:** Lebih cepat setup, tidak butuh build pipeline, focus pada logika Web3.
-
-**Ditolak:** React — overkill untuk demo video 5 menit.
+**Note:** Foundry must run via WSL on Windows — always use `wsl -e bash -c "..."`.
 
 ---
 
-### ADR-03: Venice AI sebagai AI Layer
+### ADR-02: HTML/CSS/JS + ethers.js v6 + vis.js (instead of React)
 
-**Keputusan:** Venice AI, bukan OpenAI atau Anthropic.
+**Decision:** Plain HTML/CSS/JS with ethers.js v6 and vis.js Network via CDN.
 
-**Alasan:** Required untuk prize track $3,000, privacy-first (no data retention), OpenAI-compatible.
+**Rationale:** Faster setup, no build pipeline required, allowing total focus on Web3 and agent logic. The vis.js force-directed graph is perfect for agent network visualization.
+
+**Rejected:** React (overkill for a 5-minute demo video) and D3.js (too low-level for a network graph).
 
 ---
 
-### ADR-04: MockVault (bukan integrasi real vault)
+### ADR-03: Venice AI as Coordinator and Skill Generator
 
-**Keputusan:** Buat MockVault.sol sendiri untuk testnet.
+**Decision:** Leverage Venice AI not just as a recommendation engine, but as a strategy coordinator that automatically generates skill sets per agent.
 
-**Alasan:** Kontrol penuh atas demo, tidak ada dependency ke protocol eksternal, APY bisa di-mock.
+**Rationale:** Required for the $3,000 Venice AI prize track. Highly private (no data retention). Adds significant value: instead of just "AI suggesting a vault", we get "AI generating an executable agent configuration."
+
+**Rejected:** OpenAI/Anthropic and Groq (neither qualifies for the Venice track).
+
+---
+
+### ADR-04: Parallel Agent Dispatch (Promise.allSettled)
+
+**Decision:** The Orchestrator uses `Promise.allSettled()` to dispatch all Workers in parallel.
+
+**Rationale:** Demonstrates genuine agent-to-agent coordination for the $3,000 A2A track. Sequential execution offers no real coordination showcase. `allSettled` is chosen over `all` so that a single worker failure does not abort other workers.
+
+**Rejected:** Sequential dispatch (fails to qualify for the A2A coordination track).
+
+---
+
+### ADR-05: Per-Agent ERC-7715 Permission (instead of one shared permission)
+
+**Decision:** Every Worker Agent receives its own distinct ERC-7715 permission (agent-specific, vault-specific, amount-specific).
+
+**Rationale:** Security-first design: Worker 1 cannot access Worker 2's vault even within the same session. Demonstrates fine-grained cryptographic permission boundaries.
+
+**Rejected:** One single permission for all agents (overly broad scope, weaker security story).
+
+---
+
+### ADR-06: MockVault (instead of real protocol integration)
+
+**Decision:** Deploy two MockVault.sol (ERC-4626) instances on the testnet.
+
+**Rationale:** Complete control over the demo, zero dependencies on external live protocols, and deploy two instances to demonstrate parallel Workers depositing to different vaults.
 
 ---
 
 ## 6. NFR (Non-Functional Requirements)
 
-| Aspek | Target |
-|-------|--------|
-| Waktu eksekusi full flow | < 60 detik |
-| Venice AI response time | < 10 detik |
-| Gas cost untuk user | 0 (via 1Shot) |
-| Browser support | Chrome / Brave terbaru |
+| Aspect | Target |
+|--------|--------|
+| Full flow execution time (2 parallel vaults) | < 60 seconds |
+| Venice AI response time | < 10 seconds |
+| vis.js graph update latency from on-chain event | < 1 second |
+| Gas cost for user | 0 (via 1Shot) |
+| Browser support | Latest Chrome / Brave |
 | Smart contract test coverage | ≥ 80% |
+| Worker Agent failure isolation | One worker failure does not abort other workers |
+| Minimum parallel Workers in demo | ≥ 2 (for A2A track) |
 
 ---
 
 ## 7. Failure Modes
 
-| Failure | Dampak | Mitigasi |
-|---------|--------|---------|
-| EIP-7702 tidak support di Sepolia | Blocker | Verifikasi di Day 1 |
-| MetaMask permission dialog tidak muncul | Demo gagal | Test di browser bersih sebelum record |
-| 1Shot relay timeout | Tx tidak terkonfirmasi | Retry 1x otomatis |
-| Venice AI API key invalid | Recommendation tidak muncul | Test API key sebelum demo |
-| MockVault deposit gagal | Demo gagal | Unit test sebelum deploy ke Sepolia |
-| Contract revert karena permission exceeded | Tx ditolak | Design intent — tampilkan error jelas |
+| Failure | Impact | Mitigation |
+|---------|--------|------------|
+| EIP-7702 not supported on Sepolia | Blocker | Verified — live since March 5, 2025 |
+| Regular MetaMask (not Flask) | Demo fails | Show warning: "Install MetaMask Flask (13.9+)" |
+| Venice AI timeout | Skills not generated | Hardcoded fallback skill template |
+| Venice AI JSON output malformed | Skill cards do not render | JSON schema validation + error message |
+| 1Shot relay timeout per Worker | Transaction unconfirmed | Retry once based on maxRetries skill; mark worker as failed |
+| Single Worker Agent failure | Partial execution | Promise.allSettled ensures other workers continue; graph node turns red |
+| vis.js graph fails to render | Visualization missing | Fallback: step-tracker list view |
+| Contract revert on permission exceeded | Transaction rejected | Expected security behavior — display clear error in graph node detail |
+| agentId collision | Wrong permission used | Generate via keccak256(deterministic string) |
+| MockVault deposit fails | Worker marks failed | Unit test thoroughly before deploying to Sepolia |

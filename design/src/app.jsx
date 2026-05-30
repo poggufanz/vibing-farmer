@@ -1,8 +1,9 @@
 /* ============================================
-   YIELD VIBING — v2 right rail + main App
+   VIBING FARMER — AI Yield Farming Swarm (multi-agent)
+   App state machine + right rail panels
    ============================================ */
 
-const { useState: useS, useEffect: useE, useRef: useR } = React;
+const { useState: useS, useEffect: useE, useRef: useR, useMemo: useM } = React;
 
 /* ---------- Right rail panels ---------- */
 const WalletPanel = ({ phase, address }) => {
@@ -51,34 +52,34 @@ const WalletPanel = ({ phase, address }) => {
   );
 };
 
-const PermissionPanel = ({ active, amount, onRevoke }) => {
+/* Now lists permissions per agent */
+const PermissionPanel = ({ active, strategy, onRevoke }) => {
+  const agents = strategy?.agents || [];
   return (
     <div className="panel">
       <div className="panel-head">
-        <div className="panel-title">Active permission</div>
-        <span className="panel-meta">erc-7715</span>
+        <div className="panel-title">Active permissions</div>
+        <span className="panel-meta">erc-7715 · batch</span>
       </div>
       <div className={`perm-status ${active ? "active" : ""}`}>
-        {active ? "permission active · 23h 59m" : "no active permission"}
+        {active ? `${agents.length} permission · 23h 59m` : "no active permission"}
       </div>
-      {active && (
+      {active && agents.length > 0 && (
         <>
-          <div className="perm-detail">
-            <div className="perm-detail-row">
-              <span className="k">action</span>
-              <span className="v">vault-deposit</span>
-            </div>
-            <div className="perm-detail-row">
-              <span className="k">max</span>
-              <span className="v">{amount || 100} USDC</span>
-            </div>
-            <div className="perm-detail-row">
-              <span className="k">vault</span>
-              <span className="v">{RECOMMENDATION.addr.slice(0, 8)}…{RECOMMENDATION.addr.slice(-4)}</span>
-            </div>
+          <div className="perm-agent-list">
+            {agents.map((a) => (
+              <div key={a.id} className="perm-agent-row">
+                <span className="idx mono">{a.idx}</span>
+                <div className="meta-col">
+                  <div className="agent-name">{a.id}</div>
+                  <div className="mono agent-vault">{a.vault.addr.slice(0, 8)}…{a.vault.addr.slice(-4)}</div>
+                </div>
+                <div className="mono amount tnum">{a.allocation} USDC</div>
+              </div>
+            ))}
           </div>
           <button className="perm-revoke" onClick={onRevoke}>
-            revoke permission
+            revoke all permissions
           </button>
         </>
       )}
@@ -86,33 +87,56 @@ const PermissionPanel = ({ active, amount, onRevoke }) => {
   );
 };
 
+/* Activity panel — agent-level events */
+const EVENT_STYLES = {
+  AgentStarted:    { icon: "●", color: "var(--warn)" },
+  SwapExecuted:    { icon: "↻", color: "var(--info)" },
+  ApproveExecuted: { icon: "✓", color: "var(--info)" },
+  DepositExecuted: { icon: "↓", color: "var(--info)" },
+  AgentCompleted:  { icon: "✓", color: "var(--ok)" },
+  AgentFailed:     { icon: "✕", color: "var(--danger)" },
+  OrchestratorPlanned: { icon: "·", color: "var(--text-muted)" },
+  PermissionGranted:   { icon: "·", color: "var(--text-muted)" },
+  Connected:           { icon: "·", color: "var(--text-muted)" },
+  Authorized:          { icon: "·", color: "var(--text-muted)" },
+  PermissionRevoked:   { icon: "·", color: "var(--danger)" },
+  SkillApproved:       { icon: "·", color: "var(--text-muted)" },
+};
+
 const ActivityPanel = ({ logs }) => {
   return (
     <div className="panel" style={{ borderBottom: "none", flex: 1 }}>
       <div className="panel-head">
         <div className="panel-title">Activity</div>
-        <span className="panel-meta">realtime</span>
+        <span className="panel-meta">agent events · realtime</span>
       </div>
       {logs.length === 0 ? (
         <div className="empty">no events yet</div>
       ) : (
         <div className="activity">
-          {logs.slice().reverse().map((l) => (
-            <div key={l.id} className="act-row">
-              <div>
-                <div className="act-title">{l.title}</div>
-                <div className="act-meta">{l.meta}</div>
+          {logs.slice().reverse().map((l) => {
+            const sty = EVENT_STYLES[l.event] || EVENT_STYLES.OrchestratorPlanned;
+            return (
+              <div key={l.id} className="act-row">
+                <span className="act-marker mono" style={{ color: sty.color }}>{sty.icon}</span>
+                <div>
+                  <div className="act-title">
+                    <span className="act-event mono">{l.event}</span>
+                    {l.agent && <span className="act-agent mono">{l.agent}</span>}
+                  </div>
+                  <div className="act-meta">{l.meta}</div>
+                </div>
+                <span className="act-time">{l.time}</span>
               </div>
-              <span className="act-time">{l.time}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 };
 
-/* ---------- Palette picker (custom — restrained) ---------- */
+/* ---------- Palette picker ---------- */
 const PALETTES = [
   { id: "acid-yield", name: "Acid Yield", swatch: ["#cfff3d", "#1a1b16", "#ecebe1"], desc: "Default · warm dark + acid lime" },
   { id: "mono-slate", name: "Mono Slate", swatch: ["#e6edff", "#16182e", "#e8ebf3"], desc: "Refined · cool slate, no chroma" },
@@ -179,15 +203,29 @@ const MOCK_ADDR = "0xA36f3c8e2B7f124d9a8E4D2F1C5b7e0d8a9b126a4";
 const App = () => {
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
 
-  const [stage, setStage] = useS("input");
+  // stage: 'strategy' | 'connect' | 'skills' | 'permission' | 'execute' | 'done'
+  const [stage, setStage] = useS("strategy");
   const [amount, setAmount] = useS("100");
-  const [risk, setRisk] = useS("low");
+  const [risk, setRisk] = useS("med");
 
-  const [aiPhase, setAiPhase] = useS(0); // 0..2 active step idx, 99 = done
+  // strategy sub-state
+  const [strategyPhase, setStrategyPhase] = useS("input"); // input | thinking | ready
+  const [thinkingPhase, setThinkingPhase] = useS(0);
+  const [strategy, setStrategy] = useS(null);
+
   const [connectPhase, setConnectPhase] = useS("idle");
+
+  // skills
+  const [skillStates, setSkillStates] = useS({}); // id -> { state, skill }
+  const [editingTexts, setEditingTexts] = useS({}); // id -> { text, error }
+
   const [permPhase, setPermPhase] = useS("idle");
   const [permActive, setPermActive] = useS(false);
-  const [execState, setExecState] = useS([{ status: "idle" }, { status: "idle" }, { status: "idle" }]);
+
+  // execution: map agentId -> { status, steps, hashes, memory, metrics }
+  const [execMap, setExecMap] = useS({});
+  const [openAgentId, setOpenAgentId] = useS(null);
+
   const [logs, setLogs] = useS([]);
   const logIdRef = useR(0);
 
@@ -196,6 +234,7 @@ const App = () => {
     document.documentElement.dataset.density = tweaks.density;
   }, [tweaks.palette, tweaks.density]);
 
+  const paletteIsLight = tweaks.palette === "bone-paper";
   const speed = SPEED_MS[tweaks.speed] || SPEED_MS.medium;
 
   const addLog = (entry) => {
@@ -203,36 +242,40 @@ const App = () => {
     setLogs((l) => [...l, { id: logIdRef.current, time: "just now", ...entry }]);
   };
 
-  /* ----- Flow handlers ----- */
+  /* ----- STRATEGY (step 01) ----- */
   const handleSubmitPreference = () => {
-    setStage("recommend");
-    setAiPhase(0);
-    addLog({ title: "Venice AI query started", meta: `${amount} usdc · ${risk} risk` });
+    setStrategyPhase("thinking");
+    setThinkingPhase(0);
+    addLog({ event: "OrchestratorPlanned", meta: `${amount} usdc · ${risk} risk · planning` });
   };
 
   useE(() => {
-    if (stage !== "recommend" || aiPhase === 99) return;
-    if (aiPhase < 2) {
-      const t = setTimeout(() => setAiPhase((p) => p + 1), speed * 1.2);
+    if (stage !== "strategy" || strategyPhase !== "thinking") return;
+    if (thinkingPhase < 2) {
+      const t = setTimeout(() => setThinkingPhase((p) => p + 1), speed * 1.2);
       return () => clearTimeout(t);
     }
     const t = setTimeout(() => {
-      setAiPhase(99);
-      addLog({ title: "Recommendation ready", meta: "mockvault usdc · 8.2% apy" });
+      const s = buildStrategy(amount, risk);
+      setStrategy(s);
+      setStrategyPhase("ready");
+      // Initialize skill states as pending
+      const sk = {};
+      s.agents.forEach((a) => { sk[a.id] = { state: "pending", skill: null }; });
+      setSkillStates(sk);
+      addLog({ event: "OrchestratorPlanned", meta: `${s.agents.length} worker spawned · ${s.blendedApy}% blended apy` });
     }, speed * 1.5);
     return () => clearTimeout(t);
-  }, [stage, aiPhase, speed]);
+  }, [stage, strategyPhase, thinkingPhase, speed]);
 
-  const handleAcceptRecommendation = () => {
-    setStage("connect");
-    setConnectPhase("idle");
-  };
+  const handleAcceptStrategy = () => setStage("connect");
 
+  /* ----- CONNECT (step 02) ----- */
   const handleConnect = () => {
     setConnectPhase("connecting");
     setTimeout(() => {
       setConnectPhase("connected");
-      addLog({ title: "MetaMask connected", meta: shortAddr(MOCK_ADDR) });
+      addLog({ event: "Connected", meta: shortAddr(MOCK_ADDR) });
     }, speed * 1.4);
   };
 
@@ -240,101 +283,290 @@ const App = () => {
     setConnectPhase("upgrading");
     setTimeout(() => {
       setConnectPhase("upgraded");
-      addLog({ title: "EIP-7702 authorization confirmed", meta: `tx ${shortAddr(fakeHash())} · 1shot` });
+      addLog({ event: "Authorized", meta: `eip-7702 · tx ${shortAddr(fakeHash())}` });
     }, speed * 1.8);
   };
 
-  const handleConnectDone = () => {
-    setStage("permission");
-    setPermPhase("idle");
+  const handleConnectDone = () => setStage("skills");
+
+  /* ----- SKILLS (step 03) ----- */
+  const updateSkillState = (id, patch) => {
+    setSkillStates((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   };
 
+  const handleSkillApprove = (id) => {
+    updateSkillState(id, { state: "approved" });
+    addLog({ event: "SkillApproved", agent: id, meta: "skill JSON approved · ready to bind" });
+  };
+
+  const handleApproveAll = () => {
+    const next = {};
+    Object.entries(skillStates).forEach(([id, s]) => {
+      next[id] = { ...s, state: "approved" };
+    });
+    setSkillStates(next);
+    addLog({ event: "SkillApproved", meta: `${Object.keys(next).length} skills approved · batch` });
+  };
+
+  const handleSkillEdit = (id, text, start = false) => {
+    let err = null;
+    try { JSON.parse(text); } catch (e) { err = e.message.replace(/^.*: /, ""); }
+    setEditingTexts((prev) => ({ ...prev, [id]: { text, error: err } }));
+    if (start) {
+      updateSkillState(id, { state: "editing" });
+    }
+  };
+
+  const handleSkillSave = (id) => {
+    const entry = editingTexts[id];
+    if (!entry || entry.error) return;
+    try {
+      const parsed = JSON.parse(entry.text);
+      updateSkillState(id, { state: "pending", skill: parsed });
+    } catch {
+      // shouldn't happen — guarded above
+    }
+  };
+
+  const handleSkillReset = (id) => {
+    updateSkillState(id, { state: "pending" });
+    setEditingTexts((prev) => ({ ...prev, [id]: { text: "", error: null } }));
+  };
+
+  const handleSkillsContinue = () => setStage("permission");
+
+  /* ----- PERMISSION (step 04) ----- */
   const handleGrant = () => setPermPhase("prompting");
 
   const handlePermConfirm = () => {
     setPermPhase("idle");
     setPermActive(true);
-    addLog({ title: "ERC-7715 permission granted", meta: `vault-deposit · ${amount} usdc max` });
+    const ag = strategy?.agents || [];
+    ag.forEach((a) => addLog({ event: "PermissionGranted", agent: a.id, meta: `vault ${shortAddr(a.vault.addr)} · ${a.allocation} usdc max` }));
     setTimeout(() => {
       setStage("execute");
       startExecution();
     }, 600);
   };
 
+  /* ----- EXECUTE (step 05) — parallel agents ----- */
   const startExecution = () => {
-    setExecState([{ status: "idle" }, { status: "idle" }, { status: "idle" }]);
-    runStep(0);
+    if (!strategy) return;
+    const init = makeInitialExecState(strategy.agents);
+    setExecMap(init);
+
+    // Stagger agent starts slightly so the graph reads better
+    strategy.agents.forEach((a, idx) => {
+      setTimeout(() => runAgent(a), idx * speed * 0.6);
+    });
   };
 
-  const runStep = (i) => {
-    if (i >= EXEC_STEPS.length) return;
-    setExecState((prev) => prev.map((s, idx) => (idx === i ? { status: "pending" } : s)));
-    addLog({ title: `${EXEC_STEPS[i].title} broadcasting`, meta: "via 1shot · gas 0" });
+  const runAgent = (agent) => {
+    // Agent started
+    setExecMap((prev) => ({
+      ...prev,
+      [agent.id]: {
+        ...prev[agent.id],
+        status: "running",
+        activeStep: "swap",
+        steps: { swap: "running", approve: "idle", deposit: "idle" },
+        memory: [
+          ...(prev[agent.id]?.memory || []),
+          { status: "running", title: "agent started", meta: `vault ${shortAddr(agent.vault.addr)}`, t: nowT() },
+        ],
+        metrics: { ...prev[agent.id]?.metrics, startedAt: Date.now(), totalRuns: (prev[agent.id]?.metrics?.totalRuns || 0) + 1 },
+      },
+    }));
+    addLog({ event: "AgentStarted", agent: agent.id, meta: `${agent.vault.protocol} · ${agent.allocation} usdc` });
+
+    runStep(agent, 0);
+  };
+
+  const STEP_FLOW = [
+    { id: "swap",    event: "SwapExecuted",    title: "swap usdc → usdc (slippage 0.05%)", lesson: "slippage within bounds — pool depth ok" },
+    { id: "approve", event: "ApproveExecuted", title: "erc-20 approve vault spender",       lesson: "approval cached on smart account · reuse next run" },
+    { id: "deposit", event: "DepositExecuted", title: "erc-4626 deposit · mint shares",      lesson: "share price 1.0241 · vault healthy" },
+  ];
+
+  const runStep = (agent, i) => {
+    if (i >= STEP_FLOW.length) {
+      // Agent done
+      setTimeout(() => {
+        setExecMap((prev) => ({
+          ...prev,
+          [agent.id]: {
+            ...prev[agent.id],
+            status: "confirmed",
+            activeStep: null,
+            memory: [
+              ...(prev[agent.id]?.memory || []),
+              { status: "confirmed", title: "agent completed", meta: `3 of 3 steps confirmed`, t: nowT(), lesson: `routed ${agent.allocation} USDC → ${agent.vault.protocol}, target apy ${agent.vault.apy}%` },
+            ],
+            metrics: { ...prev[agent.id]?.metrics, completedAt: Date.now(), successRate: 100 },
+          },
+        }));
+        addLog({ event: "AgentCompleted", agent: agent.id, meta: `${agent.allocation} usdc → ${agent.vault.name}` });
+      }, speed * 0.5);
+      return;
+    }
+
+    const step = STEP_FLOW[i];
+
+    // Mark step as running (after small delay to feel sequential)
     setTimeout(() => {
-      const hash = fakeHash();
-      setExecState((prev) => prev.map((s, idx) => (idx === i ? { status: "done", hash } : s)));
-      addLog({ title: `${EXEC_STEPS[i].title} confirmed`, meta: `tx ${shortAddr(hash)}` });
-      runStep(i + 1);
-    }, speed * 1.8);
+      setExecMap((prev) => ({
+        ...prev,
+        [agent.id]: {
+          ...prev[agent.id],
+          activeStep: step.id,
+          steps: { ...prev[agent.id].steps, [step.id]: "running" },
+          memory: [
+            ...(prev[agent.id]?.memory || []),
+            { status: "running", title: step.title, meta: "broadcasting via 1Shot", t: nowT() },
+          ],
+        },
+      }));
+
+      // Then confirm
+      setTimeout(() => {
+        const hash = fakeHash();
+        setExecMap((prev) => ({
+          ...prev,
+          [agent.id]: {
+            ...prev[agent.id],
+            steps: { ...prev[agent.id].steps, [step.id]: "confirmed" },
+            hashes: { ...prev[agent.id].hashes, [step.id]: hash },
+            memory: [
+              ...(prev[agent.id]?.memory || []),
+              { status: "confirmed", title: step.title, meta: `confirmed onchain`, hash, lesson: step.lesson, t: nowT() },
+            ],
+          },
+        }));
+        addLog({ event: step.event, agent: agent.id, meta: `tx ${shortAddr(hash)}` });
+        runStep(agent, i + 1);
+      }, speed * 1.4);
+    }, 80);
   };
 
+  /* ----- DONE (step 06) ----- */
   const handleExecDone = () => {
     setStage("done");
-    addLog({ title: "Vault position opened", meta: `${amount} usdc · 8.2% apy` });
+    addLog({ event: "OrchestratorPlanned", meta: `multi-agent deployment finalized · ${strategy.agents.length} positions opened` });
   };
 
   const handleAgain = () => {
-    setStage("input");
-    setAiPhase(0);
-    setExecState([{ status: "idle" }, { status: "idle" }, { status: "idle" }]);
+    setStage("strategy");
+    setStrategyPhase("input");
+    setThinkingPhase(0);
+    setStrategy(null);
+    setSkillStates({});
+    setEditingTexts({});
+    setConnectPhase("idle");
+    setPermActive(false);
+    setExecMap({});
   };
 
   const handleRevoke = () => {
     setPermActive(false);
-    addLog({ title: "Permission revoked", meta: "agent execution halted" });
+    (strategy?.agents || []).forEach((a) =>
+      addLog({ event: "PermissionRevoked", agent: a.id, meta: "agent halted · scope cleared" })
+    );
   };
 
+  /* ----- Jump to step (tweaks panel) ----- */
   const jumpTo = (id) => {
-    if (id === "input") {
-      setStage("input");
-      setAiPhase(0);
-      setConnectPhase("idle");
-      setPermActive(false);
-      setExecState([{ status: "idle" }, { status: "idle" }, { status: "idle" }]);
+    if (id === "strategy") {
+      setStage("strategy");
+      setStrategyPhase("input");
+      setThinkingPhase(0);
       return;
     }
-    if (id === "recommend") { setStage("recommend"); setAiPhase(99); return; }
+    // Ensure strategy exists for downstream stages
+    const ensured = strategy || buildStrategy(amount, risk);
+    if (!strategy) {
+      setStrategy(ensured);
+      const sk = {};
+      ensured.agents.forEach((a) => { sk[a.id] = { state: "approved", skill: null }; });
+      setSkillStates(sk);
+    }
     if (id === "connect") { setStage("connect"); setConnectPhase("idle"); return; }
-    if (id === "permission") { setStage("permission"); setPermPhase("idle"); setConnectPhase("upgraded"); return; }
-    if (id === "execute") { setStage("execute"); setConnectPhase("upgraded"); setPermActive(true); startExecution(); return; }
+    if (id === "skills")  { setStage("skills"); setConnectPhase("upgraded"); return; }
+    if (id === "permission") {
+      setStage("permission"); setPermPhase("idle"); setConnectPhase("upgraded");
+      const sk = {};
+      ensured.agents.forEach((a) => { sk[a.id] = { state: "approved", skill: null }; });
+      setSkillStates(sk);
+      return;
+    }
+    if (id === "execute") {
+      setStage("execute"); setConnectPhase("upgraded"); setPermActive(true);
+      const sk = {};
+      ensured.agents.forEach((a) => { sk[a.id] = { state: "approved", skill: null }; });
+      setSkillStates(sk);
+      startExecution();
+      return;
+    }
     if (id === "done") {
       setStage("done");
       setConnectPhase("upgraded");
       setPermActive(true);
-      setExecState([
-        { status: "done", hash: fakeHash() },
-        { status: "done", hash: fakeHash() },
-        { status: "done", hash: fakeHash() },
-      ]);
+      // Force all confirmed
+      const map = {};
+      ensured.agents.forEach((a) => {
+        map[a.id] = {
+          status: "confirmed",
+          activeStep: null,
+          steps: { swap: "confirmed", approve: "confirmed", deposit: "confirmed" },
+          hashes: { swap: fakeHash(), approve: fakeHash(), deposit: fakeHash() },
+          memory: [],
+          metrics: { totalRuns: 1, successRate: 100, startedAt: Date.now(), completedAt: Date.now() },
+        };
+      });
+      setExecMap(map);
     }
   };
 
   const renderStage = () => {
     switch (stage) {
-      case "input":
-        return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} onSubmit={handleSubmitPreference} />;
-      case "recommend":
-        return aiPhase < 99
-          ? <ThinkingCard phase={aiPhase} />
-          : <RecommendCard onProceed={handleAcceptRecommendation} />;
+      case "strategy":
+        if (strategyPhase === "input") {
+          return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} onSubmit={handleSubmitPreference} />;
+        }
+        if (strategyPhase === "thinking") {
+          return <ThinkingCard phase={thinkingPhase} />;
+        }
+        return <StrategyCard strategy={strategy} onProceed={handleAcceptStrategy} />;
       case "connect":
         return <ConnectCard phase={connectPhase} onConnect={handleConnect} onUpgrade={handleUpgrade} onDone={handleConnectDone} />;
+      case "skills":
+        return (
+          <SkillReviewCard
+            agents={strategy?.agents || []}
+            riskProfile={risk}
+            skillStates={skillStates}
+            editingTexts={editingTexts}
+            onApprove={handleSkillApprove}
+            onApproveAll={handleApproveAll}
+            onEdit={handleSkillEdit}
+            onSave={handleSkillSave}
+            onReset={handleSkillReset}
+            onContinue={handleSkillsContinue}
+          />
+        );
       case "permission":
-        return <PermissionCard amount={amount} phase={permPhase} onGrant={handleGrant} onConfirm={handlePermConfirm} />;
+        return <PermissionCard strategy={strategy} phase={permPhase} onGrant={handleGrant} onConfirm={handlePermConfirm} />;
       case "execute":
-        return <ExecCard amount={amount} execState={execState} onDone={handleExecDone} />;
+        return (
+          <ExecuteCard
+            strategy={strategy}
+            execMap={execMap}
+            paletteIsLight={paletteIsLight}
+            onOpenMemory={setOpenAgentId}
+            onDone={handleExecDone}
+          />
+        );
       case "done":
-        return <SuccessCard amount={amount} onAgain={handleAgain} />;
+        return <SuccessCard strategy={strategy} onAgain={handleAgain} />;
       default:
         return null;
     }
@@ -350,15 +582,24 @@ const App = () => {
       <main className="main">
         <TopBar walletConnected={walletPhase !== "none"} />
         <StepRail stage={stage} />
-        <div className="stage" key={stage}>
+        <div className="stage" key={`${stage}-${strategyPhase}`}>
           {renderStage()}
         </div>
       </main>
       <aside className="rail">
         <WalletPanel phase={walletPhase} address={MOCK_ADDR} />
-        <PermissionPanel active={permActive} amount={amount} onRevoke={handleRevoke} />
+        <PermissionPanel active={permActive} strategy={strategy} onRevoke={handleRevoke} />
         <ActivityPanel logs={logs} />
       </aside>
+
+      {openAgentId && strategy && (
+        <MemoryModal
+          agentId={openAgentId}
+          strategy={strategy}
+          execMap={execMap}
+          onClose={() => setOpenAgentId(null)}
+        />
+      )}
 
       <TweaksPanel title="Tweaks">
         <TweakSection label="Brand palette" />
@@ -419,6 +660,11 @@ const App = () => {
       </TweaksPanel>
     </div>
   );
+};
+
+const nowT = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
 };
 
 Object.assign(window, { App, WalletPanel, PermissionPanel, ActivityPanel, MOCK_ADDR, PALETTES, PalettePicker });

@@ -1,241 +1,241 @@
-# YIELD VIBING — Hackathon Project Plan
+# Vibing Farmer — Product Requirements Document
 
-## Hackathon Info
-
-- **Event:** MetaMask Smart Accounts Kit x 1Shot API x Venice AI Dev Cook Off
-- **Deadline:** 15 Juni 2026
-- **Prize Pool:** $11,000
-- **Pengumuman:** 22 Juni 2026
-- **Platform:** HackQuest
-- **Waktu tersedia:** ~20 hari (dari 26 Mei 2026)
-- **Mode:** Solo
+**Hackathon:** MetaMask Smart Accounts Kit × 1Shot API × Venice AI Dev Cook Off  
+**Deadline:** 15 Juni 2026 | **Prize:** $11,000 | **Mode:** Solo | **Platform:** HackQuest  
+**Tagline:** "Set once. Vibe forever."
 
 ---
 
-## Pain Point (Hasil Research dari X/Twitter 2025–2026)
+## Problem Statement
 
-### Problem Utama: Yield Farming UX yang Broken
+### Yield Farming UX is Broken
 
-Yield farmer harus melakukan **8+ transaksi manual** untuk satu flow rebalance/compound:
+Yield farmers must execute **8+ manual transactions** per rebalance cycle:
 
 1. Remove liquidity → sign approve/burn NFT
-2. Receive token mentah (ETH + USDC)
-3. Swap token → sign approve + execute swap
-4. Supply ke lending protocol (Aave) → sign supply + use as collateral
+2. Receive raw tokens (ETH + USDC)
+3. Swap tokens → sign approve + execute swap
+4. Supply to lending protocol → sign supply + use as collateral
 5. Borrow asset → sign execute borrow
-6. Deposit ke vault → sign approve + deposit & stake
+6. Deposit to vault → sign approve + deposit & stake
 
-**Setiap langkah = popup MetaMask, gas fee, risiko salah klik.**
+**Every step = MetaMask popup + gas fee + risk of mis-click.**
 
-### Voices dari User (Verbatim dari X)
+### User Research (X/Twitter 2025–2026)
 
-> "Are you tired of the tedious, multi-step dance of adjusting liquidity in DeFi? Removing liquidity, claiming fees, and adding it back in a new price range can feel like navigating a maze blindfolded." — @John_Peace1
+> "Are you tired of the tedious, multi-step dance of adjusting liquidity in DeFi?" — @John_Peace1
 
 > "Normally it's: bridge → swap → find the right vault → deposit… and hope you didn't miss a step 😭" — @kokocodes
 
 > "agent finance UX is still broken. Today you choose between: full wallet access (risky) • human over-control (co-approving every step)." — @0xYann_
 
-> "approve every tx manually, kills automation. give AI full wallet access, too risky." — @Celina6644
-
 > "only ~15–18% of wallet connects end in a real transaction." — @agnt_hub
-
-### Step Paling Menyakitkan (Dari Research)
-
-1. **Removing liquidity / exiting positions** — multi-tx, gas boros, timing kritis
-2. **Vault deposit flow** — bridge → swap → approve → deposit, gampang salah step
 
 ---
 
-## Solusi: YIELD VIBING
+## Solution: Vibing Farmer
 
 ### Elevator Pitch
 
-> Automated vault deposit flow untuk yield farmer — user set permission sekali via ERC-7715, agent eksekusi swap → approve → deposit otomatis, tanpa popup berulang, dalam batas yang user tentukan sendiri.
+> AI-coordinated agent swarm for automated multi-vault yield farming. Venice AI generates strategy and per-agent skill sets. User reviews and approves once. An Orchestrator Agent dispatches Worker Agents in parallel — each handling one complete vault flow. All transactions relay gas-free via 1Shot. Real-time vis.js graph tracks every agent's status and memory.
 
-### Scope (Realistis untuk 20 Hari Solo)
+### What Makes This Different
 
-**Fokus: Vault Deposit Flow Automation** — bukan seluruh yield farming lifecycle.
+| Feature | Vibing Farmer | DeleGate | Manual DeFi | Auto-compound bots |
+|---------|--------------|---------|-------------|-------------------|
+| Agent execution | Parallel multi-agent | Sequential | N/A | N/A |
+| Skill system (user reviews) | ✅ | ❌ | ❌ | ❌ |
+| Persistent agent memory (UI) | ✅ | ❌ | ❌ | ❌ |
+| AI coordinator (strategy + skills) | Venice AI | Groq (no Venice track) | ❌ | ❌ |
+| Gas-free relay | 1Shot (active) | Skips 1Shot | User pays | Depends on bot |
+| Wallet control | Bounded ERC-7715 | Unknown | Full manual | Full access (risky) |
+| A2A coordination track | ✅ | ❌ | ❌ | ❌ |
 
-Flow yang di-automate:
-1. User connect wallet (EIP-7702 enabled EOA)
-2. User set scoped permission via ERC-7715: "boleh swap max X token dan deposit ke vault Y"
-3. Agent eksekusi otomatis: swap → approve → deposit
-4. User tetap pegang kendali via permission boundaries
-5. Kalau agent coba exceed limit → ditolak otomatis
+---
 
-**Kenapa scope ini:**
-- Flow linear dan predictable
-- Langsung showcase EIP-7702 + ERC-7715
-- Demo yang clean dan understandable (3-5 menit video)
-- Stakes lebih rendah daripada exit/rebalance yang timing-sensitive
+## Core Architecture
 
-### Bukan Scope (Explicit)
+### 1. Venice AI Coordinator
 
-- ❌ Full yield farming protocol
-- ❌ Removing liquidity automation (terlalu high-stakes)
-- ❌ Cross-chain bridging
-- ❌ Custom AMM/DEX
-- ❌ Real mainnet deployment
+- User inputs: amount, risk level, number of vaults
+- Venice AI outputs:
+  - Multi-vault allocation strategy (which vaults, how much each)
+  - Auto-generated **skill set JSON** per agent per step type:
+    - Swap step → generates swap skill (slippage tolerance, DEX preference, max retries)
+    - Deposit step → generates deposit skill (maxAmount, vault address, expiry)
+- User reviews and can edit generated skills in UI before approval
+
+### 2. Skill System (Required)
+
+Each agent receives a skill set JSON before execution:
+
+```json
+{
+  "agentId": "worker-agent-1",
+  "vaultAddress": "0xABCD...",
+  "skills": {
+    "swap": {
+      "maxSlippage": 0.5,
+      "dexPreference": "uniswap-v3",
+      "maxRetries": 2,
+      "timeoutSeconds": 30
+    },
+    "deposit": {
+      "maxAmount": "50000000",
+      "vaultAddress": "0xABCD...",
+      "expiresAt": 1749686400
+    }
+  },
+  "generatedBy": "venice-ai",
+  "approvedByUser": true,
+  "sessionId": "session-20260609-001"
+}
+```
+
+Skills stored as files: `agents/session-{id}/agent-{n}-skills.json`
+
+### 3. Agent Swarm (Parallel Execution)
+
+- **Orchestrator Agent** (JavaScript, frontend):
+  - Receives plan JSON from Venice AI
+  - Dispatches N Worker Agents in parallel (`Promise.allSettled`)
+  - Aggregates results → writes summary to memory
+
+- **Worker Agents** (JavaScript, frontend, one per vault):
+  - Each handles one complete vault deposit flow: Swap → Approve → Deposit
+  - Uses assigned skill set (maxSlippage, dexPreference, maxRetries, etc.)
+  - Sends all transactions via ERC-7715 scoped permission + 1Shot relay
+  - Emits on-chain events per step: `AgentStarted`, `SwapExecuted`, `ApproveExecuted`, `DepositExecuted`, `AgentCompleted`, `AgentFailed`
+  - Writes memory file after execution
+
+### 4. Memory System (Required)
+
+Each agent writes to a memory file after execution:
+
+```json
+{
+  "agentId": "worker-agent-1",
+  "sessionId": "session-20260609-001",
+  "vault": "0xABCD...",
+  "entries": [
+    {
+      "timestamp": 1748387200,
+      "step": "swap",
+      "status": "success",
+      "gasUsed": 45000,
+      "slippageActual": 0.12,
+      "executionTimeMs": 4200,
+      "lesson": "Vault A accepts 0.5% slippage reliably"
+    },
+    {
+      "timestamp": 1748387260,
+      "step": "deposit",
+      "status": "success",
+      "sharesReceived": "100023456",
+      "executionTimeMs": 3800
+    }
+  ]
+}
+```
+
+Memory stored: `agents/memory/agent-{n}-memory.json`  
+Memory displayed in vis.js node detail panel.  
+Next execution reads memory for context (feeds back to Venice AI prompt).
+
+### 5. Real-time vis.js Graph
+
+- Force-directed network visualization (vis.js Network, NOT D3.js)
+- **Nodes:** Orchestrator + Worker Agents + Vault targets
+- **Edges:** dependency and communication between agents
+- **Node states:** idle → running → confirmed → failed (color-coded)
+- Updates in real-time from on-chain events (ethers.js `contract.on(...)`)
+- Clicking a node opens detail panel: current step, skill being used, memory entries
+
+### 6. Wallet & Permission Layer
+
+- **EIP-7702:** EOA upgrade to smart account (MetaMask Flask 13.9+)
+- **ERC-7715:** Scoped permission per agent (vault address, max amount, expiry)
+- **1Shot Permissionless Relayer:** Gas abstraction — user pays 0 gas
+- Permission scope visible and editable in UI before grant
+
+---
+
+## Functional Requirements
+
+| ID | Feature | Priority |
+|----|---------|---------|
+| FR-01 | Venice AI strategy generation + skill auto-generation | Must |
+| FR-02 | Skill review + edit UI before execution | Must |
+| FR-03 | Orchestrator Agent: parallel Worker dispatch | Must |
+| FR-04 | Worker Agent: Swap→Approve→Deposit per vault | Must |
+| FR-05 | Agent memory files: write after execution | Must |
+| FR-06 | vis.js graph: real-time agent network | Must |
+| FR-07 | EIP-7702 wallet upgrade | Must |
+| FR-08 | ERC-7715 permission grant per agent | Must |
+| FR-09 | 1Shot relay for all agent transactions | Must |
+| FR-10 | Permission revocation | Should |
+| FR-11 | Memory-aware next execution (feed memory to Venice AI) | Could |
+
+---
+
+## Hackathon Qualification Checklist
+
+- [ ] Uses MetaMask Smart Accounts Kit (EIP-7702 + ERC-7715) in main flow
+- [ ] Demo video shows EIP-7702 upgrade + ERC-7715 permission grant
+- [ ] 1Shot API relays agent deposit txs — demo shows `from` = relayer on Sepolia Etherscan
+- [ ] Venice AI generates strategy + skill sets — shown before execution
+- [ ] Skill review UI visible in demo
+- [ ] Agent swarm (≥2 parallel Workers) visible in vis.js graph
+- [ ] Agent memory displayed in node detail
+- [ ] All 4 prize tracks demonstrable in ≤ 5 min video
 
 ---
 
 ## Tech Stack
 
-### Required by Hackathon
-
-- **MetaMask Smart Accounts Kit** — EIP-7702 + ERC-7715 integration
-- **1Shot API Permissionless Relayer** — gas abstraction, EIP-7710 transactions
-- **Venice AI** — optional tapi bisa boost judging (AI-powered yield suggestion?)
-
-### Development
-
-- **Smart Contracts:** Solidity + Foundry
-- **Frontend:** HTML/CSS/JS + ethers.js (atau React jika perlu)
-- **Testnet:** Sepolia (atau chain yang support EIP-7702)
-- **Wallet:** MetaMask Extension
+| Layer | Technology |
+|-------|-----------|
+| Smart Contracts | Solidity ^0.8.24, Foundry |
+| Frontend | HTML/CSS/JS + ethers.js v6 + vis.js Network |
+| AI | Venice AI API (`llama-3.3-70b`, OpenAI-compatible) |
+| Relay | 1Shot Permissionless Relayer (JSON-RPC, no API key) |
+| Wallet | MetaMask Flask 13.9+ (Smart Accounts Kit) |
+| Network | Ethereum Sepolia |
+| Viem | ESM CDN (`esm.sh/viem`) for EIP-7702/ERC-7715 signing |
 
 ---
 
-## Qualification Checklist
+## Timeline
 
-- [ ] Project uses MetaMask Smart Accounts or Advanced Permissions
-- [ ] Integration via MetaMask Smart Accounts Kit
-- [ ] Demo video shows working integration in main flow
-- [ ] EIP-7702 authorizations to upgrade accounts to smart accounts via 1Shot Permissionless Relayer
-- [ ] If using 1Shot API, demo must show it being used
-
----
-
-## Timeline (20 Hari)
-
-### Phase 1: Foundation (Day 1–3, 26-28 Mei)
-
-- [ ] Day 1 — Review Solidity fundamentals (compress Day 16-17 roadmap)
-- [ ] Day 2 — Security patterns: validation, access control, CEI (compress Day 18-19 roadmap)
-- [ ] Day 3 — Deep dive EIP-7702 + ERC-7715 docs, setup Smart Accounts Kit, run hello-world example
-
-### Phase 2: Smart Contract (Day 4–8, 29 Mei - 2 Juni)
-
-- [ ] Day 4 — Design contract architecture: VaultDepositor contract spec
-- [ ] Day 5 — Write core contract: permission validation, swap logic interface
-- [ ] Day 6 — Write vault deposit logic, integration with mock vault
-- [ ] Day 7 — Security review: access control, input validation, edge cases
-- [ ] Day 8 — Testing: success path, fail path, edge cases, fuzz
-
-### Phase 3: Integration (Day 9–13, 3-7 Juni)
-
-- [ ] Day 9 — 1Shot API integration: gas abstraction setup
-- [ ] Day 10 — Frontend: wallet connect + EIP-7702 account upgrade flow
-- [ ] Day 11 — Frontend: permission request UI (ERC-7715)
-- [ ] Day 12 — Frontend: vault deposit automation flow + status dashboard
-- [ ] Day 13 — End-to-end test on testnet: full flow from connect to deposit
-
-### Phase 4: Polish & Ship (Day 14–17, 8-11 Juni)
-
-- [ ] Day 14 — Bug fixes, UX polish, error handling
-- [ ] Day 15 — Venice AI integration (optional: AI yield suggestion)
-- [ ] Day 16 — README, documentation, architecture diagram
-- [ ] Day 17 — Demo video recording (3-5 menit)
-
-### Phase 5: Buffer (Day 18–20, 12-15 Juni)
-
-- [ ] Day 18-19 — Buffer untuk unexpected issues
-- [ ] Day 20 — Final submission (deadline 15 Juni)
+| Phase | Days | Deliverable |
+|-------|------|------------|
+| 1 — Foundation | 1–3 (26–28 Mei) | Solidity review, EIP-7702/ERC-7715 study, spike review |
+| 2 — Smart Contract | 4–8 (29 Mei – 2 Juni) | AgentVaultDepositor.sol + MockVault.sol + forge tests |
+| 3 — Integration | 9–13 (3–7 Juni) | 1Shot + Orchestrator + Worker agents + vis.js graph + Sepolia E2E |
+| 4 — Polish | 14–17 (8–11 Juni) | Venice AI skill gen, memory UI, bug fixes, demo video |
+| 5 — Buffer | 18–20 (12–15 Juni) | Final submission |
 
 ---
 
-## Risiko & Mitigasi
+## Critical Failure Modes
 
-| Risiko | Probabilitas | Mitigasi |
-|--------|-------------|----------|
-| ERC-7715 di MetaMask belum stabil | Tinggi | Cek supported networks di docs dulu sebelum mulai |
-| Smart Accounts Kit docs kurang jelas | High | Liat past hackathon winners untuk reference implementasi |
-| Solo = burnout | High | Timebox per hari, max 8 jam. Kalau stuck > 2 jam, pivot |
-| Scope creep | Medium | Stick ke vault deposit flow only. No feature creep |
-| Demo video quality | Low | Script dulu, record last, keep under 5 menit |
+| Failure | Mitigation |
+|---------|-----------|
+| EIP-7702 not live on Sepolia | Already verified — live since Mar 5 2025 |
+| MetaMask Flask not available | Test on clean browser profile before demo |
+| 1Shot relay timeout | Auto-retry 1x; Worker marks itself failed, others continue |
+| Venice AI API key invalid | Test key before demo day |
+| One Worker Agent fails | `Promise.allSettled()` — other Workers continue |
+| Contract revert on permission exceeded | Design intent — show clear error in graph node |
+| vis.js graph not rendering | Fallback: step-tracker list view |
 
 ---
 
-## Reference & Resources
-
-### Dokumentasi
+## Resources
 
 - MetaMask Smart Accounts Kit: https://docs.metamask.io/wallet/smart-accounts/
-- 1Shot API: https://1shotapi.com/docs
-- Venice AI API: https://venice.ai/
 - EIP-7702: https://eips.ethereum.org/EIPS/eip-7702
 - ERC-7715: https://eips.ethereum.org/EIPS/eip-7715
-
-### Past Hackathon Winners (Study These)
-
-- MetaMask Smart Accounts x Monad Dev Cook Off winners
-- MetaMask Delegation Toolkit DTK Dev Cook-Off winners
-- MetaMask Advanced Permissions Dev Cook-Off submissions
-
-### Pain Point Research Sources
-
-- X/Twitter complaints (2025-2026) — compiled in this document
-- DeFi user behavior data dari @agnt_hub (15-18% wallet connect completion rate)
-
----
-
-## Key Decision: Jalur Developer
-
-**Security-aware Smart Contract Dev** — build products dengan security mindset dari awal.
-
-Portfolio ini bukan cuma "project hackathon" tapi juga demonstration bahwa:
-1. Bisa bikin produk yang solve real problem
-2. Punya security habit (validation, access control, failure-path thinking)
-3. Ngerti EIP-7702/ERC-7715 — cutting edge Web3 primitives
-
----
-
-## Next Immediate Action
-
-1. Cek apakah Sepolia (atau network lain) udah support EIP-7702
-2. Setup MetaMask Smart Accounts Kit locally
-3. Run hello-world example dari docs
-4. Study past hackathon winners untuk reference scope dan quality bar
-
-
-# Tambahan (Wajib dimasukkan juga)
-Oke, ini scope tambahan Venice AI yang bisa diintegrasiin ke VIBE YIELD:
-
----
-
-## Venice AI Integration Scope
-
-**Use case yang makes sense untuk VIBE YIELD:**
-
-> User kasih input: "Gw punya 500 USDC, mau yield farming yang low risk" → Venice AI rekomendasiin vault terbaik berdasarkan APY, risk profile, dan kondisi market saat ini → user approve permission sekali → agent eksekusi otomatis
-
-**Konkretnya Venice AI ngapain:**
-- Analisa kondisi vault (APY, TVL, risk score)
-- Rekomendasiin allocation strategy berdasarkan user preference
-- Generate human-readable summary: "Vault ini safe karena X, expected yield Y per bulan"
-- Alert kalau kondisi berubah drastis (APY drop, TVL exodus)
-
-**Kenapa ini strong untuk judging:**
-- Venice AI = privacy-first, data user nggak di-log → align sama Web3 ethos
-- Bukan gimmick — genuinely useful buat user yang nggak mau riset manual
-- Showcase AI + Web3 integration yang meaningful
-
----
-
-**Flow lengkap VIBE YIELD dengan Venice AI:**
-
-```
-User input preference (risk level, amount)
-    → Venice AI analisa & rekomendasiin vault
-        → User review rekomendasi
-            → User set permission via ERC-7715
-                → 1Shot Relayer eksekusi gas-free
-                    → Agent deposit ke vault otomatis
-```
-
----
-
-Track yang bisa dikejar sekaligus:
-- ✅ Best Agent ($3,000)
-- ✅ Best use of Venice AI ($3,000)
-- ✅ Best Use of 1Shot Permissionless Relayer ($1,000 USDC)
+- 1Shot API: https://1shotapi.com/docs
+- Venice AI: https://venice.ai/
+- vis.js Network: https://visjs.github.io/vis-network/docs/network/

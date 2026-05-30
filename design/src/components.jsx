@@ -1,5 +1,5 @@
 /* ============================================
-   YIELD VIBING — v2 shared components & icons
+   VIBING FARMER — v2 shared components & icons
    ============================================ */
 
 /* ---------- Icons (Lucide-style, stroke 1.5) ---------- */
@@ -20,6 +20,11 @@ const Icon = ({ name, size = 16, className = "" }) => {
     logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></>,
     chev: <><path d="M9 6l6 6-6 6" /></>,
     chevDown: <><path d="M6 9l6 6 6-6" /></>,
+    network: <><circle cx="12" cy="5" r="2" /><circle cx="5" cy="19" r="2" /><circle cx="19" cy="19" r="2" /><path d="M12 7v3M12 10l-6 7M12 10l6 7" /></>,
+    code: <><path d="M16 18l6-6-6-6M8 6l-6 6 6 6" /></>,
+    edit: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></>,
+    brain: <><path d="M9.5 2a2.5 2.5 0 0 1 2.5 2.5V20a2 2 0 0 1-4 0 2 2 0 0 1-2-2 2 2 0 0 1-1-3.732 2 2 0 0 1 .732-3 2.5 2.5 0 0 1 1-4.268A2.5 2.5 0 0 1 9.5 2zM14.5 2a2.5 2.5 0 0 0-2.5 2.5V20a2 2 0 0 0 4 0 2 2 0 0 0 2-2 2 2 0 0 0 1-3.732 2 2 0 0 0-.732-3 2.5 2.5 0 0 0-1-4.268A2.5 2.5 0 0 0 14.5 2z" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   };
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
@@ -38,7 +43,7 @@ const Sidebar = () => {
   ];
   return (
     <nav className="sidebar" aria-label="Primary">
-      <div className="sb-logo" title="yield/vibing">y/</div>
+      <div className="sb-logo" title="vibing/farmer">v/</div>
       {items.map((it) => (
         <button key={it.key} className={`sb-item ${it.active ? "active" : ""}`} title={it.key} aria-label={it.key}>
           <Icon name={it.icon} />
@@ -58,9 +63,9 @@ const TopBar = ({ walletConnected }) => {
     <header className="topbar">
       <div className="topbar-left">
         <div className="brand">
-          <span>yield</span>
+          <span>vibing</span>
           <span className="slash">/</span>
-          <span className="vibing">vibing</span>
+          <span className="vibing">farmer</span>
         </div>
         <span className="brand-net mono">
           <span className="dot" />sepolia
@@ -79,12 +84,12 @@ const TopBar = ({ walletConnected }) => {
 
 /* ---------- Step rail (subtle numeric, no wizard chrome) ---------- */
 const STEPS = [
-  { id: "input", label: "Preferensi" },
-  { id: "recommend", label: "AI Rekomendasi" },
+  { id: "strategy", label: "AI Strategy" },
   { id: "connect", label: "Connect & Upgrade" },
-  { id: "permission", label: "Permission" },
+  { id: "skills", label: "Review Skills" },
+  { id: "permission", label: "Grant Permission" },
   { id: "execute", label: "Auto-Execute" },
-  { id: "done", label: "Selesai" },
+  { id: "done", label: "Complete" },
 ];
 
 const StepRail = ({ stage }) => {
