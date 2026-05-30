@@ -6,7 +6,7 @@
 
 > **Set once. Vibe forever.**
 
-Most yield farming is exhausting. You find two or three vaults, swap into the assets, approve the spenders, and deposit—repeating a click-heavy loop over and over. Vibing Farmer changes this. We coordinate an AI agent swarm that automates this entire flow in parallel. You set your terms, review the worker skills once, and let the agents do the rest.
+Most yield farming is exhausting. You find two or three vaults, swap into the assets, approve the spenders, and deposit repeating a click-heavy loop over and over. Vibing Farmer changes this. We coordinate an AI agent swarm that automates this entire flow in parallel. You set your terms, review the worker skills once, and let the agents do the rest.
 
 ---
 
