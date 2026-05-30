@@ -14,7 +14,7 @@ tags: ["technical-spike", "architecture", "erc-7715", "permissions", "agent"]
 
 ## Summary
 
-**Spike Objective:** Determine how ERC-7715 scoped permissions are granted, stored, and validated — both from MetaMask SDK side and from VaultDepositor contract side — for the yield-vibing agent flow.
+**Spike Objective:** Determine how ERC-7715 scoped permissions are granted, stored, and validated — both from MetaMask SDK side and from VaultDepositor contract side — for the vibing-farmer agent flow.
 
 **Why This Matters:** ERC-7715 is the core security primitive. It defines what the agent CAN do without repeated user approval. Wrong implementation = either broken UX (constant popups) or broken security (agent can exceed user limits). Directly shapes VaultDepositor.sol architecture.
 
@@ -68,11 +68,11 @@ Built-in rule type for expiry:
 Built-in permission types supported by MetaMask SAK:
 - `native-token-allowance` — ETH allowance
 - `erc20-token-allowance` — ERC-20 one-time allowance
-- `erc20-token-periodic` — ERC-20 recurring allowance (most useful for yield-vibing)
+- `erc20-token-periodic` — ERC-20 recurring allowance (most useful for vibing-farmer)
 - `erc721-token-allowance` — NFT
-- Custom types via custom caveat enforcers (Foundry)
+- Custom types via custom caveats enforcers (Foundry)
 
-**For yield-vibing:** Use `erc20-token-periodic` with USDC address + maxAmount + period = expiry duration.
+**For vibing-farmer:** Use `erc20-token-periodic` with USDC address + maxAmount + period = expiry duration.
 
 ---
 
@@ -92,7 +92,7 @@ const [grantedPermission] = await window.ethereum.request({
         tokenAddress: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',  // USDC Sepolia
         periodAmount: '100000000',   // 100 USDC (6 decimals)
         periodDuration: 86400,       // 1 day in seconds
-        justification: 'Automated vault deposit via yield-vibing'
+        justification: 'Automated vault deposit via vibing-farmer'
       }
     },
     rules: [{

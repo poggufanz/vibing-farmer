@@ -1,5 +1,5 @@
 /* ============================================
-   YIELD VIBING — Skill Review (step 03)
+   VIBING FARMER — Skill Review (step 03)
    Auto-generated skill cards per worker agent.
    User can review, edit JSON, or approve each skill.
    ============================================ */

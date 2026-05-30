@@ -14,7 +14,7 @@ tags: ["technical-spike", "api-integration", "eip-7702", "metamask", "smart-acco
 
 ## Summary
 
-**Spike Objective:** Determine if EIP-7702 EOA-to-smart-account upgrade works on Sepolia via MetaMask Smart Accounts Kit, and identify the exact SDK setup required for the yield-vibing flow.
+**Spike Objective:** Determine if EIP-7702 EOA-to-smart-account upgrade works on Sepolia via MetaMask Smart Accounts Kit, and identify the exact SDK setup required for the vibing-farmer flow.
 
 **Why This Matters:** EIP-7702 is the foundational layer. If Sepolia doesn't support it or the SDK setup is non-trivial, the entire architecture shifts. Blocks VaultDepositor contract design and frontend wallet integration.
 

@@ -1,5 +1,5 @@
 /* ============================================
-   YIELD VIBING — screens (multi-agent edition)
+   VIBING FARMER — screens (multi-agent edition)
    ============================================ */
 import React from 'react';
 import { Icon } from './components.jsx';
@@ -183,7 +183,7 @@ const ConnectCard = ({ phase, error, onConnect, onUpgrade, onDone, onCancel }) =
 
       {phase === "connecting" && (
         <MmDialog
-          domain="yield-vibing.app"
+          domain="vibing-farmer.app"
           title="Connection request"
           rows={[
             { k: "request", v: "eth_requestAccounts" },
@@ -197,7 +197,7 @@ const ConnectCard = ({ phase, error, onConnect, onUpgrade, onDone, onCancel }) =
       {phase === "connected" && (
         <>
           <MmDialog
-            domain="yield-vibing.app"
+            domain="vibing-farmer.app"
             title="EIP-7702 authorization"
             rows={[
               { k: "delegate to", v: "MetaMask Smart Account v1.2", accent: true },
@@ -396,7 +396,7 @@ const MmPermissionModal = ({ strategy, onConfirm, onReject }) => {
               <div className="mm-mark">MM</div>
               <span className="mm-name">MetaMask</span>
             </div>
-            <span className="mm-domain">yield-vibing.app</span>
+            <span className="mm-domain">vibing-farmer.app</span>
           </div>
           <div className="mm-body">
             <div className="row"><span className="k">batch type</span><span className="v accent">vault-deposit · {agents.length}x</span></div>

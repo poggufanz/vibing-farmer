@@ -1,5 +1,5 @@
 /* ============================================
-   YIELD VIBING — History (Etherscan-style explorer)
+   VIBING FARMER — History (Etherscan-style explorer)
    Reads localStorage directly (history.js). No prop drilling.
    ============================================ */
 import React, { useState, useEffect } from 'react';

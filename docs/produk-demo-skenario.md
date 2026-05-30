@@ -207,7 +207,7 @@ Menunjukkan bahwa Vibing Farmer berhasil mengotomatisasi multi-vault deposit flo
 ### Scene 1: Load App (30s)
 - Open http://localhost:3000
 - Show dark 3-column layout
-- Console: "YIELD VIBING ready. Connect wallet to start."
+- Console: "Vibing Farmer ready. Connect wallet to start."
 
 ### Scene 2: Connect Wallet (30s)
 - Click Connect Wallet → MetaMask Flask popup

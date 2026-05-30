@@ -153,7 +153,7 @@ export default function SettingsPage({
   const exportData = () => {
     const data = {}; yvKeys().forEach((k) => { data[k] = localStorage.getItem(k) })
     const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }))
-    const a = document.createElement('a'); a.href = url; a.download = 'yield-vibing-export.json'; a.click(); URL.revokeObjectURL(url)
+    const a = document.createElement('a'); a.href = url; a.download = 'vibing-farmer-export.json'; a.click(); URL.revokeObjectURL(url)
   }
   const clearAll = () => {
     clearAllHistory(); yvKeys().forEach((k) => localStorage.removeItem(k))
@@ -218,7 +218,7 @@ export default function SettingsPage({
 
         {/* ── SECTION 2: Vault Strategy ── */}
         <Section title="Vault Strategy">
-          <Row label="Active Skill" desc={customSkill ? 'Custom strategy · user-defined' : 'Default Strategy by Yield Vibing'}>
+          <Row label="Active Skill" desc={customSkill ? 'Custom strategy · user-defined' : 'Default Strategy by Vibing Farmer'}>
             <button type="button" style={miniBtn} onClick={onChangeSkill}>Change skill →</button>
           </Row>
           <Divider />
@@ -325,7 +325,7 @@ export default function SettingsPage({
 
         {/* ── SECTION 6: About ── */}
         <Section title="About">
-          <div className="brand" style={{ fontSize: 18 }}><span>yield</span><span className="slash">/</span><span className="vibing">vibing</span></div>
+          <div className="brand" style={{ fontSize: 18 }}><span>vibing</span><span className="slash">/</span><span className="vibing">farmer</span></div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Autonomous DeFi yield farming agent</div>
           <div style={{ marginTop: 12 }}>
             {[['Version', '1.0.0-hackathon'], ['Network', 'Ethereum Sepolia'], ['Contracts', 'verified on Sourcify']].map(([k, v]) => (

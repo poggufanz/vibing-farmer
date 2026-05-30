@@ -1,5 +1,5 @@
 /* ============================================
-   YIELD VIBING — v2 shared components & icons
+   VIBING FARMER — v2 shared components & icons
    ============================================ */
 
 /* ---------- Icons (Lucide-style, stroke 1.5) ---------- */
@@ -43,7 +43,7 @@ const Sidebar = () => {
   ];
   return (
     <nav className="sidebar" aria-label="Primary">
-      <div className="sb-logo" title="yield/vibing">y/</div>
+      <div className="sb-logo" title="vibing/farmer">v/</div>
       {items.map((it) => (
         <button key={it.key} className={`sb-item ${it.active ? "active" : ""}`} title={it.key} aria-label={it.key}>
           <Icon name={it.icon} />
@@ -63,9 +63,9 @@ const TopBar = ({ walletConnected }) => {
     <header className="topbar">
       <div className="topbar-left">
         <div className="brand">
-          <span>yield</span>
+          <span>vibing</span>
           <span className="slash">/</span>
-          <span className="vibing">vibing</span>
+          <span className="vibing">farmer</span>
         </div>
         <span className="brand-net mono">
           <span className="dot" />sepolia

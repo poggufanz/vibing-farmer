@@ -1,14 +1,14 @@
-# YIELD VIBING — Design System
+# VIBING FARMER — Design System
 
 > **Versi:** 3.0 (Vibing Farmer · multi-agent) · **Tanggal:** 27 Mei 2026  
-> **Tujuan:** Base design system buat YIELD VIBING prototype + handoff ke implementasi React/Solidity.  
+> **Tujuan:** Base design system buat VIBING FARMER prototype + handoff ke implementasi React/Solidity.  
 > **Aesthetic:** *Editorial financial-document* — restrained, data-forward, trust-first.
 
 ---
 
 ## 0. Bacaan singkat
 
-YIELD VIBING (codename **Vibing Farmer**) adalah produk DeFi multi-agent. Sebuah **Orchestrator** nge-spawn beberapa **Worker Agent**, masing-masing dengan **skill JSON** yang user review sebelum execution. Tiap worker punya scoped permission (ERC-7715) ke satu vault, dan ngerjain `swap → approve → deposit` paralel. Karena user nge-trust agent multi-step untuk move money lewat banyak vault sekaligus, **design-nya harus serius secara visual** — bukan crypto-bro vibey, bukan generic AI-dashboard, tapi document-grade yang ngebuat user yakin batasan permission-nya dihormati.
+VIBING FARMER adalah produk DeFi multi-agent. Sebuah **Orchestrator** nge-spawn beberapa **Worker Agent**, masing-masing dengan **skill JSON** yang user review sebelum execution. Tiap worker punya scoped permission (ERC-7715) ke satu vault, dan ngerjain `swap → approve → deposit` paralel. Karena user nge-trust agent multi-step untuk move money lewat banyak vault sekaligus, **design-nya harus serius secara visual** — bukan crypto-bro vibey, bukan generic AI-dashboard, tapi document-grade yang ngebuat user yakin batasan permission-nya dihormati.
 
 ---
 
@@ -341,7 +341,7 @@ Sizes: default `padding: 11px 18px`, large `padding: 14px 22px`. Radius `--radiu
 
 ### Amount input (signature pattern)
 
-Pattern khusus YIELD VIBING — input numerik dengan font raksasa sebagai visual anchor:
+Pattern khusus VIBING FARMER — input numerik dengan font raksasa sebagai visual anchor:
 
 ```html
 <div class="amount-input-row">
@@ -373,7 +373,7 @@ Document-grade dev-tool feel. Tidak ada fox emoji.
 
 ```
 ┌─────────────────────────────────────────┐
-│ [MM] MetaMask         yield-vibing.app  │ ← header
+│ [MM] MetaMask         vibing-farmer.app │ ← header
 │ ──────────────────────────────────────  │
 │ title…                                  │
 │ key       value                         │
@@ -491,15 +491,15 @@ Tambah icon baru hanya kalau truly dibutuhkan — kebanyakan UI element bisa pak
 
 ### Brand marks
 
-- **Sidebar logo:** `y/` — mono 14px, di dalam 32×32 box dengan border. Bukan filled tile, bukan colored gradient.
+- **Sidebar logo:** `v/` — mono 14px, di dalam 32×32 box dengan border. Bukan filled tile, bukan colored gradient.
 - **MetaMask mark:** `MM` — mono 9px, 22×22 box. Replacement untuk fox emoji.
-- **Brand wordmark:** `yield/vibing` — mix Geist 500 untuk "yield", `--text-faint` slash, Instrument Serif italic 19px untuk "vibing". *Satu-satunya pakai serif italic di seluruh app.*
+- **Brand wordmark:** `vibing/farmer` — mix Geist 500 untuk "vibing", `--text-faint` slash, Instrument Serif italic 19px untuk "farmer". *Satu-satunya pakai serif italic di seluruh app.*
 
 ---
 
 ## 9. Per-Screen Signatures
 
-Tiap screen di flow harus punya **satu angka besar** sebagai visual anchor. Ini brand signature YIELD VIBING.
+Tiap screen di flow harus punya **satu angka besar** sebagai visual anchor. Ini brand signature VIBING FARMER.
 
 | Screen | Signature number | Source data |
 |---|---|---|
@@ -586,7 +586,7 @@ Tweaks persisted via host protocol di `EDITMODE-BEGIN`/`EDITMODE-END` block — 
 ### File structure
 
 ```
-YIELD VIBING Prototype.html   — entrypoint, fonts, react/babel/vis-network scripts
+Vibing Farmer Prototype.html   — entrypoint, fonts, react/babel/vis-network scripts
 styles.css                    — all tokens + components + multi-agent additions
 src/
   tweaks-panel.jsx            — host protocol + Tweak* form controls (vendored starter)
@@ -656,8 +656,8 @@ Kalau bingung apakah suatu treatment qualify atau "AI-slop": tanya "apakah ini b
 
 | File | Status |
 |---|---|
-| `YIELD VIBING Prototype.html` | Current (v3 · Vibing Farmer) — base reference |
-| `YIELD VIBING Prototype v1.html` | Original — kept for compare (AI-slop baseline) |
+| `Vibing Farmer Prototype.html` | Current (v3 · Vibing Farmer) — base reference |
+| `Vibing Farmer Prototype v1.html` | Original — kept for compare (AI-slop baseline) |
 | `styles-v1.css`, `src/components-v1.jsx`, `src/screens-v1.jsx` | v1 snapshot |
 | `styles.css`, `src/{app,components,screens,skills,agents,tweaks-panel}.jsx` | v3 active design system |
 
@@ -665,7 +665,7 @@ Kalau bingung apakah suatu treatment qualify atau "AI-slop": tanya "apakah ini b
 
 ## 16. Vibing Farmer — multi-agent architecture
 
-YIELD VIBING v3 ngubah arsitektur dari "satu user, satu agent, satu vault" jadi **orchestrator + N workers**. Design system reflects this lewat tiga komponen baru: **Strategy Card** (replaces RecommendCard), **Skill Review** (new step), **Agent Graph** (replaces flat exec log).
+VIBING FARMER v3 ngubah arsitektur dari "satu user, satu agent, satu vault" jadi **orchestrator + N workers**. Design system reflects this lewat tiga komponen baru: **Strategy Card** (replaces RecommendCard), **Skill Review** (new step), **Agent Graph** (replaces flat exec log).
 
 ### Hierarki
 

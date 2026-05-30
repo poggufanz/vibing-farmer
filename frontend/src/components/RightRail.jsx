@@ -169,7 +169,7 @@ const SkillPanel = ({ skillSource, marketLive, vaultLive, onCustomize }) => {
         <button className="panel-meta skill-customize" onClick={onCustomize}>customize →</button>
       </div>
       <div className="perm-status active">
-        {custom ? "Custom Strategy" : "Default Strategy by Yield Vibing"}
+        {custom ? "Custom Strategy" : "Default Strategy by Vibing Farmer"}
       </div>
       <div className="skill-sub">
         {custom ? "active · user-defined" : "4 vaults · expert framework"}

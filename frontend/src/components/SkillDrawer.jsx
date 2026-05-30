@@ -62,7 +62,7 @@ const SkillDrawer = ({ open, onClose, skillSource, onSkillChange }) => {
           <button className={`skill-opt ${mode === 'default' ? 'sel' : ''}`} onClick={selectDefault}>
             <span className="skill-radio" />
             <span className="skill-opt-main">
-              <span className="skill-opt-title">Default Strategy by Yield Vibing</span>
+              <span className="skill-opt-title">Default Strategy by Vibing Farmer</span>
               <span className="skill-opt-desc">
                 Built-in expert DeFi framework. Based on institutional vault eval methodology (Tesseract, Credora, Steakhouse Financial).
               </span>

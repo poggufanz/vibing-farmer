@@ -151,7 +151,7 @@ Memory stored as `agents/memory/agent-{n}-memory.json`. Displayed in vis.js node
 
 ```
 design/                              # UI prototype — reference implementation
-  YIELD VIBING Prototype.html        # v2 current — React 18 + Babel CDN
+  Vibing Farmer Prototype.html       # v2 current — React 18 + Babel CDN
   styles.css                         # v2 design tokens + all components
   src/
     app.jsx                          # State machine, right rail, palette picker

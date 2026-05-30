@@ -1,5 +1,5 @@
 /* ============================================
-   YIELD VIBING — v2 shared components & icons
+   VIBING FARMER — v2 shared components & icons
    ============================================ */
 import React from 'react';
 import { t } from './settingsStore.js';
@@ -46,7 +46,7 @@ const Sidebar = ({ view = "flow", onNavigate }) => {
   ];
   return (
     <nav className="sidebar" aria-label="Primary">
-      <div className="sb-logo" title="yield/vibing">y/</div>
+      <div className="sb-logo" title="vibing/farmer">v/</div>
       {items.map((it) => {
         const nav = !!it.view;
         const active = nav && view === it.view;
@@ -78,9 +78,9 @@ const TopBar = ({ walletConnected, onReset }) => {
     <header className="topbar">
       <div className="topbar-left">
         <div className="brand">
-          <span>yield</span>
+          <span>vibing</span>
           <span className="slash">/</span>
-          <span className="vibing">vibing</span>
+          <span className="vibing">farmer</span>
         </div>
         <span className="brand-net mono">
           <span className="dot" />sepolia

@@ -1,5 +1,5 @@
 /* ============================================
-   YIELD VIBING — Vibing Farmer (multi-agent)
+   VIBING FARMER — AI Yield Farming Swarm (multi-agent)
    App state machine + right rail panels
    ============================================ */
 

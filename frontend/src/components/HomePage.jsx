@@ -98,7 +98,7 @@ export default function HomePage({
       <div style={{ flex: 1, display: 'grid', placeItems: 'center', padding: 28, textAlign: 'center' }}>
         <div style={{ maxWidth: 420 }}>
           <div className="brand" style={{ justifyContent: 'center', fontSize: 22 }}>
-            <span>yield</span><span className="slash">/</span><span className="vibing">vibing</span>
+            <span>vibing</span><span className="slash">/</span><span className="vibing">farmer</span>
           </div>
           <p className="lede" style={{ margin: '18px auto 0', fontSize: 14 }}>
             Autonomous yield farming. Set permission once — agent farms forever.

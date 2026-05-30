@@ -1,5 +1,5 @@
 /* ============================================
-   YIELD VIBING — App (multi-agent + real Web3)
+   VIBING FARMER — App (multi-agent + real Web3)
    Design state machine wired to real wallet.js / venice.js / orchestrator.js
    ============================================ */
 import React, { useState as useS, useEffect as useE, useRef as useR } from 'react';
@@ -841,7 +841,7 @@ const App = () => {
           <HistoryPanel />
         ) : view === "agent" ? (
           <div className="stage">
-            <div style={{ maxWidth: 560, margin: "0 auto", width: "100%" }}>
+            <div style={{ maxWidth: 820, margin: "0 auto", width: "100%" }}>
               <AgentDashboard
                 active={agentEnabled && stage === "done"}
                 positions={agentData.positions}

@@ -1,5 +1,5 @@
 /* ============================================
-   YIELD VIBING — Agent Graph + Memory (step 05)
+   VIBING FARMER — Agent Graph + Memory (step 05)
    Hierarchical vis.js Network:
      Orchestrator → Worker Agents → Step nodes (Swap/Approve/Deposit) → Vault nodes
    Node colors driven by state: idle / running / confirmed / failed

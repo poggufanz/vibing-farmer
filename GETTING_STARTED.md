@@ -43,7 +43,7 @@ Deadline: **15 Juni 2026** · Prize: $11,000 · Solo · Platform: HackQuest
 ## 2. Target Directory Structure
 
 ```
-yield-vibing/
+vibing-farmer/
 │
 ├── contracts/
 │   ├── AgentVaultDepositor.sol     # Core — per-agent permission + parallel execution (CEI + ReentrancyGuard)
