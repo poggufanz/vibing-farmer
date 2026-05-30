@@ -24,6 +24,8 @@ import { OrchestratorAgent } from './orchestrator.js';
 import { makeAgentId } from './worker.js';
 import { VAULT_CATALOG, VENICE_TIMEOUT_MS } from './config.js';
 import SkillDrawer from './components/SkillDrawer.jsx';
+import HistoryPanel from './components/HistoryPanel.jsx';
+import { saveTransaction } from './history.js';
 
 /* ---------- Right rail panels ---------- */
 const WalletPanel = ({ phase, address }) => {
@@ -300,6 +302,7 @@ const App = () => {
   // stage: 'strategy' | 'connect' | 'skills' | 'permission' | 'execute' | 'done'
   const [stage, setStage] = useS("strategy");
   const [furthest, setFurthest] = useS(0); // furthest step index reached → rail can navigate to visited steps
+  const [view, setView] = useS("flow"); // 'flow' | 'history' — left sidebar nav
   const [amount, setAmount] = useS("100");
   const [risk, setRisk] = useS("med");
   const [devApiKey, setDevApiKey] = useS("");
@@ -682,6 +685,12 @@ const App = () => {
             };
           });
           addLog({ event: "AgentCompleted", agent: dId, meta: data.simulated ? "[simulated]" : `tx ${shortAddr(data.txHash)}` });
+          const ag = strategy?.agents?.find((a) => a.id === dId);
+          if (ag && data.txHash) saveTransaction({
+            txHash: data.txHash, vaultName: ag.vault.name, vaultAddress: ag.vault.addr,
+            protocol: ag.vault.protocol, amountUsdc: ag.allocation, apy: ag.vault.apy,
+            workerLabel: ag.name, workerId: ag.id, network: "sepolia",
+          });
         }
 
         if (evName === "failed") {
@@ -730,6 +739,7 @@ const App = () => {
 
   const handleAgain = () => {
     setStage("strategy");
+    setView("flow");
     setFurthest(0);
     setStrategyPhase("input");
     setThinkingPhase(0);
@@ -853,13 +863,19 @@ const App = () => {
 
   return (
     <div className="app">
-      <Sidebar />
+      <Sidebar view={view} onNavigate={setView} />
       <main className="main">
         <TopBar walletConnected={walletPhase !== "none"} onReset={handleAgain} />
-        <StepRail stage={stage} furthest={furthest} onStepClick={goBack} />
-        <div className="stage" key={`${stage}-${strategyPhase}`}>
-          {renderStage()}
-        </div>
+        {view === "history" ? (
+          <HistoryPanel />
+        ) : (
+          <>
+            <StepRail stage={stage} furthest={furthest} onStepClick={goBack} />
+            <div className="stage" key={`${stage}-${strategyPhase}`}>
+              {renderStage()}
+            </div>
+          </>
+        )}
       </main>
       <aside className="rail">
         <WalletPanel phase={walletPhase} address={realAddress} />

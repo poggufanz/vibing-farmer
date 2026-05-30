@@ -143,6 +143,12 @@
       "sourceType": "github",
       "computedHash": "6337038fe1fe6bbe1b9f252ab678ee575859190bab6f0f246f4061824eb40875"
     },
+    "ux-researcher": {
+      "source": "dylantarre/animation-principles",
+      "sourceType": "github",
+      "skillPath": "skills/03-by-role-persona/ux-researcher/SKILL.md",
+      "computedHash": "dec6c0fe23f39ba1b06c317c59425a890707e74665eec3896be1e185deb19579"
+    },
     "vercel-react-best-practices": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",

@@ -35,28 +35,33 @@ const Icon = ({ name, size = 16, className = "" }) => {
 };
 
 /* ---------- Sidebar (minimal, no active-bar gimmick) ---------- */
-const Sidebar = () => {
+const Sidebar = ({ view = "flow", onNavigate }) => {
   const items = [
     { key: "home", icon: "home" },
-    { key: "vaults", icon: "grid", active: true },
-    { key: "history", icon: "layers" },
+    { key: "vaults", icon: "grid", view: "flow" },
+    { key: "history", icon: "layers", view: "history" },
     { key: "settings", icon: "settings" },
   ];
   return (
     <nav className="sidebar" aria-label="Primary">
       <div className="sb-logo" title="yield/vibing">y/</div>
-      {items.map((it) => (
-        <button
-          key={it.key}
-          className={`sb-item ${it.active ? "active" : ""}`}
-          title={it.active ? it.key : `${it.key} · soon`}
-          aria-label={it.key}
-          aria-disabled={!it.active}
-          disabled={!it.active}
-        >
-          <Icon name={it.icon} />
-        </button>
-      ))}
+      {items.map((it) => {
+        const nav = !!it.view;
+        const active = nav && view === it.view;
+        return (
+          <button
+            key={it.key}
+            className={`sb-item ${active ? "active" : ""}`}
+            title={nav ? it.key : `${it.key} · soon`}
+            aria-label={it.key}
+            aria-disabled={!nav}
+            disabled={!nav}
+            onClick={nav ? () => onNavigate?.(it.view) : undefined}
+          >
+            <Icon name={it.icon} />
+          </button>
+        );
+      })}
       <div className="sb-spacer" />
       <button className="sb-item" title="notifications · soon" aria-label="notifications" disabled aria-disabled="true">
         <Icon name="bell" />

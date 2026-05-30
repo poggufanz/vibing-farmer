@@ -2339,3 +2339,50 @@ input, select, textarea {
 /* ---------- Light palette graph adjustments ---------- */
 [data-palette="bone-paper"] .agent-graph { background: var(--bg-elev); }
 [data-palette="bone-paper"] .legend-item .dot.idle { background: #95928a; border-color: #95928a; }
+
+
+/* ============================================
+   History — Etherscan-style explorer
+   ============================================ */
+.history-page { flex: 1; overflow-y: auto; padding: 24px 28px; }
+[data-density="compact"] .history-page { padding: 16px 18px; }
+.history-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+
+.history-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.history-tab {
+  appearance: none; background: none; border: none; cursor: pointer; font: inherit; font-size: 13px;
+  color: var(--text-faint); padding: 9px 12px; display: inline-flex; align-items: center; gap: 7px;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s ease;
+}
+.history-tab:hover { color: var(--text-muted); }
+.history-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.history-tab-count {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted);
+  background: rgba(127,127,127,.14); border-radius: 5px; padding: 1px 6px; font-variant-numeric: tabular-nums;
+}
+
+.history-empty { color: var(--text-faint); padding: 28px 4px; text-align: center; }
+
+/* tx table (Etherscan-like) */
+.tx-row {
+  display: grid; grid-template-columns: 34px minmax(130px,1.1fr) 1.7fr 1fr 0.8fr;
+  align-items: center; gap: 12px; padding: 11px 8px; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.tx-head { color: var(--text-faint); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.tx-status { color: var(--ok); display: inline-flex; }
+.tx-hash { color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.tx-hash:hover { text-decoration: underline; }
+.tx-vault { display: flex; flex-direction: column; gap: 2px; color: var(--text); }
+.tx-sub { font-size: 10.5px; color: var(--text-muted); }
+.tx-amount { color: var(--text); }
+.tx-age { color: var(--text-muted); }
+
+/* strategy + reasoning cards */
+.hist-list { display: flex; flex-direction: column; gap: 10px; }
+.hist-card { border: 1px solid var(--border); border-radius: 9px; padding: 12px 14px; }
+.hist-card-head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text); }
+.hist-card-head .hist-age { margin-left: auto; color: var(--text-faint); font-size: 11px; font-weight: 400; }
+.hist-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+.hist-card-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; }
+.hist-card-tags { font-size: 11px; color: var(--text-faint); margin-top: 4px; }
+.hist-reason { font-size: 12.5px; color: var(--text); line-height: 1.5; margin-top: 8px; font-style: italic; }

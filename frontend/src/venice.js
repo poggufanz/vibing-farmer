@@ -2,6 +2,7 @@ import { VENICE_BASE_URL, VENICE_MODEL, VENICE_TIMEOUT_MS, DEEPSEEK_BASE_URL, DE
 import { loadVaultSkill } from './skillLoader.js'
 import { fetchMarketContext } from './marketSearch.js'
 import { fetchDeFiLlamaVaults } from './defiLlama.js'
+import { saveStrategy, saveReasoning } from './history.js'
 
 // AI provider priority: Venice x402 → DeepSeek (dev) → hardcoded fallback
 // Venice x402: wallet SIWE auth, pays USDC on Base — no API key needed
@@ -131,6 +132,24 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
     )
     const parsed = validateVeniceResponse(JSON.parse(content), vaultData)
     console.log(`[ai] Strategy via ${provider.name} · skill: ${skill.source} · vaults: ${vaultDataSource}`)
+    // Persist strategy session + per-vault AI reasoning to history (localStorage)
+    saveStrategy({
+      amountUsdc: amount,
+      riskLevel,
+      numVaults: safeNumVaults,
+      vaultsSelected: parsed.selected_vaults.map(v => ({ name: v.name, protocol: v.protocol, apy: v.expected_apy, allocation: v.allocation })),
+      strategySource: provider.name,
+      skillSource: skill.source,
+      vaultDataSource,
+      marketContextUsed: marketContext !== null,
+      blendedApy: parsed.selected_vaults.reduce((sum, v) => sum + ((v.expected_apy || 0) * (v.allocation || 0)), 0).toFixed(2),
+    })
+    parsed.selected_vaults.forEach(v => {
+      if (v.reasoning) saveReasoning({
+        vaultName: v.name, protocol: v.protocol, riskTier: v.risk_tier, yieldSource: v.yield_source_type,
+        reasoning: v.reasoning, expectedApy: v.expected_apy, amountUsdc: amount, riskLevel, modelUsed: provider.model,
+      })
+    })
     return { ...parsed, generatedBy: provider.name, skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData }
   } catch (err) {
     console.warn(`[ai] Strategy failed (${provider.name}), using fallback:`, err.message)
