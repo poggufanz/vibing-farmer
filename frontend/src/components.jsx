@@ -39,6 +39,7 @@ const Sidebar = ({ view = "flow", onNavigate }) => {
   const items = [
     { key: "home", icon: "home" },
     { key: "vaults", icon: "grid", view: "flow" },
+    { key: "agent", icon: "network", view: "agent" },
     { key: "history", icon: "layers", view: "history" },
     { key: "settings", icon: "settings" },
   ];

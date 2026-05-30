@@ -269,3 +269,44 @@ function validateVeniceResponse(response, vaultData = VAULT_CATALOG) {
 
   return response
 }
+
+
+/**
+ * Classify whether a security search result is a real threat to deposited funds.
+ * Uses the default server-side AI proxy (no auth) so the background agent needs no keys.
+ * Fail-safe: returns 'none' on any error — never alarms the user on a classification failure.
+ * @param {string} searchAnswer - Tavily answer/summary text
+ * @param {string} protocol - protocol name (e.g. 'morpho-blue')
+ * @returns {Promise<'high'|'medium'|'low'|'none'>}
+ */
+export async function classifyRisk(searchAnswer, protocol) {
+  if (!searchAnswer || searchAnswer.length < 20) return 'none'
+
+  const provider = resolveProvider(null, null) // server proxy — key stays server-side
+  const messages = [
+    { role: 'system', content: 'You are a DeFi security analyst. Respond ONLY with JSON: {"severity":"high|medium|low|none"}.' },
+    {
+      role: 'user',
+      content: `Search result about ${protocol}:
+"${searchAnswer}"
+
+Classify the threat level for a user with funds deposited in ${protocol}:
+- high: active exploit, hack, or depeg happening now
+- medium: vulnerability disclosed, governance concern, unusual activity
+- low: minor concern, old news, speculation
+- none: no real threat, positive news, or irrelevant`,
+    },
+  ]
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS)
+  try {
+    const content = await callChatCompletions(provider.url, provider.model, provider.headers, messages, provider.isVenice, controller.signal)
+    const word = String(JSON.parse(content).severity || '').toLowerCase()
+    return ['high', 'medium', 'low', 'none'].includes(word) ? word : 'none'
+  } catch {
+    return 'none'
+  } finally {
+    clearTimeout(timeout)
+  }
+}

@@ -114,6 +114,26 @@ export async function executeAgentDepositOnChain(agentId, user, vault, amount) {
   return tx.hash
 }
 
+// Background-agent actions. Explicit gasLimit — MetaMask under-estimates these (the
+// dependent grant/caps are applied in a prior tx), which caused on-chain OutOfGas.
+export async function executeWithdrawOnChain(agentId, user, vault, amount) {
+  if (!ethersProvider) throw new Error('Wallet not connected.')
+  const signer = await ethersProvider.getSigner()
+  const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, signer)
+  const tx = await contract.executeWithdraw(agentId, user, vault, amount, { gasLimit: 300000n })
+  await tx.wait()
+  return tx.hash
+}
+
+export async function executeHarvestOnChain(agentId, user, vault, recompound) {
+  if (!ethersProvider) throw new Error('Wallet not connected.')
+  const signer = await ethersProvider.getSigner()
+  const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, signer)
+  const tx = await contract.executeHarvest(agentId, user, vault, recompound, { gasLimit: 300000n })
+  await tx.wait()
+  return tx.hash
+}
+
 /**
  * Batch many calls into ONE user confirmation via EIP-5792 wallet_sendCalls
  * (MetaMask Flask + EIP-7702: calls run from the user's own account address).

@@ -26,6 +26,15 @@ import { VAULT_CATALOG, VENICE_TIMEOUT_MS } from './config.js';
 import SkillDrawer from './components/SkillDrawer.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
 import { saveTransaction } from './history.js';
+import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEvent, harvestVault, emergencyWithdraw } from './agents/agentController.js';
+import AgentDashboard from './components/AgentDashboard.jsx';
+
+/* ---------- Background agent settings (localStorage: yv_agent_settings) ---------- */
+const AGENT_SETTINGS_DEFAULTS = { autoHarvest: false, harvestMinUsdc: 1.0, apyDropPct: 20, rebalanceThresholdPct: 1.5, emergencyFull: false, emergencyPct: 50, riskMonitoring: true };
+const loadAgentSettings = () => {
+  try { return { ...AGENT_SETTINGS_DEFAULTS, ...JSON.parse(localStorage.getItem('yv_agent_settings') || '{}') }; }
+  catch { return { ...AGENT_SETTINGS_DEFAULTS }; }
+};
 
 /* ---------- Right rail panels ---------- */
 const WalletPanel = ({ phase, address }) => {
@@ -135,6 +144,7 @@ const EVENT_STYLES = {
 };
 
 const ActivityPanel = ({ logs }) => {
+  const [openId, setOpenId] = useS(null);
   return (
     <div className="panel" style={{ borderBottom: "none", flex: 1 }}>
       <div className="panel-head">
@@ -147,17 +157,32 @@ const ActivityPanel = ({ logs }) => {
         <div className="activity">
           {logs.slice().reverse().map((l) => {
             const sty = EVENT_STYLES[l.event] || EVENT_STYLES.OrchestratorPlanned;
+            const open = openId === l.id;
             return (
-              <div key={l.id} className="act-row">
-                <span className="act-marker mono" style={{ color: sty.color }}>{sty.icon}</span>
-                <div>
-                  <div className="act-title">
-                    <span className="act-event mono">{l.event}</span>
-                    {l.agent && <span className="act-agent mono">{l.agent}</span>}
+              <div key={l.id}>
+                <div className="act-row" style={{ cursor: "pointer" }} role="button" tabIndex={0} aria-expanded={open}
+                  onClick={() => setOpenId(open ? null : l.id)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(open ? null : l.id); } }}>
+                  <span className="act-marker mono" aria-hidden="true" style={{ color: sty.color }}>{sty.icon}</span>
+                  <div>
+                    <div className="act-title">
+                      <span className="act-event mono">{l.event}</span>
+                      {l.agent && <span className="act-agent mono">{l.agent}</span>}
+                    </div>
+                    <div className="act-meta">{l.meta}</div>
                   </div>
-                  <div className="act-meta">{l.meta}</div>
+                  <span className="act-time">{l.time} {open ? "▴" : "▾"}</span>
                 </div>
-                <span className="act-time">{l.time}</span>
+                {open && (
+                  <div className="act-meta" style={{ padding: "2px 0 8px 22px", fontSize: 10.5, lineHeight: 1.5, opacity: .85 }}>
+                    {l.detail || l.meta}
+                    {l.txHash && (
+                      <div style={{ marginTop: 3 }}>
+                        TX: <a href={`https://sepolia.etherscan.io/tx/${l.txHash}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--info)" }}>{shortAddr(l.txHash)} ↗</a>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -342,6 +367,11 @@ const App = () => {
   const [permContext, setPermContext] = useS(null);
   const [veniceAuth, setVeniceAuth] = useS(null);
 
+  // Background agent
+  const [agentEnabled, setAgentEnabled] = useS(() => localStorage.getItem('yv_agent_enabled') !== 'false');
+  const [agentSettings, setAgentSettings] = useS(loadAgentSettings);
+  const [agentData, setAgentData] = useS({ positions: {}, alerts: [], lastUpdated: null });
+
   useE(() => {
     document.documentElement.dataset.palette = tweaks.palette;
     document.documentElement.dataset.density = tweaks.density;
@@ -358,6 +388,74 @@ const App = () => {
     const uid = `${logIdRef.current}-${Date.now()}`;
     setLogs((l) => [...l, { id: uid, time: nowT(), ...entry }]);
   };
+
+  /* ----- Background agent: persistence + lifecycle + handlers ----- */
+  useE(() => { localStorage.setItem('yv_agent_enabled', String(agentEnabled)); }, [agentEnabled]);
+  useE(() => { localStorage.setItem('yv_agent_settings', JSON.stringify(agentSettings)); }, [agentSettings]);
+  // Push threshold changes live (no worker restart → avoids polling churn on each keystroke)
+  useE(() => { updateAgentConfig({ thresholds: agentSettings }); }, [agentSettings]);
+
+  const handleAgentEvent = (ev) => {
+    if (ev.kind === 'position') {
+      setAgentData((d) => ({ ...d, lastUpdated: ev.timestamp, positions: { ...d.positions, [ev.vaultAddress]: { vaultName: ev.vaultName, balance: ev.balance, unclaimedRewards: ev.unclaimedRewards } } }));
+      return;
+    }
+    if (ev.kind === 'harvest_executed') {
+      addLog({ event: 'DepositExecuted', meta: `auto-harvest ${ev.vaultName} · tx ${shortAddr(ev.txHash)}`, txHash: ev.txHash, detail: `Auto-harvest claimed rewards from ${ev.vaultName}.` });
+      setAgentData((d) => ({ ...d, alerts: d.alerts.filter((a) => !(a.kind === 'harvest_ready' && a.vaultAddress === ev.vaultAddress)) }));
+      return;
+    }
+    // Alert kinds — dedupe by kind+vault, newest first, cap at 8
+    const key = `${ev.kind}:${ev.vaultAddress || ev.vaultName || ''}`;
+    const id = `${key}:${ev.timestamp || Date.now()}`;
+    setAgentData((d) => ({ ...d, alerts: [{ id, ...ev }, ...d.alerts.filter((a) => `${a.kind}:${a.vaultAddress || a.vaultName || ''}` !== key)].slice(0, 8) }));
+    const detail = ev.kind === 'rebalance_proposal' ? `Venice AI flagged ${ev.toProtocol} at ${ev.toApy}% vs your ${ev.fromVault} at ${ev.fromApy}% — capture +${ev.apyGain}% by rebalancing.`
+      : ev.kind === 'risk_alert' ? `Severity ${ev.severity} · classified by Venice AI. Signal on ${ev.vaultName}. Action: alert surfaced, awaiting your decision.`
+      : ev.kind === 'apy_drift' ? `APY on ${ev.vaultName} dropped to ${ev.currentApy}% (from ${ev.baselineApy}%, ${ev.driftPct}%).`
+      : ev.kind === 'harvest_ready' ? `${ev.rewardsUsdc} USDC accrued on ${ev.vaultName} · ready to claim.` : '';
+    addLog({ event: ev.kind === 'risk_alert' ? 'AgentFailed' : 'OrchestratorPlanned', meta: `${ev.kind.replace(/_/g, ' ')} · ${ev.vaultName || ev.fromVault || ''}`, detail });
+  };
+
+  // Start after deposit (positions exist), stop on disable / disconnect / leaving 'done'
+  useE(() => {
+    if (stage !== 'done' || !agentEnabled || !realAddress || !strategy?.agents?.length) return;
+    const activeVaults = strategy.agents.map((a) => ({ address: a.vault.addr, name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }));
+    startBackgroundAgent({
+      userAddress: realAddress,
+      activeVaults,
+      rpcUrl: import.meta.env.VITE_RPC_URL,
+      tavilyKey: import.meta.env.VITE_TAVILY_API_KEY,
+      supportedProtocols: ['aave-v3', 'morpho-blue', 'spark', 'fluid'],
+      thresholds: agentSettings,
+    });
+    const unsub = onAgentEvent(handleAgentEvent);
+    addLog({ event: 'OrchestratorPlanned', meta: 'background agent · monitoring started' });
+    return () => { unsub(); stopBackgroundAgent(); };
+  }, [stage, agentEnabled, realAddress, strategy]);
+
+  const dismissAlert = (id) => setAgentData((d) => ({ ...d, alerts: d.alerts.filter((a) => a.id !== id) }));
+
+  const handleHarvestNow = async (alert) => {
+    try {
+      const tx = await harvestVault({ user: realAddress, vault: alert.vaultAddress, vaultName: alert.vaultName, rewardsUsdc: alert.rewardsUsdc });
+      addLog({ event: 'DepositExecuted', meta: `harvest ${alert.vaultName} · tx ${shortAddr(tx)}`, txHash: tx, detail: `Claimed rewards from ${alert.vaultName}.` });
+      dismissAlert(alert.id);
+    } catch (e) { addLog({ event: 'AgentFailed', meta: `harvest failed: ${e.message}` }); }
+  };
+
+  const handleEmergencyWithdraw = async (alert) => {
+    const pos = agentData.positions[alert.vaultAddress];
+    const bal = BigInt(pos?.balance || '0');
+    const amt = agentSettings.emergencyFull ? bal : (bal * BigInt(Math.round(agentSettings.emergencyPct)) / 100n);
+    if (amt <= 0n) { addLog({ event: 'AgentFailed', meta: 'emergency withdraw · no balance tracked yet' }); return; }
+    try {
+      const tx = await emergencyWithdraw(alert.vaultAddress, amt.toString(), realAddress);
+      addLog({ event: 'PermissionRevoked', meta: `emergency withdraw ${alert.vaultName} · tx ${shortAddr(tx)}`, txHash: tx, detail: `Emergency withdrew from ${alert.vaultName} to your wallet.` });
+      dismissAlert(alert.id);
+    } catch (e) { addLog({ event: 'AgentFailed', meta: `withdraw failed: ${e.message}` }); }
+  };
+
+  const handleReviewRebalance = (alert) => addLog({ event: 'OrchestratorPlanned', meta: `rebalance review · ${alert.fromVault} → ${alert.toProtocol} (+${alert.apyGain}%)`, detail: `Venice AI flagged ${alert.toProtocol} at ${alert.toApy}% vs ${alert.fromVault} at ${alert.fromApy}% (+${alert.apyGain}%). Rebalancing requests a fresh ERC-7715 permission for the new vault.` });
 
   /* ----- STRATEGY (step 01) ----- */
   const handleSubmitPreference = () => {
@@ -861,6 +959,10 @@ const App = () => {
     connectPhase === "idle" || connectPhase === "connecting" ? "none" :
     connectPhase === "upgraded" ? "upgraded" : "eoa";
 
+  // APY/meta per vault for the agent dashboard (positions events don't carry APY)
+  const agentVaultMeta = {};
+  (strategy?.agents || []).forEach((a) => { agentVaultMeta[a.vault.addr.toLowerCase()] = { apy: Number(a.vault.apy) }; });
+
   return (
     <div className="app">
       <Sidebar view={view} onNavigate={setView} />
@@ -868,6 +970,25 @@ const App = () => {
         <TopBar walletConnected={walletPhase !== "none"} onReset={handleAgain} />
         {view === "history" ? (
           <HistoryPanel />
+        ) : view === "agent" ? (
+          <div className="stage">
+            <div style={{ maxWidth: 560, margin: "0 auto", width: "100%" }}>
+              <AgentDashboard
+                active={agentEnabled && stage === "done"}
+                positions={agentData.positions}
+                alerts={agentData.alerts}
+                vaultMeta={agentVaultMeta}
+                lastUpdated={agentData.lastUpdated}
+                userAddress={realAddress}
+                settings={agentSettings}
+                onHarvest={handleHarvestNow}
+                onEmergencyWithdraw={handleEmergencyWithdraw}
+                onReview={handleReviewRebalance}
+                onDismiss={dismissAlert}
+                onOpenSettings={() => window.postMessage({ type: '__activate_edit_mode' }, '*')}
+              />
+            </div>
+          </div>
         ) : (
           <>
             <StepRail stage={stage} furthest={furthest} onStepClick={goBack} />
@@ -942,6 +1063,44 @@ const App = () => {
           ]}
           onChange={(v) => setTweak("density", v)}
         />
+
+        <TweakSection label="Autonomous Agent" />
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11 }}>
+          <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            Enable agent
+            <input type="checkbox" checked={agentEnabled} onChange={(e) => setAgentEnabled(e.target.checked)} />
+          </label>
+          <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            Auto-harvest
+            <input type="checkbox" checked={agentSettings.autoHarvest} onChange={(e) => setAgentSettings((s) => ({ ...s, autoHarvest: e.target.checked }))} />
+          </label>
+          <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            Min harvest (USDC)
+            <input type="number" step="0.1" value={agentSettings.harvestMinUsdc} onChange={(e) => setAgentSettings((s) => ({ ...s, harvestMinUsdc: Number(e.target.value) }))} style={{ width: 56 }} />
+          </label>
+          <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            APY drop alert (%)
+            <input type="number" value={agentSettings.apyDropPct} onChange={(e) => setAgentSettings((s) => ({ ...s, apyDropPct: Number(e.target.value) }))} style={{ width: 56 }} />
+          </label>
+          <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            Rebalance threshold (%)
+            <input type="number" step="0.1" value={agentSettings.rebalanceThresholdPct} onChange={(e) => setAgentSettings((s) => ({ ...s, rebalanceThresholdPct: Number(e.target.value) }))} style={{ width: 56 }} />
+          </label>
+          <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            Emergency: full position
+            <input type="checkbox" checked={agentSettings.emergencyFull} onChange={(e) => setAgentSettings((s) => ({ ...s, emergencyFull: e.target.checked }))} />
+          </label>
+          {!agentSettings.emergencyFull && (
+            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              Emergency: partial (%)
+              <input type="number" value={agentSettings.emergencyPct} onChange={(e) => setAgentSettings((s) => ({ ...s, emergencyPct: Number(e.target.value) }))} style={{ width: 56 }} />
+            </label>
+          )}
+          <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            Risk monitoring
+            <input type="checkbox" checked={agentSettings.riskMonitoring} onChange={(e) => setAgentSettings((s) => ({ ...s, riskMonitoring: e.target.checked }))} />
+          </label>
+        </div>
 
         <TweakSection label="Jump to step" />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
