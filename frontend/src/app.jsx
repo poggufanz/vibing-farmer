@@ -452,6 +452,10 @@ const App = () => {
     setEditingTexts((prev) => ({ ...prev, [id]: { text: "", error: null } }));
   };
 
+  const handleSkillUpdate = (id, skillObj) => {
+    updateSkillState(id, { state: "pending", skill: skillObj });
+  };
+
   const handleSkillsContinue = () => setStage("permission");
 
   /* ----- PERMISSION (step 04) ----- */
@@ -799,12 +803,9 @@ const App = () => {
             agents={strategy?.agents || []}
             riskProfile={risk}
             skillStates={skillStates}
-            editingTexts={editingTexts}
             onApprove={handleSkillApprove}
             onApproveAll={handleApproveAll}
-            onEdit={handleSkillEdit}
-            onSave={handleSkillSave}
-            onReset={handleSkillReset}
+            onSkillUpdate={handleSkillUpdate}
             onContinue={handleSkillsContinue}
           />
         );
