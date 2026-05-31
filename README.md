@@ -55,12 +55,15 @@ Agent Memory + vis.js Graph (real-time)
 
 | Layer | Technology |
 |-------|-----------|
-| Smart Contracts | Solidity ^0.8.24, Foundry |
-| Frontend | HTML/CSS/JS + ethers.js v6 + vis.js Network |
-| AI Coordinator | Venice AI API (Llama-3.3-70b, OpenAI-compatible) |
-| Relay | 1Shot Permissionless Relayer (JSON-RPC) |
-| Wallet | MetaMask Flask 13.9+ (Smart Accounts Kit) |
-| Network | Ethereum Sepolia (for now is testnet) |
+| **Smart Contracts** | Solidity ^0.8.24, OpenZeppelin Contracts, Foundry |
+| **Frontend Framework** | React 18, Vite 5, React Router v6 |
+| **Web3 Core** | MetaMask Smart Accounts Kit (SAK) v1.6.0, Viem v2, Ethers.js v6 |
+| **AI Swarm Coordinator** | Venice AI API (Llama-3.3-70b) / DeepSeek API (OpenAI-compatible) |
+| **Data Grounding & RAG** | DeFiLlama Live Yield API, Tavily Search API (Market context injection) |
+| **Relay Infrastructure** | 1Shot Permissionless Relayer (JSON-RPC, Gas abstraction) |
+| **Swarm Visualization** | vis.js Network Graph, React Force Graph 2D |
+| **Network & Wallet** | MetaMask Flask 13.9+, Ethereum Sepolia (EIP-7702 & ERC-7715) |
+
 
 ---
 
