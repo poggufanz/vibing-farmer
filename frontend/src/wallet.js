@@ -225,7 +225,9 @@ export async function onContractEvent(eventName, callback) {
  */
 export async function signSiweForVenice(address) {
   const now = new Date()
-  const nonce = Math.random().toString(36).slice(2, 12)
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
   const resourceUrl = 'https://api.venice.ai/api/v1/chat/completions'
   const message = [
     'api.venice.ai wants you to sign in with your Ethereum account:',
