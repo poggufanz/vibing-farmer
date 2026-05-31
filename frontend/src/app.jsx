@@ -945,7 +945,7 @@ const App = () => {
       {slowConfirm && (
         <div className="modal-backdrop">
           <div className="modal" role="dialog" aria-modal="true">
-            <div className="modal-eyebrow">venice ai · timeout</div>
+            <div className="modal-eyebrow">AI · timeout</div>
             <h3 className="modal-title">AI is still processing — continue waiting?</h3>
             <p className="lede" style={{ marginTop: 8 }}>
               Generation has exceeded {Math.round(VENICE_TIMEOUT_MS / 1000)} seconds. Do you want to keep waiting or use the default strategy instead?

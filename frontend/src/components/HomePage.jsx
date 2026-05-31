@@ -192,7 +192,7 @@ export default function HomePage({
           <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', ...card, borderLeft: '3px solid var(--danger)', padding: '14px 16px', marginBottom: 24 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>🚨 Risk detected · {banner.vaultName}</div>
-              <div style={{ ...sub, marginTop: 4 }}>{(banner.searchAnswer || 'Anomaly reported by Venice AI. Consider emergency withdraw.').slice(0, 160)}</div>
+              <div style={{ ...sub, marginTop: 4 }}>{(banner.searchAnswer || 'Anomaly reported by AI. Consider emergency withdraw.').slice(0, 160)}</div>
               <button style={{ ...linkBtn, marginTop: 8 }} onClick={onOpenAgent}>View in Agent Dashboard →</button>
             </div>
             <button aria-label="dismiss alert" style={{ ...linkBtn, textDecoration: 'none', fontSize: 14 }}
