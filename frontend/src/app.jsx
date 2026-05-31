@@ -34,6 +34,9 @@ import SettingsPage from './components/SettingsPage.jsx';
 import { WalletPanel, PermissionPanel, ActivityPanel, SkillPanel, PalettePicker, PALETTES } from './components/RightRail.jsx';
 import { loadSettings, saveSetting } from './settingsStore.js';
 import { clearUserSkill } from './skillLoader.js';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import VaultDetailPage from './components/VaultDetailPage.jsx';
+import TxDetailPage from './components/TxDetailPage.jsx';
 
 /* ---------- Background agent settings (localStorage: yv_agent_settings) ---------- */
 const AGENT_SETTINGS_DEFAULTS = { autoHarvest: false, harvestMinUsdc: 1.0, apyDropPct: 20, rebalanceThresholdPct: 1.5, emergencyFull: false, emergencyPct: 50, riskMonitoring: true, positionInterval: 5, apyInterval: 10, riskInterval: 15, rewardInterval: 5 };
@@ -109,7 +112,8 @@ const App = () => {
   // stage: 'strategy' | 'connect' | 'skills' | 'permission' | 'execute' | 'done'
   const [stage, setStage] = useS("strategy");
   const [furthest, setFurthest] = useS(0); // furthest step index reached → rail can navigate to visited steps
-  const [view, setView] = useS("home"); // 'home' | 'flow' | 'agent' | 'history' | 'settings' — left sidebar nav
+  const navigate = useNavigate();
+  const location = useLocation();
   const [language, setLanguage] = useS(() => loadSettings().language); // UI i18n (labels only)
   const [amount, setAmount] = useS("100");
   const [risk, setRisk] = useS("med");
@@ -169,6 +173,26 @@ const App = () => {
     document.documentElement.dataset.palette = tweaks.palette;
     document.documentElement.dataset.density = tweaks.density;
   }, [tweaks.palette, tweaks.density]);
+
+  // Redirect old hash URLs (bookmarks like /#/home → /home)
+  useE(() => {
+    if (window.location.hash?.startsWith('#/')) {
+      const path = window.location.hash.replace('#', '');
+      window.history.replaceState(null, '', path);
+    }
+  }, []);
+
+  // Document title per route
+  useE(() => {
+    const titles = {
+      '/home':     'vibing / farmer',
+      '/strategy': 'New Strategy · vibing / farmer',
+      '/agent':    'Autonomous Agent · vibing / farmer',
+      '/history':  'History · vibing / farmer',
+      '/settings': 'Settings · vibing / farmer',
+    };
+    document.title = titles[location.pathname] || 'vibing / farmer';
+  }, [location.pathname]);
 
   // Record the furthest step reached so the rail can navigate to visited steps (and only those)
   useE(() => { setFurthest((f) => Math.max(f, STEPS.findIndex((s) => s.id === stage))); }, [stage]);
@@ -667,7 +691,7 @@ const App = () => {
 
   const handleAgain = () => {
     setStage("strategy");
-    setView("flow");
+    navigate('/strategy');
     setFurthest(0);
     setStrategyPhase("input");
     setThinkingPhase(0);
@@ -813,77 +837,87 @@ const App = () => {
 
   return (
     <div className="app">
-      <Sidebar view={view} onNavigate={setView} />
+      <Sidebar />
       <main className="main">
         <TopBar walletConnected={walletPhase !== "none"} onReset={handleAgain} />
-        {view === "home" ? (
-          <HomePage
-            userAddress={realAddress}
-            positions={agentData.positions}
-            alerts={agentData.alerts}
-            vaultMeta={agentVaultMeta}
-            lastUpdated={agentData.lastUpdated}
-            agentActive={agentEnabled && stage === "done"}
-            autoHarvest={agentSettings.autoHarvest}
-            onConnect={handleConnect}
-            onStartStrategy={handleAgain}
-            onOpenAgent={() => setView("agent")}
-            onViewHistory={() => setView("history")}
-            onWithdrawSuccess={handleWithdrawSuccess}
-          />
-        ) : view === "settings" ? (
-          <SettingsPage
-            userAddress={realAddress}
-            walletPhase={walletPhase}
-            permActive={permActive}
-            permExpiresAt={permExpiresAt}
-            permissionCount={strategy?.agents?.length || 0}
-            agentEnabled={agentEnabled}
-            setAgentEnabled={setAgentEnabled}
-            agentSettings={agentSettings}
-            setAgentSettings={setAgentSettings}
-            skillSource={skillSource}
-            language={language}
-            onLanguageChange={handleLanguageChange}
-            onChangeSkill={() => setSkillDrawerOpen(true)}
-            onResetSkill={handleResetSkill}
-            onResetAgentSettings={handleResetAgentSettings}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
-            onSwitchNetwork={handleSwitchNetwork}
-            onRevoke={handleRevoke}
-          />
-        ) : view === "history" ? (
-          <HistoryPanel />
-        ) : view === "agent" ? (
-          <div className="stage">
-            <div style={{ maxWidth: 820, margin: "0 auto", width: "100%" }}>
-              <AgentDashboard
-                active={agentEnabled && stage === "done"}
-                positions={agentData.positions}
-                alerts={agentData.alerts}
-                vaultMeta={agentVaultMeta}
-                lastUpdated={agentData.lastUpdated}
-                userAddress={realAddress}
-                settings={agentSettings}
-                withdrawEnabled={stage === "done"}
-                onHarvest={handleHarvestNow}
-                onEmergencyWithdraw={handleEmergencyWithdraw}
-                onReview={handleReviewRebalance}
-                onDismiss={dismissAlert}
-                onWithdrawSuccess={handleWithdrawSuccess}
-                onNewStrategy={handleAgain}
-              />
+        <Routes>
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={
+            <HomePage
+              userAddress={realAddress}
+              positions={agentData.positions}
+              alerts={agentData.alerts}
+              vaultMeta={agentVaultMeta}
+              lastUpdated={agentData.lastUpdated}
+              agentActive={agentEnabled && stage === "done"}
+              autoHarvest={agentSettings.autoHarvest}
+              onConnect={handleConnect}
+              onStartStrategy={handleAgain}
+              onOpenAgent={() => navigate('/agent')}
+              onViewHistory={() => navigate('/history')}
+              onWithdrawSuccess={handleWithdrawSuccess}
+            />
+          } />
+          <Route path="/strategy" element={
+            <>
+              <StepRail stage={stage} furthest={furthest} onStepClick={goBack} lang={language} />
+              <div className="stage" key={`${stage}-${strategyPhase}`}>
+                {renderStage()}
+              </div>
+            </>
+          } />
+          <Route path="/agent" element={
+            <div className="stage">
+              <div style={{ maxWidth: 820, margin: "0 auto", width: "100%" }}>
+                <AgentDashboard
+                  active={agentEnabled && stage === "done"}
+                  positions={agentData.positions}
+                  alerts={agentData.alerts}
+                  vaultMeta={agentVaultMeta}
+                  lastUpdated={agentData.lastUpdated}
+                  userAddress={realAddress}
+                  settings={agentSettings}
+                  withdrawEnabled={stage === "done"}
+                  onHarvest={handleHarvestNow}
+                  onEmergencyWithdraw={handleEmergencyWithdraw}
+                  onReview={handleReviewRebalance}
+                  onDismiss={dismissAlert}
+                  onWithdrawSuccess={handleWithdrawSuccess}
+                  onNewStrategy={handleAgain}
+                />
+              </div>
             </div>
-          </div>
-        ) : (
-          <>
-            <StepRail stage={stage} furthest={furthest} onStepClick={goBack} lang={language} />
-            <div className="stage" key={`${stage}-${strategyPhase}`}>
-              {renderStage()}
-            </div>
-          </>
-        )}
+          } />
+          <Route path="/history" element={<HistoryPanel />} />
+          <Route path="/settings" element={
+            <SettingsPage
+              userAddress={realAddress}
+              walletPhase={walletPhase}
+              permActive={permActive}
+              permExpiresAt={permExpiresAt}
+              permissionCount={strategy?.agents?.length || 0}
+              agentEnabled={agentEnabled}
+              setAgentEnabled={setAgentEnabled}
+              agentSettings={agentSettings}
+              setAgentSettings={setAgentSettings}
+              skillSource={skillSource}
+              language={language}
+              onLanguageChange={handleLanguageChange}
+              onChangeSkill={() => setSkillDrawerOpen(true)}
+              onResetSkill={handleResetSkill}
+              onResetAgentSettings={handleResetAgentSettings}
+              onConnect={handleConnect}
+              onDisconnect={handleDisconnect}
+              onSwitchNetwork={handleSwitchNetwork}
+              onRevoke={handleRevoke}
+            />
+          } />
+          <Route path="/vault/:protocol" element={
+            <VaultDetailPage positions={agentData.positions} />
+          } />
+          <Route path="/tx/:txHash" element={<TxDetailPage />} />
+          <Route path="*" element={<Navigate to="/home" replace />} />
+        </Routes>
       </main>
       <aside className="rail">
         <WalletPanel phase={walletPhase} address={realAddress} />

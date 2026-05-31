@@ -8,6 +8,7 @@ import {
   getTransactions, getStrategies, getReasoningLog, clearAllHistory,
 } from '../history.js';
 import { loadSettings } from '../settingsStore.js';
+import { useNavigateTo } from '../router.js';
 
 function formatTime(ts) {
   const { timestampFormat } = loadSettings()
@@ -33,6 +34,7 @@ const Empty = ({ what }) => <div className="history-empty mono">no {what} yet</d
 
 /* ---------- Transactions (Etherscan-like table) ---------- */
 const TxList = ({ rows }) => {
+  const navigateTo = useNavigateTo();
   if (!rows.length) return <Empty what="transactions" />;
   return (
     <div className="tx-table">
@@ -42,11 +44,12 @@ const TxList = ({ rows }) => {
       {rows.map((r) => {
         const isWithdraw = r.type === 'withdraw';
         return (
-        <div key={r.id} className="tx-row">
+        <div key={r.id} className="tx-row" style={{ cursor: r.txHash ? 'pointer' : 'default' }} onClick={() => r.txHash && navigateTo('tx', r.txHash)}>
           <span className="tx-status" title="confirmed"><Icon name="check" size={13} /></span>
-          <a className="tx-hash mono" href={`https://sepolia.etherscan.io/tx/${r.txHash}`} target="_blank" rel="noopener noreferrer">
-            {short(r.txHash)} <Icon name="external" size={11} />
-          </a>
+          <span className="tx-hash mono" style={{ cursor: 'pointer', textDecoration: 'underline', color: 'var(--text-muted)' }}
+            onClick={(e) => { e.stopPropagation(); navigateTo('tx', r.txHash); }}>
+            {short(r.txHash)}
+          </span>
           <span className="tx-vault">
             {isWithdraw ? `Withdrew ← ${r.vaultName}` : `Deposited → ${r.vaultName}`}
             <span className="tx-sub mono">{[r.protocol, r.apy ? `${r.apy}% APY` : null, r.workerId || (isWithdraw ? 'manual withdraw' : null)].filter(Boolean).join(' · ')}</span>

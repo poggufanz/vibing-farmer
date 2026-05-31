@@ -2,6 +2,8 @@
    VIBING FARMER — v2 shared components & icons
    ============================================ */
 import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { getSidebarPath } from './router.js';
 import { t } from './settingsStore.js';
 
 /* ---------- Icons (Lucide-style, stroke 1.5) ---------- */
@@ -35,37 +37,36 @@ const Icon = ({ name, size = 16, className = "" }) => {
   );
 };
 
-/* ---------- Sidebar (minimal, no active-bar gimmick) ---------- */
-const Sidebar = ({ view = "flow", onNavigate }) => {
+/* ---------- Sidebar (self-contained with React Router) ---------- */
+const Sidebar = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const activePath = getSidebarPath(location.pathname);
+
   const items = [
-    { key: "home", icon: "home", view: "home" },
-    { key: "vaults", icon: "grid", view: "flow" },
-    { key: "agent", icon: "network", view: "agent" },
-    { key: "history", icon: "layers", view: "history" },
-    { key: "settings", icon: "settings", view: "settings" },
+    { key: "home",     icon: "home",     path: "/home"     },
+    { key: "vaults",   icon: "grid",     path: "/strategy" },
+    { key: "agent",    icon: "network",  path: "/agent"    },
+    { key: "history",  icon: "layers",   path: "/history"  },
+    { key: "settings", icon: "settings", path: "/settings" },
   ];
+
   return (
     <nav className="sidebar" aria-label="Primary">
       <div className="sb-logo" title="vibing/farmer">
         <img src="/vibing_farmer.logo.svg" alt="logo" style={{ width: 18, height: 18 }} />
       </div>
-      {items.map((it) => {
-        const nav = !!it.view;
-        const active = nav && view === it.view;
-        return (
-          <button
-            key={it.key}
-            className={`sb-item ${active ? "active" : ""}`}
-            title={nav ? it.key : `${it.key} · soon`}
-            aria-label={it.key}
-            aria-disabled={!nav}
-            disabled={!nav}
-            onClick={nav ? () => onNavigate?.(it.view) : undefined}
-          >
-            <Icon name={it.icon} />
-          </button>
-        );
-      })}
+      {items.map((it) => (
+        <button
+          key={it.key}
+          className={`sb-item ${activePath === it.path ? "active" : ""}`}
+          title={it.key}
+          aria-label={it.key}
+          onClick={() => navigate(it.path)}
+        >
+          <Icon name={it.icon} />
+        </button>
+      ))}
       <div className="sb-spacer" />
       <button className="sb-item" title="notifications · soon" aria-label="notifications" disabled aria-disabled="true">
         <Icon name="bell" />

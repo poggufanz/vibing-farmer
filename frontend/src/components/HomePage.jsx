@@ -7,6 +7,7 @@ import { getTransactions } from '../history.js'
 import { fetchDeFiLlamaVaults } from '../defiLlama.js'
 import { VAULT_CATALOG } from '../config.js'
 import { loadSettings, t } from '../settingsStore.js'
+import { useNavigateTo } from '../router.js'
 
 const POLL_MS = 10 * 60 * 1000
 const u = (x) => Number(x || 0) / 1e6
@@ -64,6 +65,7 @@ export default function HomePage({
   agentActive = false, autoHarvest = false,
   onConnect, onStartStrategy, onOpenAgent, onViewHistory, onWithdrawSuccess,
 }) {
+  const navigateTo = useNavigateTo()
   const [withdrawVault, setWithdrawVault] = useState(null)
   const [dismissed, setDismissed] = useState(() => new Set())
   const [pulse, setPulse] = useState(() => pulseCache || { vaults: SEED, prev: [], fetchedAt: null, live: false })
@@ -371,7 +373,8 @@ export default function HomePage({
                         borderLeft: `2px solid ${active ? 'var(--ok)' : 'transparent'}`,
                         background: active ? 'rgba(255,255,255,.02)' : undefined,
                       }}>
-                        <span style={{ fontSize: 12.5 }}>
+                        <span style={{ fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'var(--border)' }}
+                          onClick={() => v.protocol && navigateTo('vault', v.protocol)}>
                           {active && <span style={{ color: 'var(--ok)', marginRight: 5, fontSize: 9 }}>●</span>}
                           {v.name}
                         </span>
