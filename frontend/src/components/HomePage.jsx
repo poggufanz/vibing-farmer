@@ -90,27 +90,18 @@ function getTrendingVaults(liveVaults, apyHistories, limit = 3) {
     .slice(0, limit)
 }
 
-const TrendingCard = ({ vault, rank, onFarm, onOpen }) => {
-  const pp = ppMeta(vault.stats?.change7d)
-  const isTop = rank === 1
-  return (
-    <div style={{ ...cardPad, padding: '14px 16px', borderColor: isTop ? 'var(--border-strong)' : 'var(--border)', display: 'flex', flexDirection: 'column', gap: 9 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span className="mono" style={{ fontSize: 10.5, fontWeight: 600, color: isTop ? 'var(--accent)' : 'var(--text-faint)' }}>{isTop ? '🔥 #1' : `#${rank}`}</span>
-        <span className="mono" style={{ fontSize: 10, color: 'var(--text-faint)' }}>{vault.protocol}</span>
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 500, cursor: 'pointer' }} onClick={() => onOpen(vault)}>{vault.name}</div>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-        <span className="mono tnum" style={{ fontSize: 17, fontWeight: 600 }}>{Number(vault.apy).toFixed(1)}%</span>
-        {pp && <span className={`apy-change ${pp.cls}`} style={{ display: 'inline-block', margin: 0 }}>{pp.text} 7d ↗</span>}
-      </div>
-      <span dangerouslySetInnerHTML={{ __html: generateSparkline(vault.stats.values, { width: 64, height: 28 }) }} />
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button style={linkBtn} onClick={() => onFarm(vault)}>Farm →</button>
-      </div>
-    </div>
-  )
-}
+// Collapsible section (native <details>) — default closed for compact homepage.
+// Uncontrolled `open` so user toggle survives parent re-renders (poll/sort/filter).
+const summaryRow = { cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10, gap: 12 }
+const Collapsible = ({ title, count, meta, defaultOpen = false, children }) => (
+  <details className="yv-collapse" style={section} {...(defaultOpen ? { open: true } : {})}>
+    <summary style={summaryRow}>
+      <span style={eyebrow}><span className="yv-caret">▸ </span>{title}{count != null ? ` (${count})` : ''}</span>
+      {meta}
+    </summary>
+    {children}
+  </details>
+)
 
 export default function HomePage({
   userAddress, positions = {}, alerts = [], vaultMeta = {}, lastUpdated = null,
@@ -294,48 +285,28 @@ export default function HomePage({
           </div>
         ) : (
           <>
-            {/* ── SECTION 1: Portfolio summary ── */}
+            {/* ── PORTFOLIO STRIP (compact — totals + agent merged into one row) ── */}
             <div style={section}>
-              <SectionHead title="Portfolio Summary" />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
-                <div style={cardPad}>
-                  <div style={eyebrow}>Total Deposited</div>
-                  <div className="tnum" style={{ fontSize: 22, fontWeight: 500, marginTop: 8 }}>{fmtAmt(u(totalUnits))} <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>USDC</span></div>
-                  <div style={sub}>across {posList.length} vault{posList.length === 1 ? '' : 's'}</div>
+              <SectionHead title="Portfolio" />
+              <div style={{ ...cardPad, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                <div>
+                  <span className="tnum" style={{ fontSize: 20, fontWeight: 500 }}>{fmtAmt(u(totalUnits))}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 5 }}>USDC</span>
                 </div>
-                <div style={cardPad}>
-                  <div style={eyebrow}>Earned Today</div>
-                  <div className="tnum" style={{ fontSize: 22, fontWeight: 500, marginTop: 8, color: 'var(--ok)' }}>+{earnedToday.toFixed(2)} <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>USDC</span></div>
-                  <div style={sub}>est. at blended APY</div>
+                <span style={{ width: 1, height: 22, background: 'var(--border)' }} />
+                <div>
+                  <span className="tnum" style={{ fontSize: 14, fontWeight: 500, color: 'var(--ok)' }}>+{earnedToday.toFixed(2)}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>/day</span>
                 </div>
-                <div style={cardPad}>
-                  <div style={eyebrow}>Agent</div>
-                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 7, fontSize: 14 }}>
-                    <span style={dot(agentActive ? 'var(--ok)' : 'var(--text-faint)')} />{agentActive ? 'monitoring' : 'stopped'}
-                  </div>
-                  <div style={sub}>{mode} mode · {posList.length} worker{posList.length === 1 ? '' : 's'} active</div>
-                </div>
+                <span style={{ width: 1, height: 22, background: 'var(--border)' }} />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{posList.length} vault{posList.length === 1 ? '' : 's'}</span>
+                <button onClick={onOpenAgent} title="Open Agent Dashboard"
+                  style={{ ...linkBtn, textDecoration: 'none', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
+                  <span style={dot(agentActive ? 'var(--ok)' : 'var(--text-faint)')} />
+                  {agentActive ? 'monitoring' : 'stopped'} · {mode} →
+                </button>
               </div>
             </div>
-
-            {/* ── TRENDING NOW (7d APY momentum) ── */}
-            {(pulse.vaults || []).some((v) => v.poolId) && (
-              <div style={section}>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10, gap: 12 }}>
-                  <span style={eyebrow}>Trending Now</span>
-                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>based on 7d APY momentum</span>
-                </div>
-                {!hasHistories ? (
-                  <div className="mono" style={{ fontSize: 12, color: 'var(--text-faint)', padding: '2px 0' }}>Fetching APY momentum data…</div>
-                ) : trending.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                    {trending.map((v, i) => (
-                      <TrendingCard key={v.name} vault={v} rank={i + 1} onFarm={handleFarm} onOpen={handleOpenVault} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* ── SECTION 2: Active positions ── */}
             <div style={section}>
@@ -365,54 +336,40 @@ export default function HomePage({
               </div>
             </div>
 
-            {/* ── SECTION 3: Agent status ── */}
-            <div style={section}>
-              <SectionHead title={t(lang, 'agentStatus')} />
-              <div style={cardPad}>
-                {agentActive ? (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                      <span style={dot('var(--ok)')} />monitoring · {mode} mode · {posList.length} vault{posList.length === 1 ? '' : 's'} watched
-                    </div>
-                    {lastAlert && <div style={{ ...sub, marginTop: 10 }}>Last action: {alertText(lastAlert)} · {formatTime(lastAlert.timestamp || lastUpdated, now)}</div>}
-                    <button style={{ ...linkBtn, marginTop: 12 }} onClick={onOpenAgent}>Open Agent Dashboard →</button>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-muted)' }}>
-                      <span style={{ ...dot('transparent'), border: '1px solid var(--text-faint)' }} />agent inactive
-                    </div>
-                    <div style={{ ...sub, marginTop: 8 }}>Start a strategy to activate autonomous monitoring.</div>
-                  </>
-                )}
+            {/* ── TOP MOVERS (inline — 7d APY momentum, replaces Trending cards) ── */}
+            {(pulse.vaults || []).some((v) => v.poolId) && (
+              <div style={{ ...section, display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap' }}>
+                <span style={eyebrow}>Top Movers</span>
+                {!hasHistories ? (
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>fetching APY momentum…</span>
+                ) : trending.length > 0 ? (
+                  trending.map((v, i) => {
+                    const pp = ppMeta(v.stats?.change7d)
+                    return (
+                      <React.Fragment key={v.name}>
+                        {i > 0 && <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>·</span>}
+                        <button onClick={() => handleOpenVault(v)}
+                          style={{ ...linkBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'baseline', gap: 5, fontSize: 12 }}>
+                          <span>{v.protocol}</span>
+                          {pp && <span className="mono" style={{ fontSize: 11, color: pp.color }}>{pp.text}</span>}
+                        </button>
+                      </React.Fragment>
+                    )
+                  })
+                ) : null}
               </div>
-            </div>
+            )}
 
-            {/* ── SECTION 4: Recent activity ── */}
-            <div style={section}>
-              <SectionHead title={t(lang, 'recentActivity')} action="View all →" onAction={onViewHistory} />
-              <div style={{ ...card }}>
-                {activity.length === 0 ? (
-                  <div className="empty" style={{ padding: '14px 18px' }}>No activity yet.</div>
-                ) : activity.map((e, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 18px', borderTop: i ? '1px solid var(--border)' : 'none' }}>
-                    <span className="mono" style={{ color: e.color, width: 14, textAlign: 'center' }}>{e.icon}</span>
-                    <span style={{ flex: 1, fontSize: 12.5 }}>{e.text}</span>
-                    <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>{formatTime(e.ts, now)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* ── SECTION 5: Market Pulse + Vault Table ── */}
-            <div style={section}>
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10, gap: 12 }}>
-                <span style={eyebrow}>{t(lang, 'marketPulse')}</span>
+            {/* ── MARKET PULSE (collapsed by default) ── */}
+            <Collapsible
+              title={t(lang, 'marketPulse')}
+              count={(pulse.vaults || []).length}
+              meta={(
                 <span className="mono" style={{ fontSize: 10.5, color: loading ? 'var(--text-faint)' : live ? 'var(--ok)' : 'var(--text-faint)' }}>
-                  {loading ? 'fetching live data…' : live ? `live · DeFiLlama · updated ${formatTime(pulse.fetchedAt, now)}` : 'cached · last known data'}
+                  {loading ? 'fetching live data…' : live ? `live · updated ${formatTime(pulse.fetchedAt, now)}` : 'cached'}
                 </span>
-              </div>
+              )}
+            >
 
               {/* Aggregate stats — stablecoin avg APY + best opportunity, with pp deltas */}
               {stableAvgApy !== null && (
@@ -527,7 +484,26 @@ export default function HomePage({
               </div>
 
               <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={onStartStrategy}>Start New Strategy →</button>
-            </div>
+            </Collapsible>
+
+            {/* ── RECENT ACTIVITY (collapsed by default) ── */}
+            <Collapsible
+              title={t(lang, 'recentActivity')}
+              count={activity.length}
+              meta={<button style={linkBtn} onClick={(e) => { e.preventDefault(); onViewHistory() }}>View all →</button>}
+            >
+              <div style={{ ...card }}>
+                {activity.length === 0 ? (
+                  <div className="empty" style={{ padding: '14px 18px' }}>No activity yet.</div>
+                ) : activity.map((e, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 18px', borderTop: i ? '1px solid var(--border)' : 'none' }}>
+                    <span className="mono" style={{ color: e.color, width: 14, textAlign: 'center' }}>{e.icon}</span>
+                    <span style={{ flex: 1, fontSize: 12.5 }}>{e.text}</span>
+                    <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>{formatTime(e.ts, now)}</span>
+                  </div>
+                ))}
+              </div>
+            </Collapsible>
           </>
         )}
       </div>

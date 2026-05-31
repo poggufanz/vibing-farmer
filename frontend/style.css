@@ -2872,3 +2872,22 @@ input[type="number"]::-webkit-inner-spin-button {
 
 .apy-chart-labels .up   { color: var(--accent); }
 .apy-chart-labels .down { color: var(--danger); }
+
+/* ============================================
+   Collapsible homepage sections (compact layout)
+   ============================================ */
+details.yv-collapse > summary { list-style: none; }
+details.yv-collapse > summary::-webkit-details-marker { display: none; }
+
+.yv-caret {
+  display: inline-block;
+  transition: transform var(--duration-fast, 150ms) ease;
+}
+
+details.yv-collapse[open] > summary .yv-caret {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yv-caret { transition: none; }
+}

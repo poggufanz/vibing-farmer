@@ -24,6 +24,7 @@ import { generateStrategy } from './venice.js';
 import { OrchestratorAgent } from './orchestrator.js';
 import { makeAgentId } from './worker.js';
 import { VAULT_CATALOG, VENICE_TIMEOUT_MS } from './config.js';
+import { loadPersistedPositions, persistPositions, reconcilePositionsFromChain } from './positionsStore.js';
 import SkillDrawer from './components/SkillDrawer.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
 import { saveTransaction } from './history.js';
@@ -224,6 +225,33 @@ const App = () => {
   };
 
   /* ----- Background agent: persistence + lifecycle + handlers ----- */
+  // Restore positions on connect (instant from cache) then reconcile against chain.
+  // Fixes home resetting to "no positions" after reload/reconnect with same wallet.
+  useE(() => {
+    if (!realAddress) return;
+    const restored = loadPersistedPositions(realAddress);
+    if (Object.keys(restored).length) {
+      setAgentData((d) => ({ ...d, positions: { ...restored, ...d.positions } }));
+    }
+    let alive = true;
+    reconcilePositionsFromChain(realAddress)
+      .then((chain) => {
+        if (!alive || !chain) return; // null = no RPC / all reads failed → keep cache
+        persistPositions(realAddress, chain); // authoritative write (incl. empty)
+        setAgentData((d) => ({ ...d, positions: chain, lastUpdated: Date.now() }));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [realAddress]);
+
+  // Persist in-session position changes (deposits, withdraws). Skip empty pre-hydration
+  // writes so a fresh-connect {} can't clobber the cached snapshot before restore runs.
+  useE(() => {
+    if (!realAddress) return;
+    if (Object.keys(agentData.positions || {}).length === 0) return;
+    persistPositions(realAddress, agentData.positions);
+  }, [agentData.positions, realAddress]);
+
   useE(() => { localStorage.setItem('yv_agent_enabled', String(agentEnabled)); }, [agentEnabled]);
   useE(() => { localStorage.setItem('yv_agent_settings', JSON.stringify(agentSettings)); }, [agentSettings]);
   // Push threshold changes live (no worker restart → avoids polling churn on each keystroke)
