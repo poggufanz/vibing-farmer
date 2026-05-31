@@ -169,6 +169,23 @@ const App = () => {
   const [agentSettings, setAgentSettings] = useS(loadAgentSettings);
   const [agentData, setAgentData] = useS({ positions: {}, alerts: [], lastUpdated: null });
 
+  const [sbExtended, setSbExtended] = useS(() => localStorage.getItem('yv_sb_extended') === 'true');
+  const [railCollapsed, setRailCollapsed] = useS(() => localStorage.getItem('yv_rail_collapsed') === 'true');
+
+  const toggleSb = () => {
+    setSbExtended(prev => {
+      localStorage.setItem('yv_sb_extended', String(!prev));
+      return !prev;
+    });
+  };
+
+  const toggleRail = () => {
+    setRailCollapsed(prev => {
+      localStorage.setItem('yv_rail_collapsed', String(!prev));
+      return !prev;
+    });
+  };
+
   useE(() => {
     document.documentElement.dataset.palette = tweaks.palette;
     document.documentElement.dataset.density = tweaks.density;
@@ -837,10 +854,10 @@ const App = () => {
   (strategy?.agents || []).forEach((a) => { agentVaultMeta[a.vault.addr.toLowerCase()] = { apy: Number(a.vault.apy), protocol: a.vault.protocol }; });
 
   return (
-    <div className="app">
-      <Sidebar />
+    <div className={`app ${sbExtended ? 'sb-extended' : 'sb-minimized'} ${railCollapsed ? 'rail-collapsed' : ''}`}>
+      <Sidebar extended={sbExtended} onToggle={toggleSb} />
       <main className="main">
-        <TopBar walletConnected={walletPhase !== "none"} onReset={handleAgain} />
+        <TopBar walletConnected={walletPhase !== "none"} onReset={handleAgain} railCollapsed={railCollapsed} onToggleRail={toggleRail} />
         <Routes>
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="/home" element={

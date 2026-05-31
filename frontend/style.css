@@ -145,15 +145,11 @@ input, select, textarea {
 /* ---------- App shell ---------- */
 .app {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr) 360px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   height: 100vh;
   background: var(--bg-base);
   gap: 1px;
   padding: 0;
-}
-
-[data-density="compact"] .app {
-  grid-template-columns: 52px minmax(0, 1fr) 320px;
 }
 
 /* ---------- Sidebar ---------- */
@@ -164,14 +160,33 @@ input, select, textarea {
   flex-direction: column;
   align-items: center;
   padding: 18px 0;
-  gap: 2px;
+  gap: 4px;
+  width: 58px;
+  box-sizing: border-box;
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1), padding 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.app.sb-extended .sidebar {
+  width: 180px;
+  align-items: stretch;
+  padding: 18px 12px;
+}
+
+[data-density="compact"] .sidebar {
+  width: 52px;
+}
+[data-density="compact"] .app.sb-extended .sidebar {
+  width: 160px;
 }
 
 .sb-logo {
   width: 32px;
   height: 32px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-mono);
   font-weight: 600;
   font-size: 14px;
@@ -179,17 +194,61 @@ input, select, textarea {
   color: var(--text);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  margin-bottom: 18px;
+  margin: 0 auto 18px auto;
+  transition: border-color 0.2s ease, width 0.22s cubic-bezier(0.4, 0, 0.2, 1), margin 0.22s cubic-bezier(0.4, 0, 0.2, 1), justify-content 0.22s ease;
+  box-sizing: border-box;
+}
+
+.app.sb-extended .sb-logo {
+  border-color: transparent;
+  width: 100%;
+  justify-content: flex-start;
+  margin: 0 0 24px 6px;
+}
+
+.sb-logo-text {
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.22s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-left: 0;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.app.sb-extended .sb-logo-text {
+  opacity: 1;
+  max-width: 120px;
+  margin-left: 8px;
 }
 
 .sb-item {
   width: 34px;
   height: 34px;
   border-radius: var(--radius-sm);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-faint);
-  transition: color 0.12s ease;
+  transition: color 0.12s ease, background 0.12s ease, width 0.22s cubic-bezier(0.4, 0, 0.2, 1), padding 0.22s cubic-bezier(0.4, 0, 0.2, 1), justify-content 0.22s ease;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.app.sb-extended .sb-item {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .sb-item:hover { color: var(--text-muted); }
@@ -197,6 +256,25 @@ input, select, textarea {
 .sb-item.active {
   color: var(--text);
   background: var(--bg-elev);
+}
+
+.sb-label {
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.22s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-left: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.app.sb-extended .sb-label {
+  opacity: 1;
+  max-width: 120px;
+  margin-left: 10px;
 }
 .sb-item:disabled,
 .sb-item[aria-disabled="true"] {
@@ -1242,6 +1320,21 @@ input, select, textarea {
   flex-direction: column;
   min-width: 0;
   overflow-y: auto;
+  width: 360px;
+  box-sizing: border-box;
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-left-color 0.22s ease;
+}
+
+.app.rail-collapsed .rail {
+  width: 0px;
+  opacity: 0;
+  border-left-color: transparent;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+[data-density="compact"] .rail {
+  width: 320px;
 }
 
 .rail::-webkit-scrollbar { width: 6px; }

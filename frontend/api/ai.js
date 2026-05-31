@@ -12,8 +12,8 @@ const ALLOWED_ORIGINS = [
 ].filter(Boolean)
 
 const ALLOWED_MODELS = [
-  'deepseek-chat',
-  'deepseek-reasoner',
+  'deepseek-v4-pro',
+  'deepseek-v4-flash',
 ]
 
 async function readBody(req) {
