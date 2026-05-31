@@ -86,6 +86,7 @@ export async function fetchDeFiLlamaVaults() {
       chain: pool.chain,
       symbol: pool.symbol,
       defillamaPool: pool.pool, // real mainnet pool address (display only)
+      poolId: pool.pool, // DeFiLlama pool UUID — used for APY history fetch
 
       // Execution info (MockVault on Sepolia)
       address: PROTOCOL_VAULT_MAP[pool.project],
@@ -176,6 +177,7 @@ function getFallbackCatalog() {
       risk: 'low',
       yield_source: 'lending',
       drawdown: '-1.2',
+      poolId: null,
       source: 'fallback',
     },
     {
@@ -190,6 +192,7 @@ function getFallbackCatalog() {
       risk: 'medium',
       yield_source: 'curated',
       drawdown: '-2.8',
+      poolId: null,
       source: 'fallback',
     },
     {
@@ -204,6 +207,7 @@ function getFallbackCatalog() {
       risk: 'high',
       yield_source: 'structured',
       drawdown: '-6.5',
+      poolId: null,
       source: 'fallback',
     },
     {
@@ -218,6 +222,7 @@ function getFallbackCatalog() {
       risk: 'high',
       yield_source: 'hybrid',
       drawdown: '-4.1',
+      poolId: null,
       source: 'fallback',
     },
   ]

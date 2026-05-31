@@ -267,7 +267,13 @@ const MmDialog = ({ domain, title, rows, pending }) => (
   <div className="mm-pop enter">
     <div className="mm-pop-head">
       <div className="mm-brand">
-        <div className="mm-mark">MM</div>
+        <div className="mm-mark">
+          <img 
+            src="https://images.ctfassets.net/clixtyxoaeas/4ES1xXFPTzqLsOumTgHcMd/e5bcf8648eeea657850731684ee4942b/MetaMask-icon-fox-developer.svg" 
+            alt="MetaMask Logo" 
+            style={{ width: 14, height: 14, display: "block" }} 
+          />
+        </div>
         <span className="mm-name">MetaMask</span>
       </div>
       <span className="mm-domain">{domain}</span>
@@ -415,7 +421,13 @@ const MmPermissionModal = ({ strategy, onConfirm, onReject }) => {
         <div className="mm-pop" style={{ marginTop: 0 }}>
           <div className="mm-pop-head">
             <div className="mm-brand">
-              <div className="mm-mark">MM</div>
+              <div className="mm-mark">
+                <img 
+                  src="https://images.ctfassets.net/clixtyxoaeas/4ES1xXFPTzqLsOumTgHcMd/e5bcf8648eeea657850731684ee4942b/MetaMask-icon-fox-developer.svg" 
+                  alt="MetaMask Logo" 
+                  style={{ width: 14, height: 14, display: "block" }} 
+                />
+              </div>
               <span className="mm-name">MetaMask</span>
             </div>
             <span className="mm-domain">vibing-farmer.app</span>

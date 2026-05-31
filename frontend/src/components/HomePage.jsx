@@ -5,6 +5,8 @@ import React, { useState, useEffect } from 'react'
 import WithdrawModal from './WithdrawModal.jsx'
 import { getTransactions } from '../history.js'
 import { fetchDeFiLlamaVaults } from '../defiLlama.js'
+import { fetchApyHistoryBatch } from '../apyHistory.js'
+import { generateSparkline, calcApyStats } from '../sparkline.js'
 import { VAULT_CATALOG } from '../config.js'
 import { loadSettings, t } from '../settingsStore.js'
 import { useNavigateTo } from '../router.js'
@@ -60,6 +62,56 @@ const SectionHead = ({ title, action, onAction }) => (
   </div>
 )
 
+// Vault table column template — Vault · Protocol · APY · Sparkline · TVL · Risk · Action
+const GRID_COLS = '2.2fr 1.1fr 1fr .9fr .95fr .65fr .9fr'
+
+// Format a percentage-point delta — replaces ↑↓→ arrows with actual pp numbers.
+const ppMeta = (delta) => {
+  if (delta === null || delta === undefined || Number.isNaN(parseFloat(delta))) return null
+  const n = parseFloat(delta)
+  return {
+    n,
+    cls: n > 0 ? 'up' : n < 0 ? 'down' : 'flat',
+    text: `${n >= 0 ? '+' : ''}${n.toFixed(2)}pp`,
+    color: n > 0 ? 'var(--accent)' : n < 0 ? 'var(--danger)' : 'var(--text-muted)',
+  }
+}
+
+// Rank vaults by 7d APY momentum; only those with usable history survive.
+function getTrendingVaults(liveVaults, apyHistories, limit = 3) {
+  return liveVaults
+    .map((vault) => {
+      const history = apyHistories[vault.poolId]
+      const stats = history ? calcApyStats(history) : null
+      return { ...vault, stats, change7d: stats ? parseFloat(stats.change7d) : -999 }
+    })
+    .filter((v) => v.change7d > -999 && v.stats?.values)
+    .sort((a, b) => b.change7d - a.change7d)
+    .slice(0, limit)
+}
+
+const TrendingCard = ({ vault, rank, onFarm, onOpen }) => {
+  const pp = ppMeta(vault.stats?.change7d)
+  const isTop = rank === 1
+  return (
+    <div style={{ ...cardPad, padding: '14px 16px', borderColor: isTop ? 'var(--border-strong)' : 'var(--border)', display: 'flex', flexDirection: 'column', gap: 9 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span className="mono" style={{ fontSize: 10.5, fontWeight: 600, color: isTop ? 'var(--accent)' : 'var(--text-faint)' }}>{isTop ? '🔥 #1' : `#${rank}`}</span>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--text-faint)' }}>{vault.protocol}</span>
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 500, cursor: 'pointer' }} onClick={() => onOpen(vault)}>{vault.name}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+        <span className="mono tnum" style={{ fontSize: 17, fontWeight: 600 }}>{Number(vault.apy).toFixed(1)}%</span>
+        {pp && <span className={`apy-change ${pp.cls}`} style={{ display: 'inline-block', margin: 0 }}>{pp.text} 7d ↗</span>}
+      </div>
+      <span dangerouslySetInnerHTML={{ __html: generateSparkline(vault.stats.values, { width: 64, height: 28 }) }} />
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button style={linkBtn} onClick={() => onFarm(vault)}>Farm →</button>
+      </div>
+    </div>
+  )
+}
+
 export default function HomePage({
   userAddress, positions = {}, alerts = [], vaultMeta = {}, lastUpdated = null,
   agentActive = false, autoHarvest = false,
@@ -72,6 +124,7 @@ export default function HomePage({
   const [sortBy, setSortBy] = useState('tvl')
   const [sortDir, setSortDir] = useState('desc')
   const [filterRisk, setFilterRisk] = useState('all')
+  const [apyHistories, setApyHistories] = useState({})
 
   // Read settings once, before any early return (was declared after the no-wallet return → TDZ crash)
   const settings = loadSettings()
@@ -96,6 +149,16 @@ export default function HomePage({
     const id = setInterval(load, POLL_MS)
     return () => { alive = false; clearInterval(id) }
   }, [userAddress])
+
+  // APY history: fetch after vault list loads. Non-blocking — sparklines fill in
+  // progressively as data arrives; apyHistory.js caches so nav doesn't re-fetch.
+  const poolKey = (pulse.vaults || []).map((v) => v.poolId).filter(Boolean).join(',')
+  useEffect(() => {
+    if (!poolKey) return
+    let alive = true
+    fetchApyHistoryBatch(poolKey.split(',')).then((map) => { if (alive) setApyHistories(map) })
+    return () => { alive = false }
+  }, [poolKey])
 
   // ── STATE 1: no wallet ──────────────────────────────────────────────
   if (!userAddress) {
@@ -142,14 +205,6 @@ export default function HomePage({
   const lastAlert = alerts[0]
   const fresh = pulse.fetchedAt && now - pulse.fetchedAt < POLL_MS
   const live = fresh && pulse.live
-  const arrowFor = (v) => {
-    const p = pulse.prev.find((x) => x.name === v.name)
-    if (!p) return { sym: '→', txt: 'stable', color: 'var(--text-muted)' }
-    const d = +(v.apy - p.apy).toFixed(2)
-    if (d > 0.05) return { sym: '↑', txt: `+${d}% from last check`, color: 'var(--ok)' }
-    if (d < -0.05) return { sym: '↓', txt: `${d}% from last check`, color: 'var(--danger)' }
-    return { sym: '→', txt: 'stable', color: 'var(--text-muted)' }
-  }
 
   const loading = !!userAddress && !pulse.fetchedAt
   const posEntries = Object.entries(positions)
@@ -182,6 +237,28 @@ export default function HomePage({
       }
       return sortDir === 'asc' ? -cmp : cmp
     })
+
+  // Trending Now — ranked by 7d APY momentum. Only render when ≥1 history loaded.
+  const trending = getTrendingVaults(pulse.vaults || [], apyHistories, 3)
+  const hasHistories = Object.keys(apyHistories).length > 0
+
+  // Per-vault stats lookup for table sparkline + 1d pp change.
+  const statsFor = (v) => {
+    const h = v.poolId ? apyHistories[v.poolId] : null
+    return h ? calcApyStats(h) : null
+  }
+
+  // Market Pulse aggregate — stablecoin avg APY + best opportunity, with pp deltas.
+  const vaultsForAgg = pulse.vaults || []
+  const stableAvgApy = vaultsForAgg.length
+    ? (vaultsForAgg.reduce((s, v) => s + Number(v.apy || 0), 0) / vaultsForAgg.length)
+    : null
+  const dayDeltas = vaultsForAgg.map((v) => statsFor(v)).filter(Boolean).map((s) => parseFloat(s.change1d))
+  const stableAvgPp = dayDeltas.length ? ppMeta(dayDeltas.reduce((a, b) => a + b, 0) / dayDeltas.length) : null
+  const bestVault = vaultsForAgg.length ? [...vaultsForAgg].sort((a, b) => b.apy - a.apy)[0] : null
+  const bestPp = bestVault ? ppMeta(statsFor(bestVault)?.change7d) : null
+
+  const handleOpenVault = (v) => { if (v.protocol) navigateTo('vault', v.protocol) }
 
   return (
     <div className="enter" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 28 }}>
@@ -240,6 +317,25 @@ export default function HomePage({
                 </div>
               </div>
             </div>
+
+            {/* ── TRENDING NOW (7d APY momentum) ── */}
+            {(pulse.vaults || []).some((v) => v.poolId) && (
+              <div style={section}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10, gap: 12 }}>
+                  <span style={eyebrow}>Trending Now</span>
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>based on 7d APY momentum</span>
+                </div>
+                {!hasHistories ? (
+                  <div className="mono" style={{ fontSize: 12, color: 'var(--text-faint)', padding: '2px 0' }}>Fetching APY momentum data…</div>
+                ) : trending.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                    {trending.map((v, i) => (
+                      <TrendingCard key={v.name} vault={v} rank={i + 1} onFarm={handleFarm} onOpen={handleOpenVault} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── SECTION 2: Active positions ── */}
             <div style={section}>
@@ -318,6 +414,25 @@ export default function HomePage({
                 </span>
               </div>
 
+              {/* Aggregate stats — stablecoin avg APY + best opportunity, with pp deltas */}
+              {stableAvgApy !== null && (
+                <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 12 }}>
+                  <div>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Stablecoin avg APY</span>
+                    <span className="mono tnum" style={{ marginLeft: 8, fontSize: 13, fontWeight: 600 }}>{stableAvgApy.toFixed(1)}%</span>
+                    {stableAvgPp && <span className="mono" style={{ marginLeft: 6, fontSize: 11, color: stableAvgPp.color }}>{stableAvgPp.text} 1d</span>}
+                  </div>
+                  {bestVault && (
+                    <div>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Best opportunity</span>
+                      <span className="mono" style={{ marginLeft: 8, fontSize: 12 }}>{bestVault.protocol}</span>
+                      <span className="mono tnum" style={{ marginLeft: 6, fontSize: 13, fontWeight: 600 }}>{Number(bestVault.apy).toFixed(1)}%</span>
+                      {bestPp && <span className="mono" style={{ marginLeft: 6, fontSize: 11, color: bestPp.color }}>{bestPp.text} 7d</span>}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Sort + Filter controls */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10, flexWrap: 'wrap' }}>
                 <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-faint)', marginRight: 2 }}>Sort:</span>
@@ -339,16 +454,16 @@ export default function HomePage({
               {/* Table */}
               <div style={{ ...card }}>
                 {/* Column headers */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.1fr .85fr .95fr .65fr .9fr', gap: 8, padding: '7px 18px', borderBottom: '1px solid var(--border)' }}>
-                  {['Vault', 'Protocol', 'APY', 'TVL', 'Risk', 'Action'].map((h) => (
+                <div style={{ display: 'grid', gridTemplateColumns: GRID_COLS, gap: 8, padding: '7px 18px', borderBottom: '1px solid var(--border)' }}>
+                  {['Vault', 'Protocol', 'APY', 'Trend', 'TVL', 'Risk', 'Action'].map((h) => (
                     <span key={h} className="mono" style={{ fontSize: 9.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.08em' }}>{h}</span>
                   ))}
                 </div>
 
                 {loading ? (
                   [0, 1, 2, 3].map((i) => (
-                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.1fr .85fr .95fr .65fr .9fr', gap: 8, alignItems: 'center', padding: '11px 18px', borderTop: '1px solid var(--border)' }}>
-                      {[130, 75, 42, 52, 28, 40].map((w, j) => (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: GRID_COLS, gap: 8, alignItems: 'center', padding: '11px 18px', borderTop: '1px solid var(--border)' }}>
+                      {[130, 75, 42, 48, 52, 28, 40].map((w, j) => (
                         <div key={j} className="skeleton-bar" style={{ height: 10, width: w, borderRadius: 3 }} />
                       ))}
                     </div>
@@ -361,11 +476,14 @@ export default function HomePage({
                   sortedVaults.map((v, i) => {
                     const active = isActive(v)
                     const bal = getPositionBalance(v)
-                    const ar = arrowFor(v)
+                    const stats = statsFor(v)
+                    const prevP = pulse.prev.find((x) => x.name === v.name)
+                    const prevDelta = prevP ? +(v.apy - prevP.apy).toFixed(2) : null
+                    const pp1d = ppMeta(stats?.change1d ?? prevDelta)
                     const riskColor = v.risk === 'low' ? 'var(--ok)' : v.risk === 'medium' ? '#f59e0b' : '#f97316'
                     return (
                       <div key={v.name} style={{
-                        display: 'grid', gridTemplateColumns: '2.2fr 1.1fr .85fr .95fr .65fr .9fr',
+                        display: 'grid', gridTemplateColumns: GRID_COLS,
                         alignItems: 'center', gap: 8,
                         padding: '11px 18px',
                         paddingLeft: active ? 16 : 18,
@@ -379,9 +497,18 @@ export default function HomePage({
                           {v.name}
                         </span>
                         <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{v.protocol}</span>
-                        <span className="mono tnum" style={{ fontSize: 12.5, fontWeight: v.apy > 8 ? 600 : 400 }}>
-                          {Number(v.apy).toFixed(1)}%
-                          <span style={{ color: ar.color, marginLeft: 3, fontSize: 11 }}>{ar.sym}</span>
+                        <span className="vault-apy">
+                          <span className="mono tnum apy-value" style={{ fontSize: 12.5, fontWeight: v.apy > 8 ? 600 : 400 }}>{Number(v.apy).toFixed(1)}%</span>
+                          {pp1d && <span className={`apy-change ${pp1d.cls}`}>{pp1d.text}</span>}
+                        </span>
+                        <span className="vault-sparkline">
+                          {stats ? (
+                            <span dangerouslySetInnerHTML={{ __html: generateSparkline(stats.values, { width: 64, height: 24 }) }} />
+                          ) : v.poolId ? (
+                            <span className="sparkline-loading">····</span>
+                          ) : (
+                            <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>—</span>
+                          )}
                         </span>
                         <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>{v.tvlFormatted || '—'}</span>
                         <span className="mono" style={{ fontSize: 11, color: riskColor }}>

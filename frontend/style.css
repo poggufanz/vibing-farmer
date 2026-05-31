@@ -182,8 +182,8 @@ input, select, textarea {
 }
 
 .sb-logo {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -195,15 +195,24 @@ input, select, textarea {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   margin: 0 auto 18px auto;
-  transition: border-color 0.2s ease, width 0.22s cubic-bezier(0.4, 0, 0.2, 1), margin 0.22s cubic-bezier(0.4, 0, 0.2, 1), justify-content 0.22s ease;
+  transition: border-color 0.2s ease, width 0.22s cubic-bezier(0.4, 0, 0.2, 1), margin 0.22s cubic-bezier(0.4, 0, 0.2, 1), justify-content 0.22s ease, padding 0.22s cubic-bezier(0.4, 0, 0.2, 1), height 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
+  padding: 0;
 }
 
 .app.sb-extended .sb-logo {
   border-color: transparent;
   width: 100%;
+  height: 38px;
   justify-content: flex-start;
-  margin: 0 0 24px 6px;
+  margin: 0 0 24px 0;
+  padding: 0 12px;
+}
+
+.sb-logo img {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .sb-logo-text {
@@ -223,7 +232,7 @@ input, select, textarea {
 .app.sb-extended .sb-logo-text {
   opacity: 1;
   max-width: 120px;
-  margin-left: 8px;
+  margin-left: 10px;
 }
 
 .sb-item {
@@ -234,12 +243,13 @@ input, select, textarea {
   align-items: center;
   justify-content: center;
   color: var(--text-faint);
-  transition: color 0.12s ease, background 0.12s ease, width 0.22s cubic-bezier(0.4, 0, 0.2, 1), padding 0.22s cubic-bezier(0.4, 0, 0.2, 1), justify-content 0.22s ease;
+  transition: color 0.12s ease, background 0.12s ease, width 0.22s cubic-bezier(0.4, 0, 0.2, 1), padding 0.22s cubic-bezier(0.4, 0, 0.2, 1), justify-content 0.22s ease, height 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   border: none;
   background: transparent;
   cursor: pointer;
   box-sizing: border-box;
   overflow: hidden;
+  padding: 0;
 }
 
 .app.sb-extended .sb-item {
@@ -286,6 +296,7 @@ input, select, textarea {
   width: 17px;
   height: 17px;
   stroke-width: 1.4;
+  flex-shrink: 0;
 }
 
 .sb-spacer { flex: 1; }
@@ -2791,3 +2802,73 @@ input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
+/* ============================================
+   APY sparklines + trend numbers (Portals.fi-inspired)
+   ============================================ */
+
+/* Table: APY cell stacks value over pp change */
+.vault-apy { display: block; }
+
+.vault-apy .apy-value { display: block; }
+
+/* Table: sparkline cell */
+.vault-sparkline {
+  display: flex;
+  align-items: center;
+}
+
+.sparkline-loading {
+  color: rgba(255, 255, 255, 0.2);
+  font-family: var(--font-mono);
+  letter-spacing: 4px;
+  font-size: 10px;
+}
+
+/* pp change — lime (up) / coral (down) / muted (flat) */
+.apy-change {
+  display: block;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
+.apy-change.up   { color: var(--accent); }
+.apy-change.down { color: var(--danger); }
+.apy-change.flat { color: var(--text-muted); }
+
+/* Vault detail: larger 7d APY chart */
+.apy-chart {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.apy-chart-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+.apy-chart-header .apy-avg { color: var(--text-muted); }
+
+.apy-chart-labels {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-top: 6px;
+}
+
+.apy-chart-labels .up   { color: var(--accent); }
+.apy-chart-labels .down { color: var(--danger); }

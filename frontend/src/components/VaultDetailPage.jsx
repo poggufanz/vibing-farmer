@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { VAULT_CATALOG } from '../config.js'
 import { fetchDeFiLlamaVaults } from '../defiLlama.js'
+import { fetchApyHistory } from '../apyHistory.js'
+import { generateSparkline, calcApyStats } from '../sparkline.js'
 import { useNavigateTo } from '../router.js'
 
 const short = (a) => (a ? `${a.slice(0, 10)}…${a.slice(-8)}` : '')
@@ -19,6 +21,7 @@ export default function VaultDetailPage({ positions = {} }) {
   const navigateTo = useNavigateTo()
   const catalog = VAULT_CATALOG.find((v) => v.protocol === protocol)
   const [liveData, setLiveData] = useState(null)
+  const [apyStats, setApyStats] = useState(null)
 
   useEffect(() => {
     fetchDeFiLlamaVaults()
@@ -28,6 +31,15 @@ export default function VaultDetailPage({ positions = {} }) {
       })
       .catch(() => {})
   }, [protocol])
+
+  // APY 7d history — fetch once live pool ID is known. Non-blocking, cached.
+  useEffect(() => {
+    const pid = liveData?.poolId
+    if (!pid) return
+    let alive = true
+    fetchApyHistory(pid).then((h) => { if (alive && h) setApyStats(calcApyStats(h)) })
+    return () => { alive = false }
+  }, [liveData?.poolId])
 
   if (!catalog) {
     return (
@@ -89,6 +101,24 @@ export default function VaultDetailPage({ positions = {} }) {
           </div>
         ))}
       </div>
+
+      {/* APY 7d trend chart (live history) */}
+      {apyStats && apyStats.values && (
+        <div className="apy-chart">
+          <div className="apy-chart-header">
+            <span>APY 7d</span>
+            <span className="apy-avg">7d avg: {apyStats.avg7d}%</span>
+          </div>
+          <span dangerouslySetInnerHTML={{ __html: generateSparkline(apyStats.values, { width: 280, height: 48, strokeWidth: 2 }) }} />
+          <div className="apy-chart-labels">
+            <span>{apyStats.values[0]?.toFixed(1)}%</span>
+            <span className={parseFloat(apyStats.change7d) >= 0 ? 'up' : 'down'}>
+              {parseFloat(apyStats.change7d) >= 0 ? '+' : ''}{apyStats.change7d}pp 7d
+            </span>
+            <span>{apyStats.current}%</span>
+          </div>
+        </div>
+      )}
 
       <div style={divider} />
 
