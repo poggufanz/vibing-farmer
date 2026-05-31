@@ -1485,6 +1485,12 @@ input, select, textarea {
   to { opacity: 1; }
 }
 
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: .35; }
+  50% { opacity: .08; }
+}
+.skeleton-bar { background: rgba(255,255,255,.18); animation: skeleton-pulse 1.4s ease-in-out infinite; }
+
 .modal {
   background: var(--bg-card);
   border: 1px solid var(--border-strong);

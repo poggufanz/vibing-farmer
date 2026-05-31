@@ -1,7 +1,7 @@
 /* ============================================
    VIBING FARMER — screens (multi-agent edition)
    ============================================ */
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icon } from './components.jsx';
 import { loadSettings, t } from './settingsStore.js';
 
@@ -20,8 +20,28 @@ const RISK_OPTIONS = [
 const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
   const { language: lang } = loadSettings()
   const valid = Number(amount) > 0 && risk;
+  const [prefill, setPrefill] = useState(null)
+  useEffect(() => {
+    const protocol = sessionStorage.getItem('yv_prefill_protocol')
+    const name = sessionStorage.getItem('yv_prefill_name')
+    const apy = sessionStorage.getItem('yv_prefill_apy')
+    if (protocol) {
+      setPrefill({ protocol, name, apy })
+      sessionStorage.removeItem('yv_prefill_protocol')
+      sessionStorage.removeItem('yv_prefill_name')
+      sessionStorage.removeItem('yv_prefill_apy')
+    }
+  }, [])
   return (
     <section className="card enter">
+      {prefill && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.04)', border: '1px solid var(--border)', borderRadius: 6, padding: '9px 14px', marginBottom: 16, fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>
+          <span style={{ color: 'var(--ok)', fontSize: 9 }}>●</span>
+          <span style={{ color: 'var(--text-muted)' }}>
+            Farming <strong style={{ color: 'inherit', fontWeight: 600, fontFamily: 'inherit' }}>{prefill.name}</strong> · {Number(prefill.apy).toFixed(1)}% APY
+          </span>
+        </div>
+      )}
       <div className="eyebrow">
         <span className="num">01</span>
         <span>AI Strategy · venice ai · multi-agent</span>

@@ -67,6 +67,9 @@ export default function HomePage({
   const [withdrawVault, setWithdrawVault] = useState(null)
   const [dismissed, setDismissed] = useState(() => new Set())
   const [pulse, setPulse] = useState(() => pulseCache || { vaults: SEED, prev: [], fetchedAt: null, live: false })
+  const [sortBy, setSortBy] = useState('tvl')
+  const [sortDir, setSortDir] = useState('desc')
+  const [filterRisk, setFilterRisk] = useState('all')
 
   // Read settings once, before any early return (was declared after the no-wallet return → TDZ crash)
   const settings = loadSettings()
@@ -145,6 +148,38 @@ export default function HomePage({
     if (d < -0.05) return { sym: '↓', txt: `${d}% from last check`, color: 'var(--danger)' }
     return { sym: '→', txt: 'stable', color: 'var(--text-muted)' }
   }
+
+  const loading = !!userAddress && !pulse.fetchedAt
+  const posEntries = Object.entries(positions)
+  const isActive = (v) => v.address && posEntries.some(([a]) => a.toLowerCase() === v.address.toLowerCase())
+  const getPositionBalance = (v) => {
+    const entry = v.address ? posEntries.find(([a]) => a.toLowerCase() === v.address.toLowerCase()) : null
+    return entry ? u(entry[1].balance) : null
+  }
+  const handleFarm = (v) => {
+    sessionStorage.setItem('yv_prefill_protocol', v.protocol)
+    sessionStorage.setItem('yv_prefill_name', v.name)
+    sessionStorage.setItem('yv_prefill_apy', String(v.apy))
+    onStartStrategy()
+  }
+  const handleSort = (key) => {
+    if (sortBy === key) setSortDir((d) => d === 'desc' ? 'asc' : 'desc')
+    else { setSortBy(key); setSortDir('desc') }
+  }
+  const riskOrder = { low: 0, medium: 1, high: 2 }
+  const sortedVaults = [...pulse.vaults]
+    .filter((v) => filterRisk === 'all' || v.risk === filterRisk)
+    .sort((a, b) => {
+      let cmp = 0
+      if (sortBy === 'tvl') cmp = (b.tvlUsd || 0) - (a.tvlUsd || 0)
+      else if (sortBy === 'apy') cmp = b.apy - a.apy
+      else if (sortBy === 'risk') {
+        const ra = riskOrder[a.risk] ?? 1
+        const rb = riskOrder[b.risk] ?? 1
+        cmp = ra - rb
+      }
+      return sortDir === 'asc' ? -cmp : cmp
+    })
 
   return (
     <div className="enter" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 28 }}>
@@ -271,27 +306,96 @@ export default function HomePage({
               </div>
             </div>
 
-            {/* ── SECTION 5: Market pulse ── */}
+            {/* ── SECTION 5: Market Pulse + Vault Table ── */}
             <div style={section}>
+              {/* Header */}
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10, gap: 12 }}>
                 <span style={eyebrow}>{t(lang, 'marketPulse')}</span>
-                <span className="mono" style={{ fontSize: 10.5, color: live ? 'var(--ok)' : 'var(--text-faint)' }}>
-                  {live ? `live · DeFiLlama · updated ${formatTime(pulse.fetchedAt, now)}` : 'cached · DeFiLlama'}
+                <span className="mono" style={{ fontSize: 10.5, color: loading ? 'var(--text-faint)' : live ? 'var(--ok)' : 'var(--text-faint)' }}>
+                  {loading ? 'fetching live data…' : live ? `live · DeFiLlama · updated ${formatTime(pulse.fetchedAt, now)}` : 'cached · last known data'}
                 </span>
               </div>
-              <div style={{ ...card }}>
-                {pulse.vaults.map((v, i) => {
-                  const ar = arrowFor(v)
-                  return (
-                    <div key={v.name} style={{ display: 'grid', gridTemplateColumns: '1.4fr .5fr 1.5fr .8fr', alignItems: 'center', gap: 10, padding: '11px 18px', borderTop: i ? '1px solid var(--border)' : 'none' }}>
-                      <span style={{ fontSize: 12.5 }}>{v.name}</span>
-                      <span className="mono tnum" style={{ fontSize: 12.5 }}>{Number(v.apy).toFixed(1)}%</span>
-                      <span className="mono" style={{ fontSize: 10.5, color: ar.color }}>{ar.sym} {ar.txt}</span>
-                      <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-faint)', textAlign: 'right' }}>{v.tvlFormatted ? `${v.tvlFormatted} TVL` : '—'}</span>
-                    </div>
-                  )
-                })}
+
+              {/* Sort + Filter controls */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10, flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-faint)', marginRight: 2 }}>Sort:</span>
+                {[['tvl', 'TVL'], ['apy', 'APY'], ['risk', 'Risk']].map(([key, label]) => (
+                  <button key={key} onClick={() => handleSort(key)}
+                    style={{ ...pillBtn, color: sortBy === key ? 'var(--text-primary, #e8e8e8)' : 'var(--text-muted)', borderColor: sortBy === key ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.12)' }}>
+                    {label}{sortBy === key ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+                  </button>
+                ))}
+                <span style={{ width: 1, height: 12, background: 'var(--border)', margin: '0 5px', display: 'inline-block', verticalAlign: 'middle' }} />
+                {[['all', 'All'], ['low', 'Low risk'], ['medium', 'Medium'], ['high', 'High']].map(([k, lbl]) => (
+                  <button key={k} onClick={() => setFilterRisk(k)}
+                    style={{ ...pillBtn, color: filterRisk === k ? 'var(--text-primary, #e8e8e8)' : 'var(--text-muted)', borderColor: filterRisk === k ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.12)' }}>
+                    {lbl}
+                  </button>
+                ))}
               </div>
+
+              {/* Table */}
+              <div style={{ ...card }}>
+                {/* Column headers */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.1fr .85fr .95fr .65fr .9fr', gap: 8, padding: '7px 18px', borderBottom: '1px solid var(--border)' }}>
+                  {['Vault', 'Protocol', 'APY', 'TVL', 'Risk', 'Action'].map((h) => (
+                    <span key={h} className="mono" style={{ fontSize: 9.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.08em' }}>{h}</span>
+                  ))}
+                </div>
+
+                {loading ? (
+                  [0, 1, 2, 3].map((i) => (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.1fr .85fr .95fr .65fr .9fr', gap: 8, alignItems: 'center', padding: '11px 18px', borderTop: '1px solid var(--border)' }}>
+                      {[130, 75, 42, 52, 28, 40].map((w, j) => (
+                        <div key={j} className="skeleton-bar" style={{ height: 10, width: w, borderRadius: 3 }} />
+                      ))}
+                    </div>
+                  ))
+                ) : sortedVaults.length === 0 ? (
+                  <div style={{ padding: '16px 18px', textAlign: 'center', fontSize: 12, color: 'var(--text-faint)' }}>
+                    no vaults match this filter
+                  </div>
+                ) : (
+                  sortedVaults.map((v, i) => {
+                    const active = isActive(v)
+                    const bal = getPositionBalance(v)
+                    const ar = arrowFor(v)
+                    const riskColor = v.risk === 'low' ? 'var(--ok)' : v.risk === 'medium' ? '#f59e0b' : '#f97316'
+                    return (
+                      <div key={v.name} style={{
+                        display: 'grid', gridTemplateColumns: '2.2fr 1.1fr .85fr .95fr .65fr .9fr',
+                        alignItems: 'center', gap: 8,
+                        padding: '11px 18px',
+                        paddingLeft: active ? 16 : 18,
+                        borderTop: i ? '1px solid var(--border)' : 'none',
+                        borderLeft: `2px solid ${active ? 'var(--ok)' : 'transparent'}`,
+                        background: active ? 'rgba(255,255,255,.02)' : undefined,
+                      }}>
+                        <span style={{ fontSize: 12.5 }}>
+                          {active && <span style={{ color: 'var(--ok)', marginRight: 5, fontSize: 9 }}>●</span>}
+                          {v.name}
+                        </span>
+                        <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{v.protocol}</span>
+                        <span className="mono tnum" style={{ fontSize: 12.5, fontWeight: v.apy > 8 ? 600 : 400 }}>
+                          {Number(v.apy).toFixed(1)}%
+                          <span style={{ color: ar.color, marginLeft: 3, fontSize: 11 }}>{ar.sym}</span>
+                        </span>
+                        <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>{v.tvlFormatted || '—'}</span>
+                        <span className="mono" style={{ fontSize: 11, color: riskColor }}>
+                          {v.risk === 'medium' ? 'med' : (v.risk || '—')}
+                        </span>
+                        <span>
+                          {active && bal !== null
+                            ? <span className="mono tnum" style={{ fontSize: 11, color: 'var(--ok)' }}>{bal.toFixed(2)} USDC</span>
+                            : <button style={linkBtn} onClick={() => handleFarm(v)}>Farm</button>
+                          }
+                        </span>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
               <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={onStartStrategy}>Start New Strategy →</button>
             </div>
           </>
