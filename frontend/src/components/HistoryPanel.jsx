@@ -128,7 +128,7 @@ const HistoryPanel = () => {
   const onClear = () => { clearAllHistory(); setNonce((n) => n + 1); };
 
   return (
-    <section className="history-page">
+    <section className="history-page enter">
       <div className="history-head">
         <div className="eyebrow">
           <span>History · on-chain explorer</span>

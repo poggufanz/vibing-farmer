@@ -95,7 +95,7 @@ export default function HomePage({
   // ── STATE 1: no wallet ──────────────────────────────────────────────
   if (!userAddress) {
     return (
-      <div style={{ flex: 1, display: 'grid', placeItems: 'center', padding: 28, textAlign: 'center' }}>
+      <div className="enter" style={{ flex: 1, display: 'grid', placeItems: 'center', padding: 28, textAlign: 'center' }}>
         <div style={{ maxWidth: 420 }}>
           <img src="/vibing_farmer.logo.svg" alt="Vibing Farmer Logo" style={{ width: 80, height: 80, margin: '0 auto 24px', display: 'block' }} />
           <div className="brand" style={{ justifyContent: 'center', fontSize: 22 }}>
@@ -147,7 +147,7 @@ export default function HomePage({
   }
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 28 }}>
+    <div className="enter" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 28 }}>
       <div style={{ maxWidth: 820, margin: '0 auto', width: '100%' }}>
 
         {/* ── ALERT BANNER (conditional) ── */}

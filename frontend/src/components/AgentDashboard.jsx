@@ -131,7 +131,7 @@ export default function AgentDashboard({
   }
 
   return (
-    <div className="panel">
+    <div className="panel enter">
       <style>{`@keyframes yvpulse{0%,100%{opacity:1}50%{opacity:.25}}@media(prefers-reduced-motion:reduce){.yv-pulse{animation:none!important}}`}</style>
       <div className="panel-head">
         <div className="panel-title">{t(lang, 'agentStatus')}</div>

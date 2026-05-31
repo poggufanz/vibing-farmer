@@ -168,7 +168,7 @@ export default function SettingsPage({
   const ghUrl = import.meta.env.VITE_GITHUB_URL || '#'
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 28 }}>
+    <div className="enter" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 28 }}>
       <div style={{ maxWidth: 820, margin: '0 auto', width: '100%' }}>
 
         {/* ── SECTION 1: Agent Configuration ── */}
