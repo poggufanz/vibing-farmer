@@ -646,6 +646,22 @@ const App = () => {
   /* ----- DONE (step 06) ----- */
   const handleExecDone = () => {
     setStage("done");
+    // Seed positions from confirmed workers so AgentDashboard is populated immediately
+    // without waiting for the background agent's first 5-minute poll.
+    // Background agent overwrites these with real on-chain balances on first check.
+    const seedPositions = {};
+    (strategy?.agents || []).forEach((a) => {
+      if (execMap[a.id]?.status === 'confirmed') {
+        seedPositions[a.vault.addr] = {
+          vaultName: a.vault.name,
+          balance: String(Math.round(a.allocation * 1e6)),
+          unclaimedRewards: '0',
+        };
+      }
+    });
+    if (Object.keys(seedPositions).length > 0) {
+      setAgentData((d) => ({ ...d, positions: { ...d.positions, ...seedPositions }, lastUpdated: Date.now() }));
+    }
     addLog({ event: "OrchestratorPlanned", meta: `multi-agent deployment finalized · ${strategy?.agents?.length} positions opened` });
   };
 
