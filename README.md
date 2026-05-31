@@ -60,7 +60,7 @@ Agent Memory + vis.js Graph (real-time)
 | AI Coordinator | Venice AI API (Llama-3.3-70b, OpenAI-compatible) |
 | Relay | 1Shot Permissionless Relayer (JSON-RPC) |
 | Wallet | MetaMask Flask 13.9+ (Smart Accounts Kit) |
-| Network | Ethereum Sepolia (for now is testnet) |
+| Network | Ethereum Sepolia |
 
 ---
 
