@@ -279,7 +279,7 @@ export default function AgentDashboard({
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--text-faint)', lineHeight: 1.65, marginBottom: 20 }}>
               Start your first strategy to begin farming.<br />
-              Venice AI will recommend the optimal vault.
+              AI will recommend the optimal vault.
             </div>
             {onNewStrategy && (
               <button style={textBtn('var(--text-muted)')} onClick={onNewStrategy}>

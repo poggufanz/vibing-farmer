@@ -946,13 +946,13 @@ const App = () => {
         <div className="modal-backdrop">
           <div className="modal" role="dialog" aria-modal="true">
             <div className="modal-eyebrow">venice ai · timeout</div>
-            <h3 className="modal-title">AI masih memproses — lanjut nunggu?</h3>
+            <h3 className="modal-title">AI is still processing — continue waiting?</h3>
             <p className="lede" style={{ marginTop: 8 }}>
-              Generation udah lewat {Math.round(VENICE_TIMEOUT_MS / 1000)} detik. Mau tunggu lebih lama, atau pakai strategy default aja?
+              Generation has exceeded {Math.round(VENICE_TIMEOUT_MS / 1000)} seconds. Do you want to keep waiting or use the default strategy instead?
             </p>
             <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={handleStopWaiting}>Pakai default</button>
-              <button className="btn btn-primary" onClick={handleKeepWaiting}>Lanjut nunggu</button>
+              <button className="btn btn-ghost" onClick={handleStopWaiting}>Use default</button>
+              <button className="btn btn-primary" onClick={handleKeepWaiting}>Keep waiting</button>
             </div>
           </div>
         </div>

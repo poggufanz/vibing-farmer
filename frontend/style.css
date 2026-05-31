@@ -684,6 +684,13 @@ input, select, textarea {
   font-weight: 500;
 }
 
+.ai-attribution {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  font-family: monospace;
+  letter-spacing: 0.02em;
+}
+
 /* ---------- Recommendation card (data-forward editorial) ---------- */
 .rec-card {
   background: var(--bg-card);

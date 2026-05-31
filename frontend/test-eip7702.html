@@ -103,7 +103,7 @@
   </style>
 </head>
 <body>
-  <h1>Verifikasi ERC-7715</h1>
+  <h1>ERC-7715 Verification</h1>
   <p class="subtitle">Gate check Phase 1 — VIBING FARMER</p>
 
   <div class="warn">
@@ -113,11 +113,11 @@
   </div>
 
   <div class="info">
-    <strong>CATATAN: EIP-7702</strong>
-    Raw EIP-7702 upgrade (<code>eth_signAuthorization</code>) tidak bisa diakses langsung via injected provider.
-    EIP-7702 dihandle internal oleh <strong>MetaMask Smart Accounts Kit</strong> saat permission di-grant.
-    Test ini hanya verifikasi ERC-7715 permission flow — sudah cukup untuk Phase 1.
-    Setup SAK lengkap dilakukan di Phase 3 (Integration).
+    <strong>NOTE: EIP-7702</strong>
+    Raw EIP-7702 upgrade (<code>eth_signAuthorization</code>) cannot be accessed directly via the injected provider.
+    EIP-7702 is handled internally by <strong>MetaMask Smart Accounts Kit</strong> when the permission is granted.
+    This test only verifies the ERC-7715 permission flow — which is sufficient for Phase 1.
+    Full SAK setup is done in Phase 3 (Integration).
   </div>
 
   <div class="grid grid-2">
@@ -128,8 +128,8 @@
         <div class="status" id="st-chain"><span class="dot"></span>Sepolia (chainId 0xaa36a7)</div>
         <div class="status" id="st-account"><span class="dot"></span>Account connected</div>
       </div>
-      <button id="btn-check-env" onclick="checkEnv()">Cek Environment</button>
-      <div class="log" id="log-env">Klik "Cek Environment" untuk mulai...</div>
+      <button id="btn-check-env" onclick="checkEnv()">Check Environment</button>
+      <div class="log" id="log-env">Click "Check Environment" to start...</div>
     </div>
 
     <div class="card">
@@ -139,7 +139,7 @@
         <div class="status" id="st-request"><span class="dot"></span>wallet_requestExecutionPermissions</div>
       </div>
       <button id="btn-check-erc7715" onclick="checkERC7715()" disabled>Test ERC-7715</button>
-      <div class="log" id="log-erc7715">Selesaikan Step 1 terlebih dahulu...</div>
+      <div class="log" id="log-erc7715">Complete Step 1 first...</div>
     </div>
   </div>
 
@@ -150,11 +150,11 @@
       <div class="status" id="st-context"><span class="dot"></span>Permission context received</div>
     </div>
     <button id="btn-grant" onclick="grantPermission()" disabled>Grant Test Permission</button>
-    <div class="log" id="log-grant">Selesaikan Step 1 &amp; 2 terlebih dahulu...</div>
+    <div class="log" id="log-grant">Complete Step 1 &amp; 2 first...</div>
   </div>
 
   <div class="card">
-    <h2>Hasil Verifikasi</h2>
+    <h2>Verification Results</h2>
     <div id="summary" class="grid">
       <div class="status" id="sum-mm"><span class="dot"></span>MetaMask Flask version</div>
       <div class="status" id="sum-rpc"><span class="dot"></span>Sepolia RPC working</div>
@@ -162,7 +162,7 @@
       <div class="status" id="sum-request"><span class="dot"></span>wallet_requestExecutionPermissions</div>
       <div class="status" id="sum-context"><span class="dot"></span>Permission context returned</div>
     </div>
-    <div class="log" id="log-summary">Semua gate harus hijau sebelum lanjut Phase 2...</div>
+    <div class="log" id="log-summary">All gates must be green before proceeding to Phase 2...</div>
   </div>
 
   <script>
@@ -185,14 +185,14 @@
     async function checkEnv() {
       log('log-env', 'Checking...');
       try {
-        if (!window.ethereum) throw new Error('MetaMask tidak ditemukan');
+        if (!window.ethereum) throw new Error('MetaMask not found');
         mmVersion = window.ethereum.version || 'unknown';
         setStatus('st-mm', true, 'MetaMask detected: ' + mmVersion);
 
         chainId = await ethereum.request({ method: 'eth_chainId' });
         const isSepolia = chainId === '0xaa36a7';
-        setStatus('st-chain', isSepolia, isSepolia ? 'Sepolia OK (' + chainId + ')' : 'Bukan Sepolia (' + chainId + ')');
-        if (!isSepolia) throw new Error('Switch ke Sepolia di MetaMask Flask');
+        setStatus('st-chain', isSepolia, isSepolia ? 'Sepolia OK (' + chainId + ')' : 'Not Sepolia (' + chainId + ')');
+        if (!isSepolia) throw new Error('Switch to Sepolia in MetaMask Flask');
 
         const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
         account = accounts[0];
@@ -215,12 +215,12 @@
         });
         setStatus('st-support', true, 'Supported: ' + JSON.stringify(supported).slice(0, 60));
         setStatus('sum-support', true, 'wallet_getSupportedExecutionPermissions OK');
-        log('log-erc7715', 'ERC-7715 didukung.\nResponse: ' + JSON.stringify(supported, null, 2).slice(0, 500));
+        log('log-erc7715', 'ERC-7715 supported.\nResponse: ' + JSON.stringify(supported, null, 2).slice(0, 500));
         document.getElementById('btn-grant').disabled = false;
       } catch (e) {
-        setStatus('st-support', false, 'Tidak didukung: ' + e.message);
-        setStatus('sum-support', false, 'wallet_getSupportedExecutionPermissions GAGAL');
-        log('log-erc7715', 'ERROR: ' + e.message + '\n\nPastikan MetaMask Flask 13.9+ dan sudah switch ke Sepolia.');
+        setStatus('st-support', false, 'Not supported: ' + e.message);
+        setStatus('sum-support', false, 'wallet_getSupportedExecutionPermissions FAILED');
+        log('log-erc7715', 'ERROR: ' + e.message + '\n\nMake sure MetaMask Flask 13.9+ is installed and switched to Sepolia.');
       }
     }
 
@@ -260,8 +260,8 @@
         log('log-grant', 'Permission granted!\nResult: ' + JSON.stringify(result, null, 2).slice(0, 800));
         updateSummary();
       } catch (e) {
-        setStatus('st-grant', false, 'Gagal: ' + e.message);
-        setStatus('sum-request', false, 'wallet_requestExecutionPermissions GAGAL');
+        setStatus('st-grant', false, 'Failed: ' + e.message);
+        setStatus('sum-request', false, 'wallet_requestExecutionPermissions FAILED');
         log('log-grant', 'ERROR: ' + e.message);
       }
     }
@@ -270,7 +270,7 @@
       setStatus('sum-mm', true, 'MetaMask: ' + (mmVersion || 'unknown'));
       setStatus('sum-rpc', true, 'Sepolia RPC: chainId ' + (chainId || '?'));
       document.getElementById('log-summary').textContent =
-        '✅ Gate check Phase 1 BERHASIL! ERC-7715 permission flow bekerja.\nEIP-7702 dihandle oleh MetaMask SAK di Phase 3 (Integration).';
+        '✅ Gate check Phase 1 SUCCESSFUL! ERC-7715 permission flow is working.\nEIP-7702 is handled by MetaMask SAK in Phase 3 (Integration).';
     }
   </script>
 </body>

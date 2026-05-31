@@ -209,7 +209,7 @@ export default function HomePage({
                 0.00 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>USDC · no active positions</span>
               </div>
               <p className="lede" style={{ fontSize: 13, marginTop: 12, maxWidth: 520 }}>
-                Start your first strategy to begin farming. Venice AI will recommend the best vault for
+                Start your first strategy to begin farming. AI will recommend the best vault for
                 your risk profile. Agent will execute automatically — you pay zero gas.
               </p>
               <button className="btn btn-primary" style={{ marginTop: 18 }} onClick={onStartStrategy}>Start Strategy →</button>
