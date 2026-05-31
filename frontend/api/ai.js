@@ -65,7 +65,7 @@ export default async function handler(req, res) {
       return res.end(JSON.stringify({ error: 'Invalid messages' }))
     }
     for (const msg of messages) {
-      if (typeof msg.content === 'string' && msg.content.length > 10000) {
+      if (typeof msg.content === 'string' && msg.content.length > 100000) {
         res.statusCode = 400
         res.setHeader('Content-Type', 'application/json')
         return res.end(JSON.stringify({ error: 'Message too long' }))
