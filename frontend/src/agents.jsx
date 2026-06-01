@@ -11,13 +11,19 @@ import React, {
 import ForceGraph2D from 'react-force-graph-2d';
 import { Icon } from './components.jsx';
 import { shortAddr } from './screens.jsx';
+import { VAULT_CATALOG } from './config.js';
 
 /* ---------- Strategy data — generated per-flow ---------- */
-const AGENT_PROTOCOLS = [
-  { name: "MockVault USDC-A",   protocol: "aave-v3",    apy: "8.2",  drawdown: "-1.8", addr: "0x72bC6b01A60e22ab8b9D62E8237B37633C36aBa5", role: "Conservative · lending" },
-  { name: "MockVault USDC-B",   protocol: "morpho-blue", apy: "12.7", drawdown: "-3.6", addr: "0x2BF6aa67D7a372ad0f4F45Bf2223156DF12eF9DF", role: "Balanced · liquidity provision" },
-  { name: "LeveredVault USDC",  protocol: "pendle-v2",   apy: "21.5", drawdown: "-7.2", addr: "0x2BF6aa67D7a372ad0f4F45Bf2223156DF12eF9DF", role: "Aggressive · leveraged yield" },
-];
+// Derived from VAULT_CATALOG so addresses stay in sync with config automatically.
+const ROLES = ["Conservative · lending", "Balanced · liquidity provision", "Aggressive · leveraged yield"];
+const AGENT_PROTOCOLS = VAULT_CATALOG.slice(0, 3).map((v, i) => ({
+  name: v.name,
+  protocol: v.protocol,
+  apy: String(v.apy),
+  drawdown: v.drawdown,
+  addr: v.address,
+  role: ROLES[i],
+}));
 
 const buildStrategy = (amount, risk) => {
   const total = Number(amount) || 100;
@@ -302,7 +308,7 @@ const MemoryModal = ({ agentId, strategy, execMap, onClose }) => {
           </div>
           <div className="memory-metric">
             <span className="label mono">success rate</span>
-            <span className="val tnum mono">{ex.metrics?.successRate == null ? "—" : `${ex.metrics.successRate}%`}</span>
+            <span className="val tnum mono">{ex.metrics?.successRate == null ? "-" : `${ex.metrics.successRate}%`}</span>
           </div>
           <div className="memory-metric">
             <span className="label mono">gas paid · user</span>
@@ -317,7 +323,7 @@ const MemoryModal = ({ agentId, strategy, execMap, onClose }) => {
         <div className="memory-section-title mono">execution log</div>
         <div className="memory-log">
           {ex.memory.length === 0 ? (
-            <div className="empty">no events yet — agent queued</div>
+            <div className="empty">no events yet · agent queued</div>
           ) : (
             ex.memory.map((m, i) => (
               <div key={i} className={`memory-row ${m.status}`}>
@@ -362,8 +368,9 @@ const MemoryModal = ({ agentId, strategy, execMap, onClose }) => {
 /* ============================================
    Strategy card (step 02 result) — multi-agent
    ============================================ */
-const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate }) => {
+const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate, strategyHash, attestation, attesting }) => {
   const customSkill = skillSource === "user-local" || skillSource === "user-file";
+  const shortHash = (h) => h ? `${h.slice(0, 10)}...` : "";
   return (
     <section className="rec-card enter">
       <div className="eyebrow">
@@ -424,6 +431,33 @@ const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate }) => {
         ))}
       </div>
 
+      {(attestation || attesting || strategyHash) && (
+        <div className="mono" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 16, padding: "9px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", fontSize: 11, color: "var(--text-muted)" }}>
+          {attestation ? (
+            <>
+              <span style={{ color: "var(--ok)", fontSize: 8 }}>●</span>
+              <span>Strategy attested on-chain</span>
+              <span style={{ color: "var(--text-faint)" }}>·</span>
+              <span>Hash: {attestation.hash}</span>
+              <a href={attestation.etherscanUrl} target="_blank" rel="noopener noreferrer" className="accent" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                Verify on Etherscan <Icon name="external" size={11} />
+              </a>
+              <span style={{ color: "var(--text-faint)", marginLeft: "auto" }}>Powered by ERC-8004 · tamper-proof AI reasoning</span>
+            </>
+          ) : attesting ? (
+            <>
+              <span style={{ color: "var(--text-faint)", fontSize: 8 }}>○</span>
+              <span>Attesting strategy on-chain…</span>
+            </>
+          ) : (
+            <>
+              <span style={{ color: "var(--text-faint)", fontSize: 8 }}>○</span>
+              <span>Strategy hash: {shortHash(strategyHash)} (local only)</span>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="action-row">
         <div className="foot-note">
           <span className="ai-attribution">
@@ -475,7 +509,7 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
       <div className="exec-header">
         <div>
           <h1 className="h-display" style={{ fontSize: 30, marginTop: 6 }}>
-            {strategy.agents.length} agents running in parallel — orchestrated seamlessly.
+            {strategy.agents.length} agents running in parallel · orchestrated seamlessly.
           </h1>
           <p className="lede" style={{ marginTop: 10, maxWidth: 540 }}>
             Each worker executes the skills you approved: <span className="mono">swap → approve → deposit</span>.

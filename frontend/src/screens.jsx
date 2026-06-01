@@ -50,12 +50,12 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
       </div>
 
       <h1 className="h-display">
-        Set your deposit — let the orchestrator spawn the agents.
+        Set your deposit · let the orchestrator spawn the agents.
       </h1>
       <p className="lede">
         AI generates the strategy: how many worker agents are needed, which vault each agent handles,
         and which skills they run. All transactions are relayed via 1Shot, so you pay zero gas. The permissions you grant
-        are scoped per agent—no agent can act outside its designated vault boundaries.
+        are scoped per agent · no agent can act outside its designated vault boundaries.
       </p>
 
       <div className="amount-block">
@@ -159,7 +159,7 @@ const ThinkingCard = ({ phase, times = [] }) => {
               <span className="marker" />
               <span>{s.label}</span>
               <span className="time">
-                {state === "idle" ? "—" : `${(t ?? 0).toFixed(1)}s`}
+                {state === "idle" ? "-" : `${(t ?? 0).toFixed(1)}s`}
                 {state === "active" && <span className="think-spin" aria-hidden="true" />}
               </span>
             </div>
@@ -175,7 +175,7 @@ const ThinkingCard = ({ phase, times = [] }) => {
 /* ============================================
    02 — Connect & EIP-7702 upgrade
    ============================================ */
-const ConnectCard = ({ phase, error, onConnect, onUpgrade, onDone, onCancel }) => {
+const ConnectCard = ({ phase, error, mmVersion, onConnect, onUpgrade, onDone, onCancel }) => {
   return (
     <section className="card enter">
       <div className="eyebrow">
@@ -186,13 +186,27 @@ const ConnectCard = ({ phase, error, onConnect, onUpgrade, onDone, onCancel }) =
       </div>
 
       <h1 className="h-display">
-        Upgrade your account to a smart account — single signature, reversible.
+        Upgrade your account to a smart account · single signature, reversible.
       </h1>
       <p className="lede">
         Your MetaMask account is currently a standard EOA. EIP-7702 sets delegation code on your existing account,
         activating it as a smart account without changing wallets. Afterwards, the orchestrator can spawn worker
         agents, each with scoped permissions.
       </p>
+
+      {mmVersion && mmVersion.type !== "none" && (
+        <div className="mono" style={{ fontSize: 11, marginTop: 14, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", color: mmVersion.supportsERC7715 ? "var(--ok)" : "var(--warn)" }}>
+          <span style={{ fontSize: 8 }}>●</span>
+          {mmVersion.isFlask ? (
+            <span>MetaMask Flask {mmVersion.version} ✓ · ERC-7715 supported</span>
+          ) : (
+            <>
+              <span>MetaMask stable detected · Flask required for permissions</span>
+              <a href="https://metamask.io/flask/" target="_blank" rel="noopener noreferrer" className="accent" style={{ textDecoration: "none" }}>Switch to Flask →</a>
+            </>
+          )}
+        </div>
+      )}
 
       {phase === "idle" && (
         <div className="action-row">
@@ -338,7 +352,7 @@ const PermissionCard = ({ strategy, onGrant, phase, error, onConfirm, onReject }
       </div>
 
       <h1 className="h-display">
-        Authorize {agents.length} agents — each scoped to their own vault.
+        Authorize {agents.length} agents · each scoped to their own vault.
       </h1>
       <p className="lede">
         These permissions are batched in a single signature, but each worker receives its own scope: a specific vault,

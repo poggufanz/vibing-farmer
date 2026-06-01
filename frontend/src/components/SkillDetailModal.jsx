@@ -16,7 +16,7 @@ function labelStep(step) {
 }
 
 function shortAddr(addr) {
-  if (!addr || addr.length < 10) return addr || '—';
+  if (!addr || addr.length < 10) return addr || '-';
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
@@ -89,7 +89,7 @@ export default function SkillDetailModal({ agent, skill, state, onClose, onAppro
           <Row k="Maximum"   v={skill.guards?.maxAmount || info.amountVal} />
           <Row k="Gas cap"   v={skill.guards?.maxGas || '200,000'} />
           <Row k="Valid for" v={`${hours} hour${hours !== 1 ? 's' : ''} from now`} />
-          <Row k="Revocable" v={skill.guards?.revocable ? 'Yes — revoke anytime' : 'No'} />
+          <Row k="Revocable" v={skill.guards?.revocable ? 'Yes · revoke anytime' : 'No'} />
           <Row k="Risk"      v={info.risk} />
         </div>
 

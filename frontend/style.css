@@ -600,9 +600,13 @@ input, select, textarea {
   font-size: 13.5px;
   font-weight: 500;
   letter-spacing: -0.01em;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1);
   white-space: nowrap;
   border: 1px solid transparent;
+}
+
+.btn:active, .sb-item:active, .icon-btn:active {
+  transform: scale(0.98) translateY(0.5px);
 }
 
 .btn-primary {

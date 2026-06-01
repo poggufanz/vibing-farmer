@@ -88,7 +88,7 @@ export async function submitRelay({ to, calldata, permissionContext }) {
 
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(`1Shot relay failed: ${response.status} — ${text}`)
+    throw new Error(`1Shot relay failed: ${response.status} · ${text}`)
   }
 
   const data = await response.json()
@@ -178,7 +178,7 @@ async function ensureBgSetup(agentId, vault) {
     depCall('grantAgentPermission', [agentId, vault, BG_MAX, expiresAt]),
     depCall('setAgentCapabilities', [agentId, true, true]),
   ])
-  if (!setupHash) throw new Error('Wallet lacks EIP-5792 batch support — cannot arm agent')
+  if (!setupHash) throw new Error('Wallet lacks EIP-5792 batch support · cannot arm agent')
 }
 
 /** Emergency withdraw `amount` (units) from `vault` back to `user`. Setup batch, then the action. */

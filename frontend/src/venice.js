@@ -4,6 +4,7 @@ import { fetchMarketContext } from './marketSearch.js'
 import { fetchDeFiLlamaVaults } from './defiLlama.js'
 import { saveStrategy, saveReasoning } from './history.js'
 import { loadSettings } from './settingsStore.js'
+import { hashStrategy } from './attestation.js'
 
 // AI provider priority: Venice x402 → DeepSeek (dev) → hardcoded fallback
 // Venice x402: wallet SIWE auth, pays USDC on Base — no API key needed
@@ -143,6 +144,8 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
     )
     const parsed = validateVeniceResponse(JSON.parse(content), vaultData)
     console.log(`[ai] Strategy via ${provider.name} · skill: ${skill.source} · vaults: ${vaultDataSource}`)
+    // Deterministic tamper-proof hash of the AI strategy + reasoning (for on-chain attestation)
+    const strategyHash = hashStrategy({ ...parsed, generatedBy: provider.name })
     // Persist strategy session + per-vault AI reasoning to history (localStorage)
     saveStrategy({
       amountUsdc: amount,
@@ -154,6 +157,7 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
       vaultDataSource,
       marketContextUsed: marketContext !== null,
       blendedApy: parsed.selected_vaults.reduce((sum, v) => sum + ((v.expected_apy || 0) * (v.allocation || 0)), 0).toFixed(2),
+      strategyHash,
     })
     parsed.selected_vaults.forEach(v => {
       if (v.reasoning) saveReasoning({
@@ -161,7 +165,7 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
         reasoning: v.reasoning, expectedApy: v.expected_apy, amountUsdc: amount, riskLevel, modelUsed: provider.model,
       })
     })
-    return { ...parsed, generatedBy: provider.name, skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData }
+    return { ...parsed, generatedBy: provider.name, skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData, strategyHash, attestation: null }
   } catch (err) {
     console.warn(`[ai] Strategy failed (${provider.name}), using fallback:`, err.message)
     return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData }

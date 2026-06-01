@@ -7,7 +7,7 @@ import { readVaultDepositTimestamp } from '../wallet.js'
 import { loadSettings, t } from '../settingsStore.js'
 
 const fmtDur = (secAgo) => {
-  if (!secAgo || secAgo <= 0) return '—'
+  if (!secAgo || secAgo <= 0) return '-'
   const d = Math.floor(secAgo / 86400), h = Math.floor((secAgo % 86400) / 3600), m = Math.floor((secAgo % 3600) / 60)
   if (d > 0) return `${d} day${d === 1 ? '' : 's'} ${h} hour${h === 1 ? '' : 's'}`
   return h > 0 ? `${h} hour${h === 1 ? '' : 's'} ${m} min` : `${m} min`

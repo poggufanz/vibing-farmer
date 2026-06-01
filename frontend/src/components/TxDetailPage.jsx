@@ -24,7 +24,7 @@ function formatRel(ts) {
 
 const backBtn = { appearance: 'none', border: 0, background: 'transparent', font: 'inherit', fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }
 const divider = { borderTop: '1px solid var(--border)', margin: '20px 0' }
-const sectionLabel = { fontSize: 9.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.06em', fontFamily: 'var(--font-mono)' }
+const sectionLabel = { fontSize: 9.5, color: 'var(--text-faint)', textTransform: 'lowercase', letterSpacing: '-0.01em', fontFamily: 'var(--font-mono)' }
 const extLink = { color: 'var(--text-muted)', fontSize: 11, textDecoration: 'underline' }
 const ghostBtn = { appearance: 'none', border: '.5px solid rgba(255,255,255,.18)', borderRadius: 5, background: 'rgba(255,255,255,.06)', color: 'inherit', font: 'inherit', fontSize: 11, padding: '6px 12px', cursor: 'pointer' }
 
@@ -71,8 +71,8 @@ export default function TxDetailPage() {
     { label: 'Vault',       value: tx.vaultName },
     { label: 'Protocol',    value: tx.protocol },
     { label: 'Amount',      value: `${tx.amountUsdc} USDC` },
-    { label: 'APY',         value: tx.apy ? `${tx.apy}%` : '—' },
-    { label: 'Worker',      value: tx.workerId || '—' },
+    { label: 'APY',         value: tx.apy ? `${tx.apy}%` : '-' },
+    { label: 'Worker',      value: tx.workerId || '-' },
     { label: 'Gas paid by', value: tx.gasPayedBy || '1shot-relayer', highlight: true },
     { label: 'Network',     value: `${tx.network || 'sepolia'} testnet` },
   ]
@@ -119,7 +119,7 @@ export default function TxDetailPage() {
         <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px' }}>
           {details.map(({ label, value, highlight }) => (
             <div key={label}>
-              <div className="mono" style={{ fontSize: 9, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>
+              <div className="mono" style={{ fontSize: 9, color: 'var(--text-faint)', textTransform: 'lowercase', letterSpacing: '-0.01em', marginBottom: 3 }}>
                 {label}
               </div>
               <div style={{ fontSize: 12.5, color: highlight ? 'var(--ok)' : 'inherit', fontWeight: highlight ? 500 : 400 }}>

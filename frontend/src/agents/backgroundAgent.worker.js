@@ -4,7 +4,7 @@
 // Uses raw JSON-RPC (fetch) so the worker bundles without ethers.
 
 const INTERVALS = {
-  position: 5 * 60 * 1000,   // 5 min — balance + yield
+  position: 5 * 60 * 1000,   // 5 min — slow backstop; event listener handles real-time sync
   apy: 10 * 60 * 1000,       // 10 min — APY drift + rebalance opportunity
   reward: 5 * 60 * 1000,     // 5 min — unclaimed rewards check
   risk: 15 * 60 * 1000,      // 15 min — security news scan

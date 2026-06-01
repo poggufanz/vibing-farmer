@@ -37,6 +37,13 @@ contract AgentVaultDepositor is ReentrancyGuard {
     event WithdrawExecuted(address indexed user, address vault, uint256 amount, uint256 shares);
     event HarvestExecuted(address indexed user, address vault, uint256 rewards);
     event HarvestRecompounded(address indexed user, address vault, uint256 rewards);
+    event StrategyAttested(
+        address indexed user,
+        bytes32 strategyHash,
+        uint256 timestamp,
+        string vaultProtocol,
+        uint256 allocatedAmount
+    );
 
     // Custom errors
     error PermissionNotActive();
@@ -84,6 +91,23 @@ contract AgentVaultDepositor is ReentrancyGuard {
     /// @notice Revoke an agent's permission immediately.
     function revokeAgentPermission(bytes32 agentId) external {
         agentPermissions[msg.sender][agentId].active = false;
+    }
+
+    /// @notice Attest an AI-generated strategy on-chain. Pure event emission — no
+    ///         state change, no storage cost. Creates a tamper-proof, auditable
+    ///         record of the strategy hash + reasoning (ERC-8004 aligned).
+    function attestStrategy(
+        bytes32 strategyHash,
+        string calldata vaultProtocol,
+        uint256 allocatedAmount
+    ) external {
+        emit StrategyAttested(
+            msg.sender,
+            strategyHash,
+            block.timestamp,
+            vaultProtocol,
+            allocatedAmount
+        );
     }
 
     /// @notice Execute a full Swap→Approve→Deposit flow for one agent.

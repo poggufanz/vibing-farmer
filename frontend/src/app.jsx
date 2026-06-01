@@ -19,12 +19,18 @@ import {
   useTweaks, TweaksPanel, TweakSection, TweakRadio,
 } from './tweaks-panel.jsx';
 
-import { connectWallet, requestERC7715Permission, signSiweForVenice, switchToSepolia } from './wallet.js';
+import { ethers } from 'ethers';
+import { connectWallet, requestERC7715Permission, signSiweForVenice, switchToSepolia, getProvider } from './wallet.js';
 import { generateStrategy } from './venice.js';
+import { attestStrategyOnChain, formatAttestation } from './attestation.js';
+import { detectMetaMaskVersion } from './flaskDetect.js';
+import FlaskGate from './components/FlaskGate.jsx';
+import OnboardingFlow from './components/OnboardingFlow.jsx';
 import { OrchestratorAgent } from './orchestrator.js';
 import { makeAgentId } from './worker.js';
-import { VAULT_CATALOG, VENICE_TIMEOUT_MS } from './config.js';
-import { loadPersistedPositions, persistPositions, reconcilePositionsFromChain } from './positionsStore.js';
+import { VAULT_CATALOG, VENICE_TIMEOUT_MS, AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI } from './config.js';
+import { loadPersistedPositions, persistPositions, reconcilePositionsFromChain, mergePositions, applyChainPositions } from './positionsStore.js';
+import { getReadProvider } from './readProvider.js';
 import SkillDrawer from './components/SkillDrawer.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
 import { saveTransaction } from './history.js';
@@ -94,7 +100,7 @@ const mapVeniceToStrategy = (veniceResult, amount, risk) => {
         protocol: v.protocol || live.protocol || cat.protocol || PROTOCOLS[i] || "aave-v3",
         apy: String(v.expected_apy ?? live.apy ?? cat.apy ?? 4.8),
         drawdown: live.drawdown || cat.drawdown || "-1.8",
-        addr: v.address,
+        addr: cat.address || VAULT_CATALOG.find((c) => c.protocol === (v.protocol || ''))?.address || v.address,
         tvl: v.tvlFormatted || live.tvlFormatted || "N/A",
         isLiveData: live.source === "defiLlama",
         defillamaPool: live.defillamaPool || null,
@@ -103,6 +109,18 @@ const mapVeniceToStrategy = (veniceResult, amount, risk) => {
   });
   const blended = agents.reduce((acc, a) => acc + Number(a.vault.apy) * (a.allocation / total), 0);
   return { agents, total, blendedApy: blended.toFixed(1), risk, rationale: veniceResult.strategy_summary || veniceResult.rationale };
+};
+
+// Worker monitoring list from ALL held positions (not just the latest strategy), enriched
+// with protocol/APY meta from the current strategy first, then the static catalog — so the
+// background agent keeps watching earlier deposits after a new one is added.
+const buildActiveVaults = (positions, strategy) => {
+  const meta = {};
+  (strategy?.agents || []).forEach((a) => { meta[a.vault.addr.toLowerCase()] = { name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }; });
+  VAULT_CATALOG.forEach((v) => { const k = v.address.toLowerCase(); if (!meta[k]) meta[k] = { name: v.name, protocol: v.protocol, depositApy: Number(v.apy) }; });
+  return Object.entries(positions || {})
+    .map(([address, p]) => { const m = meta[address.toLowerCase()] || {}; return { address, name: p.vaultName || m.name, protocol: m.protocol, depositApy: m.depositApy || 0 }; })
+    .filter((v) => v.protocol);
 };
 
 /* ---------- App ---------- */
@@ -128,6 +146,9 @@ const App = () => {
   const genAbortRef = useR(null);
   const slowTimerRef = useR(null);
   const [strategy, setStrategy] = useS(null);
+  const [rawStrategy, setRawStrategy] = useS(null); // raw Venice result (carries strategyHash) for on-chain attestation
+  const [strategyAttestation, setStrategyAttestation] = useS(null);
+  const [attesting, setAttesting] = useS(false);
   const [skillSource, setSkillSource] = useS("default");
   const [marketLive, setMarketLive] = useS(null); // Tavily live market context used? null until first generation
   const [vaultLive, setVaultLive] = useS(null); // DeFiLlama live vault data used? null until first generation
@@ -164,6 +185,23 @@ const App = () => {
   const [realAddress, setRealAddress] = useS(null);
   const [permContext, setPermContext] = useS(null);
   const [veniceAuth, setVeniceAuth] = useS(null);
+  const [mmVersion, setMmVersion] = useS(null); // MetaMask flavor/version — Flask detection (once on mount)
+  const [onboarded, setOnboarded] = useS(() => localStorage.getItem('yv_onboarded') === 'true');
+
+  // Detect MetaMask flavor/version once on mount — Flask gate for ERC-7715.
+  useE(() => { detectMetaMaskVersion().then(setMmVersion); }, []);
+
+  // Strategy Attestation — NON-BLOCKING, best-effort. Fires once a wallet provider
+  // exists (post-connect) and the AI strategy carries a deterministic hash. Any
+  // failure/rejection is swallowed by attestStrategyOnChain → strategy still executes.
+  useE(() => {
+    const provider = getProvider();
+    if (!rawStrategy?.strategyHash || !provider || strategyAttestation || attesting) return;
+    setAttesting(true);
+    attestStrategyOnChain(rawStrategy, provider)
+      .then((a) => setStrategyAttestation(formatAttestation(a)))
+      .finally(() => setAttesting(false));
+  }, [rawStrategy, realAddress]);
 
   // Background agent
   const [agentEnabled, setAgentEnabled] = useS(() => localStorage.getItem('yv_agent_enabled') !== 'false');
@@ -237,8 +275,10 @@ const App = () => {
     reconcilePositionsFromChain(realAddress)
       .then((chain) => {
         if (!alive || !chain) return; // null = no RPC / all reads failed → keep cache
-        persistPositions(realAddress, chain); // authoritative write (incl. empty)
-        setAgentData((d) => ({ ...d, positions: chain, lastUpdated: Date.now() }));
+        // Merge, never replace: on-chain truth updates/adds vaults but can't wipe seeded
+        // positions whose deposits are simulated or not yet mined (chain reads them as 0).
+        // The persist effect writes the merged result, so an empty chain can't clobber cache.
+        setAgentData((d) => ({ ...d, positions: mergePositions(d.positions, chain), lastUpdated: Date.now() }));
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -252,6 +292,54 @@ const App = () => {
     persistPositions(realAddress, agentData.positions);
   }, [agentData.positions, realAddress]);
 
+  // Event-driven sync: re-read chain the instant a real Deposit/Withdraw lands for this
+  // user — no waiting on the worker's poll. Debounced so a burst of parallel deposits
+  // collapses into ONE reconcile. Listens + reads via the dedicated read-only provider
+  // (getReadProvider) — never the wallet's BrowserProvider, which -32603s while a
+  // wallet_* RPC is pending. applyChainPositions is authoritative (can lower on
+  // withdraw), unlike the raise-only connect-time merge that protects simulated seeds.
+  useE(() => {
+    if (!realAddress) return;
+    const provider = getReadProvider();
+    const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, provider);
+    let timer = null;
+    const sync = async () => {
+      const chain = await reconcilePositionsFromChain(realAddress);
+      if (!chain) return;
+      setAgentData((d) => ({ ...d, positions: applyChainPositions(d.positions, chain), lastUpdated: Date.now() }));
+    };
+    const onEvent = () => { clearTimeout(timer); timer = setTimeout(sync, 1500); };
+    const depFilter = contract.filters.DepositExecuted(null, realAddress); // (agentId, user, ...)
+    const wdFilter = contract.filters.WithdrawExecuted(realAddress);       // (user, ...)
+
+    // Capture deposit event to save amounts (each internal call's amount tracked separately)
+    const onDepositEvent = (agentId, user, vault, amount, shares, event) => {
+      const vaultMeta = VAULT_CATALOG.find(v => v.address.toLowerCase() === vault.toLowerCase());
+      const amountUsdc = Number(amount) / 1e6;
+      if (amountUsdc > 0) {
+        saveTransaction({
+          txHash: event.transactionHash,
+          vaultName: vaultMeta?.name || `Vault ${vault.slice(0, 6)}…`,
+          vaultAddress: vault,
+          protocol: vaultMeta?.protocol,
+          apy: vaultMeta?.apy,
+          amountUsdc,
+          workerLabel: vaultMeta?.name || `Vault ${vault.slice(0, 10)}…`,
+          network: 'sepolia',
+        });
+      }
+      onEvent(); // Also trigger position sync after 1.5s debounce
+    };
+
+    contract.on(depFilter, onDepositEvent);
+    contract.on(wdFilter, onEvent);
+    return () => {
+      clearTimeout(timer);
+      contract.off(depFilter, onDepositEvent);
+      contract.off(wdFilter, onEvent);
+    };
+  }, [realAddress]);
+
   useE(() => { localStorage.setItem('yv_agent_enabled', String(agentEnabled)); }, [agentEnabled]);
   useE(() => { localStorage.setItem('yv_agent_settings', JSON.stringify(agentSettings)); }, [agentSettings]);
   // Push threshold changes live (no worker restart → avoids polling churn on each keystroke)
@@ -259,7 +347,7 @@ const App = () => {
 
   const handleAgentEvent = (ev) => {
     if (ev.kind === 'position') {
-      setAgentData((d) => ({ ...d, lastUpdated: ev.timestamp, positions: { ...d.positions, [ev.vaultAddress]: { vaultName: ev.vaultName, balance: ev.balance, unclaimedRewards: ev.unclaimedRewards } } }));
+      setAgentData((d) => ({ ...d, lastUpdated: ev.timestamp, positions: mergePositions(d.positions, { [ev.vaultAddress]: { vaultName: ev.vaultName, balance: ev.balance, unclaimedRewards: ev.unclaimedRewards } }) }));
       return;
     }
     if (ev.kind === 'harvest_executed') {
@@ -271,7 +359,7 @@ const App = () => {
     const key = `${ev.kind}:${ev.vaultAddress || ev.vaultName || ''}`;
     const id = `${key}:${ev.timestamp || Date.now()}`;
     setAgentData((d) => ({ ...d, alerts: [{ id, ...ev }, ...d.alerts.filter((a) => `${a.kind}:${a.vaultAddress || a.vaultName || ''}` !== key)].slice(0, 8) }));
-    const detail = ev.kind === 'rebalance_proposal' ? `Venice AI flagged ${ev.toProtocol} at ${ev.toApy}% vs your ${ev.fromVault} at ${ev.fromApy}% — capture +${ev.apyGain}% by rebalancing.`
+    const detail = ev.kind === 'rebalance_proposal' ? `Venice AI flagged ${ev.toProtocol} at ${ev.toApy}% vs your ${ev.fromVault} at ${ev.fromApy}% · capture +${ev.apyGain}% by rebalancing.`
       : ev.kind === 'risk_alert' ? `Severity ${ev.severity} · classified by Venice AI. Signal on ${ev.vaultName}. Action: alert surfaced, awaiting your decision.`
       : ev.kind === 'apy_drift' ? `APY on ${ev.vaultName} dropped to ${ev.currentApy}% (from ${ev.baselineApy}%, ${ev.driftPct}%).`
       : ev.kind === 'harvest_ready' ? `${ev.rewardsUsdc} USDC accrued on ${ev.vaultName} · ready to claim.` : '';
@@ -281,7 +369,10 @@ const App = () => {
   // Start after deposit (positions exist), stop on disable / disconnect / leaving 'done'
   useE(() => {
     if (stage !== 'done' || !agentEnabled || !realAddress || !strategy?.agents?.length) return;
-    const activeVaults = strategy.agents.map((a) => ({ address: a.vault.addr, name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }));
+    // Monitor EVERY held position (accumulated across deposits), not just the latest
+    // strategy — otherwise a new deposit would stop the agent watching earlier vaults.
+    let activeVaults = buildActiveVaults(agentData.positions, strategy);
+    if (!activeVaults.length) activeVaults = strategy.agents.map((a) => ({ address: a.vault.addr, name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }));
     startBackgroundAgent({
       userAddress: realAddress,
       activeVaults,
@@ -346,6 +437,8 @@ const App = () => {
     let cancelled = false;
     setThinkTimes([]);
     setThinkingPhase(0);
+    setStrategyAttestation(null);
+    setRawStrategy(null);
     const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     const freeze = (i, st) => setThinkTimes((a) => { const n = [...a]; n[i] = (performance.now() - st) / 1000; return n; });
 
@@ -380,6 +473,7 @@ const App = () => {
         setSkillSource(veniceResult.skillSource || "default");
         setMarketLive(!!veniceResult.marketContextUsed);
         setVaultLive(veniceResult.vaultDataSource === "defiLlama");
+        setRawStrategy(veniceResult); // carries strategyHash → attestation effect picks it up once a provider exists
         if (veniceResult.generatedBy !== "fallback") {          s = mapVeniceToStrategy(veniceResult, amount, risk);
           addLog({ event: "OrchestratorPlanned", meta: `strategy via ${veniceResult.generatedBy} · ${(veniceResult.strategy_summary || veniceResult.rationale)?.slice(0, 60)}` });
         }
@@ -717,23 +811,52 @@ const App = () => {
   };
 
   /* ----- DONE (step 06) ----- */
-  const handleExecDone = () => {
+  const handleExecDone = async () => {
     setStage("done");
-    // Seed positions from confirmed workers so AgentDashboard is populated immediately
-    // without waiting for the background agent's first 5-minute poll.
-    // Background agent overwrites these with real on-chain balances on first check.
+    // Allocation-based FALLBACK only — used when the chain read is unavailable (no RPC)
+    // or a vault reads 0 (simulated relay / deposit not yet mined). Stored in raw token
+    // units (allocation USDC * 1e6); the display layer divides by 1e6.
     const seedPositions = {};
     (strategy?.agents || []).forEach((a) => {
       if (execMap[a.id]?.status === 'confirmed') {
-        seedPositions[a.vault.addr] = {
+        const addr = a.vault.addr;
+        const prev = seedPositions[addr];
+        const prevBal = BigInt(prev?.balance || '0');
+        const newBal = BigInt(Math.round(a.allocation * 1e6));
+        seedPositions[addr] = {
           vaultName: a.vault.name,
-          balance: String(Math.round(a.allocation * 1e6)),
-          unclaimedRewards: '0',
+          balance: (prevBal + newBal).toString(), // sum if multiple agents target same vault
+          unclaimedRewards: prev?.unclaimedRewards || '0',
         };
       }
     });
-    if (Object.keys(seedPositions).length > 0) {
-      setAgentData((d) => ({ ...d, positions: { ...d.positions, ...seedPositions }, lastUpdated: Date.now() }));
+    // SOURCE OF TRUTH: actual on-chain balanceOf -> convertToAssets (raw units).
+    // If chain is available, use authoritative balances (can move up or down).
+    // If chain unavailable (simulated relay / not yet mined), ADD seed into existing
+    // positions — these are confirmed new deposits, so we sum, not take max.
+    let chain = null;
+    try { chain = await reconcilePositionsFromChain(realAddress); } catch { /* keep seed */ }
+    if (chain) {
+      const finalPositions = mergePositions(seedPositions, chain);
+      if (Object.keys(finalPositions).length > 0) {
+        setAgentData((d) => ({ ...d, positions: applyChainPositions(d.positions, finalPositions), lastUpdated: Date.now() }));
+      }
+    } else if (Object.keys(seedPositions).length > 0) {
+      // Simulated path: sum new allocations into existing positions
+      setAgentData((d) => {
+        const positions = { ...(d.positions || {}) };
+        for (const [addr, pos] of Object.entries(seedPositions)) {
+          const key = Object.keys(positions).find((k) => k.toLowerCase() === addr.toLowerCase()) || addr;
+          const curBal = BigInt(positions[key]?.balance || '0');
+          const newBal = BigInt(pos.balance || '0');
+          positions[key] = {
+            vaultName: pos.vaultName,
+            unclaimedRewards: positions[key]?.unclaimedRewards || pos.unclaimedRewards || '0',
+            balance: (curBal + newBal).toString(),
+          };
+        }
+        return { ...d, positions, lastUpdated: Date.now() };
+      });
     }
     addLog({ event: "OrchestratorPlanned", meta: `multi-agent deployment finalized · ${strategy?.agents?.length} positions opened` });
   };
@@ -745,6 +868,9 @@ const App = () => {
     setStrategyPhase("input");
     setThinkingPhase(0);
     setStrategy(null);
+    setRawStrategy(null);
+    setStrategyAttestation(null);
+    setAttesting(false);
     setSkillStates({});
     setEditingTexts({});
     setConnectPhase("idle");
@@ -839,9 +965,9 @@ const App = () => {
           return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} onSubmit={handleSubmitPreference} />;
         if (strategyPhase === "thinking")
           return <ThinkingCard phase={thinkingPhase} times={thinkTimes} />;
-        return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} />;
+        return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} strategyHash={rawStrategy?.strategyHash} attestation={strategyAttestation} attesting={attesting} />;
       case "connect":
-        return <ConnectCard phase={connectPhase} error={connectError} onConnect={handleConnect} onUpgrade={handleUpgrade} onDone={handleConnectDone} onCancel={() => { setConnectPhase("idle"); setStage("strategy"); }} />;
+        return <ConnectCard phase={connectPhase} error={connectError} mmVersion={mmVersion} onConnect={handleConnect} onUpgrade={handleUpgrade} onDone={handleConnectDone} onCancel={() => { setConnectPhase("idle"); setStage("strategy"); }} />;
       case "skills":
         return (
           <SkillReviewCard
@@ -855,6 +981,8 @@ const App = () => {
           />
         );
       case "permission":
+        if (mmVersion && !mmVersion.supportsERC7715)
+          return <FlaskGate detectedType={mmVersion.type} onRetry={() => detectMetaMaskVersion().then(setMmVersion)} />;
         return <PermissionCard strategy={strategy} phase={permPhase} error={permError} onGrant={handleGrant} onConfirm={handlePermConfirm} onReject={handlePermReject} />;
       case "execute":
         return (
@@ -880,6 +1008,19 @@ const App = () => {
   // APY/meta per vault for the agent dashboard (positions events don't carry APY)
   const agentVaultMeta = {};
   (strategy?.agents || []).forEach((a) => { agentVaultMeta[a.vault.addr.toLowerCase()] = { apy: Number(a.vault.apy), protocol: a.vault.protocol }; });
+
+  // APY-first onboarding — full-screen takeover for first-time users (not yet onboarded).
+  // Screen 1 (value prop, no wallet) → connect → Screen 2 (how it works) → main app.
+  // "Skip intro" or "Got it" persists yv_onboarded=true so it never shows again.
+  if (!onboarded) {
+    return (
+      <OnboardingFlow
+        connected={!!realAddress}
+        onConnect={handleConnect}
+        onComplete={() => { localStorage.setItem('yv_onboarded', 'true'); setOnboarded(true); }}
+      />
+    );
+  }
 
   return (
     <div className={`app ${sbExtended ? 'sb-extended' : 'sb-minimized'} ${railCollapsed ? 'rail-collapsed' : ''}`}>
@@ -992,7 +1133,7 @@ const App = () => {
         <div className="modal-backdrop">
           <div className="modal" role="dialog" aria-modal="true">
             <div className="modal-eyebrow">AI · timeout</div>
-            <h3 className="modal-title">AI is still processing — continue waiting?</h3>
+            <h3 className="modal-title">AI is still processing · continue waiting?</h3>
             <p className="lede" style={{ marginTop: 8 }}>
               Generation has exceeded {Math.round(VENICE_TIMEOUT_MS / 1000)} seconds. Do you want to keep waiting or use the default strategy instead?
             </p>

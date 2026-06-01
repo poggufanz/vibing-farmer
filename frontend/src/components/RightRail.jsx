@@ -14,7 +14,7 @@ const WalletPanel = ({ phase, address }) => {
           <div className="panel-title">Wallet</div>
           <span className="panel-meta">not connected</span>
         </div>
-        <div className="empty">— belum connect</div>
+        <div className="empty">not connected yet</div>
       </div>
     );
   }
@@ -69,7 +69,7 @@ const PermissionPanel = ({ active, strategy, onRevoke, expiresAt }) => {
         <span className="panel-meta">erc-7715 · batch</span>
       </div>
       <div className={`perm-status ${active ? "active" : ""}`}>
-        {active ? `${agents.length} permission · ${fmtRemaining(expiresAt) || '—'}` : "no active permission"}
+        {active ? `${agents.length} permission · ${fmtRemaining(expiresAt) || '-'}` : "no active permission"}
       </div>
       {active && agents.length > 0 && (
         <>

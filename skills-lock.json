@@ -42,6 +42,12 @@
       "skillPath": "skills/build-graph/SKILL.md",
       "computedHash": "ae4760f61632866c69df9bdf6ecf54d1444a3e6bea012310e122d9175f3bd813"
     },
+    "code-review": {
+      "source": "anthropics/knowledge-work-plugins",
+      "sourceType": "github",
+      "skillPath": "engineering/skills/code-review/SKILL.md",
+      "computedHash": "2b1ac29c8d03ecdd6dbb9d0ebc8cdb05965151bedceed36f262546785b3123bc"
+    },
     "cognitive-fluency-psychology": {
       "source": "flpbalada/my-opencode-config",
       "sourceType": "github",
@@ -61,6 +67,12 @@
       "source": "softaworks/agent-toolkit",
       "sourceType": "github",
       "computedHash": "f23c909d45c6207e974dbce0db4c648de13d586abb37057cfec34d62f25bb526"
+    },
+    "design-taste-frontend": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "skillPath": "skills/taste-skill/SKILL.md",
+      "computedHash": "899b84384f74f540ea5284d9b2e9234e050998b42eacc805410b518d4226c0b3"
     },
     "docs-generator": {
       "source": "poggufanz/docs-generator-skill",

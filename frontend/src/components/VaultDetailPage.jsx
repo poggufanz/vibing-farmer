@@ -11,7 +11,7 @@ const short = (a) => (a ? `${a.slice(0, 10)}…${a.slice(-8)}` : '')
 
 const backBtn = { appearance: 'none', border: 0, background: 'transparent', font: 'inherit', fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }
 const divider = { borderTop: '1px solid var(--border)', margin: '20px 0' }
-const sectionLabel = { fontSize: 9.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.06em', fontFamily: 'var(--font-mono)' }
+const sectionLabel = { fontSize: 9.5, color: 'var(--text-faint)', textTransform: 'lowercase', letterSpacing: '-0.01em', fontFamily: 'var(--font-mono)' }
 const metricCard = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '10px 12px' }
 const pillBtn = { appearance: 'none', border: '.5px solid rgba(255,255,255,.18)', borderRadius: 5, background: 'rgba(255,255,255,.06)', color: 'inherit', font: 'inherit', fontSize: 10.5, padding: '4px 9px', cursor: 'pointer' }
 const extLink = { color: 'var(--text-muted)', fontSize: 11, textDecoration: 'underline' }
@@ -55,7 +55,7 @@ export default function VaultDetailPage({ positions = {} }) {
   }
 
   const apy = liveData?.apy ?? catalog.apy
-  const tvl = liveData?.tvlFormatted ?? '—'
+  const tvl = liveData?.tvlFormatted ?? '-'
   const riskColor = catalog.risk === 'low' ? 'var(--ok)' : catalog.risk === 'medium' ? '#f59e0b' : '#f97316'
 
   // User position — match by contract address
@@ -76,7 +76,7 @@ export default function VaultDetailPage({ positions = {} }) {
       <button onClick={() => { if (window.history.length > 1) window.history.back(); else navigateTo('home'); }} style={backBtn}>← Back to Vaults</button>
 
       <div style={{ marginTop: 22 }}>
-        <span className="mono" style={{ fontSize: 10, color: 'var(--text-faint)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--text-faint)', letterSpacing: '-0.01em', textTransform: 'lowercase' }}>
           {protocol}
         </span>
       </div>
@@ -94,7 +94,7 @@ export default function VaultDetailPage({ positions = {} }) {
           { label: 'Yield Source', value: catalog.yield_source },
         ].map(({ label, value, color }) => (
           <div key={label} style={metricCard}>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--text-faint)', textTransform: 'lowercase', letterSpacing: '-0.01em', marginBottom: 6 }}>
               {label}
             </div>
             <div style={{ fontSize: 13, fontWeight: 500, color: color || 'inherit' }}>{value}</div>
@@ -127,7 +127,7 @@ export default function VaultDetailPage({ positions = {} }) {
         <div style={sectionLabel}>RISK PROFILE</div>
         <div style={{ fontSize: 13, marginTop: 8, lineHeight: 1.55, color: 'var(--text-muted)' }}>
           <span style={{ color: riskColor, fontWeight: 500 }}>{catalog.risk}</span>
-          {' — '}
+          {' · '}
           {catalog.description}
           {catalog.drawdown && (
             <span style={{ color: 'var(--text-faint)' }}>
