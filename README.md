@@ -64,7 +64,6 @@ Agent Memory + vis.js Graph (real-time)
 | **Swarm Visualization** | vis.js Network Graph, React Force Graph 2D |
 | **Network & Wallet** | MetaMask Flask 13.9+, Ethereum Sepolia (EIP-7702 & ERC-7715) |
 
-
 ---
 
 ## Quick Start
