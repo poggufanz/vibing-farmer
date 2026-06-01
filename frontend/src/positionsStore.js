@@ -8,6 +8,7 @@
 
 import { ethers } from 'ethers'
 import { VAULT_CATALOG, VAULT_ABI } from './config.js'
+import { getReadProvider } from './readProvider.js'
 
 const keyFor = (addr) => `yv_positions_${String(addr).toLowerCase()}`
 
@@ -34,20 +35,15 @@ export function persistPositions(address, positions) {
 /**
  * Reconcile positions against chain. Reads balanceOf + convertToAssets per unique
  * vault. Returns a positions map ({ [vaultAddr]: { vaultName, balance, unclaimedRewards } })
- * containing only non-zero balances, or null when no RPC is configured / all reads fail.
+ * containing only non-zero balances, or null when all reads fail.
  *
+ * Reads go through the dedicated read-only provider (getReadProvider) — NEVER the
+ * wallet's BrowserProvider, which throws -32603 while a wallet_* RPC is pending.
  * Never throws — per-vault failures are isolated via Promise.allSettled.
  */
 export async function reconcilePositionsFromChain(address) {
-  const rpc = import.meta.env.VITE_RPC_URL
-  if (!address || !rpc) return null
-
-  let provider
-  try {
-    provider = new ethers.JsonRpcProvider(rpc)
-  } catch {
-    return null
-  }
+  if (!address) return null
+  const provider = getReadProvider()
 
   // Unique vault addresses (catalog maps multiple protocols to shared MockVaults).
   const seen = new Set()
@@ -86,4 +82,35 @@ export async function reconcilePositionsFromChain(address) {
   // If every read failed, return null so callers keep the cached snapshot instead
   // of wiping it with a falsely-empty result.
   return anyOk ? positions : null
+}
+
+
+// Merge position maps keyed by vault address (case-insensitive). Balances only ever
+// INCREASE via merge — withdraw handlers are the only path that lowers them. Idempotent:
+// re-running with the same seed (e.g. re-visiting "done") can't double or drop a balance,
+// and a worker's on-chain 0 (simulated/unmined deposit) can't wipe a seeded position.
+export function mergePositions(prev, incoming) {
+  const merged = { ...(prev || {}) }
+  for (const [addr, pos] of Object.entries(incoming || {})) {
+    if (!pos) continue
+    const key = Object.keys(merged).find((k) => k.toLowerCase() === addr.toLowerCase()) || addr
+    const curBal = BigInt(merged[key]?.balance || '0')
+    const newBal = BigInt(pos.balance || '0')
+    merged[key] = { ...merged[key], ...pos, balance: (newBal > curBal ? newBal : curBal).toString() }
+  }
+  return merged
+}
+
+// Authoritatively apply on-chain positions over the current map: REPLACES balances for
+// returned vaults (can move down, e.g. after a withdraw) but leaves untracked vaults
+// untouched. Use only when chain is proven-current — e.g. right after a Deposit/Withdraw
+// event — never for speculative/seeded values.
+export function applyChainPositions(prev, chain) {
+  const positions = { ...(prev || {}) }
+  for (const [addr, pos] of Object.entries(chain || {})) {
+    if (!pos) continue
+    const key = Object.keys(positions).find((k) => k.toLowerCase() === addr.toLowerCase()) || addr
+    positions[key] = { ...positions[key], ...pos }
+  }
+  return positions
 }

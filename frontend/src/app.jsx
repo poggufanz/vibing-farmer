@@ -19,6 +19,7 @@ import {
   useTweaks, TweaksPanel, TweakSection, TweakRadio,
 } from './tweaks-panel.jsx';
 
+import { ethers } from 'ethers';
 import { connectWallet, requestERC7715Permission, signSiweForVenice, switchToSepolia, getProvider } from './wallet.js';
 import { generateStrategy } from './venice.js';
 import { attestStrategyOnChain, formatAttestation } from './attestation.js';
@@ -27,8 +28,9 @@ import FlaskGate from './components/FlaskGate.jsx';
 import OnboardingFlow from './components/OnboardingFlow.jsx';
 import { OrchestratorAgent } from './orchestrator.js';
 import { makeAgentId } from './worker.js';
-import { VAULT_CATALOG, VENICE_TIMEOUT_MS } from './config.js';
-import { loadPersistedPositions, persistPositions, reconcilePositionsFromChain } from './positionsStore.js';
+import { VAULT_CATALOG, VENICE_TIMEOUT_MS, AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI } from './config.js';
+import { loadPersistedPositions, persistPositions, reconcilePositionsFromChain, mergePositions, applyChainPositions } from './positionsStore.js';
+import { getReadProvider } from './readProvider.js';
 import SkillDrawer from './components/SkillDrawer.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
 import { saveTransaction } from './history.js';
@@ -107,6 +109,18 @@ const mapVeniceToStrategy = (veniceResult, amount, risk) => {
   });
   const blended = agents.reduce((acc, a) => acc + Number(a.vault.apy) * (a.allocation / total), 0);
   return { agents, total, blendedApy: blended.toFixed(1), risk, rationale: veniceResult.strategy_summary || veniceResult.rationale };
+};
+
+// Worker monitoring list from ALL held positions (not just the latest strategy), enriched
+// with protocol/APY meta from the current strategy first, then the static catalog — so the
+// background agent keeps watching earlier deposits after a new one is added.
+const buildActiveVaults = (positions, strategy) => {
+  const meta = {};
+  (strategy?.agents || []).forEach((a) => { meta[a.vault.addr.toLowerCase()] = { name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }; });
+  VAULT_CATALOG.forEach((v) => { const k = v.address.toLowerCase(); if (!meta[k]) meta[k] = { name: v.name, protocol: v.protocol, depositApy: Number(v.apy) }; });
+  return Object.entries(positions || {})
+    .map(([address, p]) => { const m = meta[address.toLowerCase()] || {}; return { address, name: p.vaultName || m.name, protocol: m.protocol, depositApy: m.depositApy || 0 }; })
+    .filter((v) => v.protocol);
 };
 
 /* ---------- App ---------- */
@@ -261,8 +275,10 @@ const App = () => {
     reconcilePositionsFromChain(realAddress)
       .then((chain) => {
         if (!alive || !chain) return; // null = no RPC / all reads failed → keep cache
-        persistPositions(realAddress, chain); // authoritative write (incl. empty)
-        setAgentData((d) => ({ ...d, positions: chain, lastUpdated: Date.now() }));
+        // Merge, never replace: on-chain truth updates/adds vaults but can't wipe seeded
+        // positions whose deposits are simulated or not yet mined (chain reads them as 0).
+        // The persist effect writes the merged result, so an empty chain can't clobber cache.
+        setAgentData((d) => ({ ...d, positions: mergePositions(d.positions, chain), lastUpdated: Date.now() }));
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -276,6 +292,30 @@ const App = () => {
     persistPositions(realAddress, agentData.positions);
   }, [agentData.positions, realAddress]);
 
+  // Event-driven sync: re-read chain the instant a real Deposit/Withdraw lands for this
+  // user — no waiting on the worker's poll. Debounced so a burst of parallel deposits
+  // collapses into ONE reconcile. Listens + reads via the dedicated read-only provider
+  // (getReadProvider) — never the wallet's BrowserProvider, which -32603s while a
+  // wallet_* RPC is pending. applyChainPositions is authoritative (can lower on
+  // withdraw), unlike the raise-only connect-time merge that protects simulated seeds.
+  useE(() => {
+    if (!realAddress) return;
+    const provider = getReadProvider();
+    const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, provider);
+    let timer = null;
+    const sync = async () => {
+      const chain = await reconcilePositionsFromChain(realAddress);
+      if (!chain) return;
+      setAgentData((d) => ({ ...d, positions: applyChainPositions(d.positions, chain), lastUpdated: Date.now() }));
+    };
+    const onEvent = () => { clearTimeout(timer); timer = setTimeout(sync, 1500); };
+    const depFilter = contract.filters.DepositExecuted(null, realAddress); // (agentId, user, ...)
+    const wdFilter = contract.filters.WithdrawExecuted(realAddress);       // (user, ...)
+    contract.on(depFilter, onEvent);
+    contract.on(wdFilter, onEvent);
+    return () => { clearTimeout(timer); contract.off(depFilter, onEvent); contract.off(wdFilter, onEvent); };
+  }, [realAddress]);
+
   useE(() => { localStorage.setItem('yv_agent_enabled', String(agentEnabled)); }, [agentEnabled]);
   useE(() => { localStorage.setItem('yv_agent_settings', JSON.stringify(agentSettings)); }, [agentSettings]);
   // Push threshold changes live (no worker restart → avoids polling churn on each keystroke)
@@ -283,7 +323,7 @@ const App = () => {
 
   const handleAgentEvent = (ev) => {
     if (ev.kind === 'position') {
-      setAgentData((d) => ({ ...d, lastUpdated: ev.timestamp, positions: { ...d.positions, [ev.vaultAddress]: { vaultName: ev.vaultName, balance: ev.balance, unclaimedRewards: ev.unclaimedRewards } } }));
+      setAgentData((d) => ({ ...d, lastUpdated: ev.timestamp, positions: mergePositions(d.positions, { [ev.vaultAddress]: { vaultName: ev.vaultName, balance: ev.balance, unclaimedRewards: ev.unclaimedRewards } }) }));
       return;
     }
     if (ev.kind === 'harvest_executed') {
@@ -305,7 +345,10 @@ const App = () => {
   // Start after deposit (positions exist), stop on disable / disconnect / leaving 'done'
   useE(() => {
     if (stage !== 'done' || !agentEnabled || !realAddress || !strategy?.agents?.length) return;
-    const activeVaults = strategy.agents.map((a) => ({ address: a.vault.addr, name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }));
+    // Monitor EVERY held position (accumulated across deposits), not just the latest
+    // strategy — otherwise a new deposit would stop the agent watching earlier vaults.
+    let activeVaults = buildActiveVaults(agentData.positions, strategy);
+    if (!activeVaults.length) activeVaults = strategy.agents.map((a) => ({ address: a.vault.addr, name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }));
     startBackgroundAgent({
       userAddress: realAddress,
       activeVaults,
@@ -744,11 +787,11 @@ const App = () => {
   };
 
   /* ----- DONE (step 06) ----- */
-  const handleExecDone = () => {
+  const handleExecDone = async () => {
     setStage("done");
-    // Seed positions from confirmed workers so AgentDashboard is populated immediately
-    // without waiting for the background agent's first 5-minute poll.
-    // Background agent overwrites these with real on-chain balances on first check.
+    // Allocation-based FALLBACK only — used when the chain read is unavailable (no RPC)
+    // or a vault reads 0 (simulated relay / deposit not yet mined). Stored in raw token
+    // units (allocation USDC * 1e6); the display layer divides by 1e6.
     const seedPositions = {};
     (strategy?.agents || []).forEach((a) => {
       if (execMap[a.id]?.status === 'confirmed') {
@@ -759,8 +802,13 @@ const App = () => {
         };
       }
     });
-    if (Object.keys(seedPositions).length > 0) {
-      setAgentData((d) => ({ ...d, positions: { ...d.positions, ...seedPositions }, lastUpdated: Date.now() }));
+    // SOURCE OF TRUTH: actual on-chain balanceOf -> convertToAssets (raw units). merge keeps
+    // the larger value, so real holdings (incl. prior deposits) win over the allocation seed.
+    let chain = null;
+    try { chain = await reconcilePositionsFromChain(realAddress); } catch { /* keep seed */ }
+    const finalPositions = chain ? mergePositions(seedPositions, chain) : seedPositions;
+    if (Object.keys(finalPositions).length > 0) {
+      setAgentData((d) => ({ ...d, positions: mergePositions(d.positions, finalPositions), lastUpdated: Date.now() }));
     }
     addLog({ event: "OrchestratorPlanned", meta: `multi-agent deployment finalized · ${strategy?.agents?.length} positions opened` });
   };

@@ -1,6 +1,7 @@
 import { ethers } from 'ethers'
 import { SEPOLIA_CHAIN_ID_HEX, AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, VAULT_ABI, USDC_SEPOLIA } from './config.js'
 import { requireFlask } from './flaskDetect.js'
+import { getReadProvider } from './readProvider.js'
 
 let ethersProvider = null
 let account = null
@@ -165,7 +166,7 @@ export async function executeHarvestOnChain(agentId, user, vault, recompound) {
 export async function readVaultDepositTimestamp(vault, user) {
   if (!ethersProvider) return 0
   try {
-    const contract = new ethers.Contract(vault, VAULT_ABI, ethersProvider)
+    const contract = new ethers.Contract(vault, VAULT_ABI, getReadProvider())
     return Number(await contract.depositTimestamp(user))
   } catch { return 0 }
 }
@@ -214,7 +215,7 @@ export async function batchCalls(calls) {
  */
 export async function readAgentPermission(userAddress, agentId) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
-  const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, ethersProvider)
+  const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, getReadProvider())
   const [vault, maxAmount, usedAmount, expiresAt, active] =
     await contract.agentPermissions(userAddress, agentId)
   return { vault, maxAmount, usedAmount, expiresAt, active }
