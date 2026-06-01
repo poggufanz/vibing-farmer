@@ -65,7 +65,7 @@ export async function fetchDeFiLlamaVaults() {
         supportedProtocols.includes(pool.project) &&
         pool.tvlUsd > 1_000_000 && // min $1M TVL — filter dust pools
         pool.apy > 0 &&
-        !pool.ilRisk // exclude pools with impermanent loss risk
+        pool.ilRisk !== 'yes' // exclude IL-risk pools; API returns "no"/"yes" (not bool)
       )
       .sort((a, b) => b.tvlUsd - a.tvlUsd) // sort by TVL descending
       .slice(0, 6) // take top 6 by TVL
