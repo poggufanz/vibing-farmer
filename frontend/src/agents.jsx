@@ -509,7 +509,7 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
       <div className="exec-header">
         <div>
           <h1 className="h-display" style={{ fontSize: 30, marginTop: 6 }}>
-            {strategy.agents.length} agents running in parallel · orchestrated seamlessly.
+            {strategy.agents.length} agents executing in parallel.
           </h1>
           <p className="lede" style={{ marginTop: 10, maxWidth: 540 }}>
             Each worker executes the skills you approved: <span className="mono">swap → approve → deposit</span>.
