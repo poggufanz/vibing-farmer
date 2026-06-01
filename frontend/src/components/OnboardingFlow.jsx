@@ -33,8 +33,8 @@ function ValueScreen({ vaults, histories, onConnect }) {
         <h1 className="h-display" style={{ marginTop: 22, fontSize: 30 }}>Your USDC. Earning yield.</h1>
         <p className="lede" style={{ margin: '8px auto 0' }}>Zero gas. One permission.</p>
 
-        <div className="mono" style={{ fontSize: 11, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.06em', margin: '28px 0 10px', textAlign: 'left' }}>
-          Live vault rates right now
+        <div className="mono" style={{ fontSize: 11, color: 'var(--text-faint)', textTransform: 'lowercase', letterSpacing: '-0.01em', margin: '28px 0 10px', textAlign: 'left' }}>
+          live vault rates right now
         </div>
         <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
           {vaults.map((v, i) => {

@@ -29,7 +29,7 @@ const formatTime = (ts, now = Date.now()) => {
 const SEED = VAULT_CATALOG.map((v) => ({ name: v.name, protocol: v.protocol, apy: v.apy, tvlFormatted: null, source: 'fallback' }))
 let pulseCache = null // module-level: survives nav remount within a session
 
-const eyebrow = { fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: '.06em', color: 'var(--text-faint)', textTransform: 'uppercase' }
+const eyebrow = { fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: '-0.01em', color: 'var(--text-faint)', textTransform: 'lowercase' }
 const linkBtn = { appearance: 'none', border: 0, background: 'transparent', font: 'inherit', fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }
 const card = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }
 const cardPad = { ...card, padding: '16px 18px' }
@@ -413,7 +413,7 @@ export default function HomePage({
                 {/* Column headers */}
                 <div style={{ display: 'grid', gridTemplateColumns: GRID_COLS, gap: 8, padding: '7px 18px', borderBottom: '1px solid var(--border)' }}>
                   {['Vault', 'Protocol', 'APY', 'Trend', 'TVL', 'Risk', 'Action'].map((h) => (
-                    <span key={h} className="mono" style={{ fontSize: 9.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.08em' }}>{h}</span>
+                    <span key={h} className="mono" style={{ fontSize: 9.5, color: 'var(--text-faint)', textTransform: 'lowercase', letterSpacing: '-0.01em' }}>{h}</span>
                   ))}
                 </div>
 

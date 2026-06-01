@@ -12,7 +12,7 @@ import { getHistorySummary, clearTransactions, clearStrategies, clearReasoningLo
 import { fmtRemaining } from '../ui.js'
 
 const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '-')
-const eyebrow = { fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: '.06em', color: 'var(--text-faint)', textTransform: 'uppercase' }
+const eyebrow = { fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: '-0.01em', color: 'var(--text-faint)', textTransform: 'lowercase' }
 const card = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px 18px' }
 const miniBtn = { appearance: 'none', border: '.5px solid var(--border-strong)', borderRadius: 5, background: 'rgba(255,255,255,.06)', color: 'inherit', font: 'inherit', fontSize: 11, padding: '5px 10px', cursor: 'pointer' }
 const dangerBtn = { ...miniBtn, borderColor: 'var(--danger)', color: 'var(--danger)' }

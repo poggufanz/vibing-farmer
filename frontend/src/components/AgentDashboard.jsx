@@ -59,7 +59,8 @@ const whyText = (a) => {
 // ─── Shared style primitives ────────────────────────────────────────────────
 const mono = { fontFamily: 'var(--font-mono)', fontSize: 10.5 }
 const sectionLabel = {
-  fontSize: 9.5, letterSpacing: '.1em', textTransform: 'uppercase',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 9.5, letterSpacing: '-0.01em', textTransform: 'lowercase',
   color: 'var(--text-faint)', marginBottom: 10,
 }
 const textBtn = (color = 'var(--text-muted)') => ({
