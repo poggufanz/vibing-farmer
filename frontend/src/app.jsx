@@ -359,7 +359,7 @@ const App = () => {
     const key = `${ev.kind}:${ev.vaultAddress || ev.vaultName || ''}`;
     const id = `${key}:${ev.timestamp || Date.now()}`;
     setAgentData((d) => ({ ...d, alerts: [{ id, ...ev }, ...d.alerts.filter((a) => `${a.kind}:${a.vaultAddress || a.vaultName || ''}` !== key)].slice(0, 8) }));
-    const detail = ev.kind === 'rebalance_proposal' ? `Venice AI flagged ${ev.toProtocol} at ${ev.toApy}% vs your ${ev.fromVault} at ${ev.fromApy}% — capture +${ev.apyGain}% by rebalancing.`
+    const detail = ev.kind === 'rebalance_proposal' ? `Venice AI flagged ${ev.toProtocol} at ${ev.toApy}% vs your ${ev.fromVault} at ${ev.fromApy}% · capture +${ev.apyGain}% by rebalancing.`
       : ev.kind === 'risk_alert' ? `Severity ${ev.severity} · classified by Venice AI. Signal on ${ev.vaultName}. Action: alert surfaced, awaiting your decision.`
       : ev.kind === 'apy_drift' ? `APY on ${ev.vaultName} dropped to ${ev.currentApy}% (from ${ev.baselineApy}%, ${ev.driftPct}%).`
       : ev.kind === 'harvest_ready' ? `${ev.rewardsUsdc} USDC accrued on ${ev.vaultName} · ready to claim.` : '';
@@ -1133,7 +1133,7 @@ const App = () => {
         <div className="modal-backdrop">
           <div className="modal" role="dialog" aria-modal="true">
             <div className="modal-eyebrow">AI · timeout</div>
-            <h3 className="modal-title">AI is still processing — continue waiting?</h3>
+            <h3 className="modal-title">AI is still processing · continue waiting?</h3>
             <p className="lede" style={{ marginTop: 8 }}>
               Generation has exceeded {Math.round(VENICE_TIMEOUT_MS / 1000)} seconds. Do you want to keep waiting or use the default strategy instead?
             </p>

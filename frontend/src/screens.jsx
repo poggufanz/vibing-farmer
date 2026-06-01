@@ -50,7 +50,7 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
       </div>
 
       <h1 className="h-display">
-        Set your deposit — let the orchestrator spawn the agents.
+        Set your deposit · let the orchestrator spawn the agents.
       </h1>
       <p className="lede">
         AI generates the strategy: how many worker agents are needed, which vault each agent handles,
@@ -159,7 +159,7 @@ const ThinkingCard = ({ phase, times = [] }) => {
               <span className="marker" />
               <span>{s.label}</span>
               <span className="time">
-                {state === "idle" ? "—" : `${(t ?? 0).toFixed(1)}s`}
+                {state === "idle" ? "-" : `${(t ?? 0).toFixed(1)}s`}
                 {state === "active" && <span className="think-spin" aria-hidden="true" />}
               </span>
             </div>

@@ -308,7 +308,7 @@ const MemoryModal = ({ agentId, strategy, execMap, onClose }) => {
           </div>
           <div className="memory-metric">
             <span className="label mono">success rate</span>
-            <span className="val tnum mono">{ex.metrics?.successRate == null ? "—" : `${ex.metrics.successRate}%`}</span>
+            <span className="val tnum mono">{ex.metrics?.successRate == null ? "-" : `${ex.metrics.successRate}%`}</span>
           </div>
           <div className="memory-metric">
             <span className="label mono">gas paid · user</span>
@@ -323,7 +323,7 @@ const MemoryModal = ({ agentId, strategy, execMap, onClose }) => {
         <div className="memory-section-title mono">execution log</div>
         <div className="memory-log">
           {ex.memory.length === 0 ? (
-            <div className="empty">no events yet — agent queued</div>
+            <div className="empty">no events yet · agent queued</div>
           ) : (
             ex.memory.map((m, i) => (
               <div key={i} className={`memory-row ${m.status}`}>
@@ -509,7 +509,7 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
       <div className="exec-header">
         <div>
           <h1 className="h-display" style={{ fontSize: 30, marginTop: 6 }}>
-            {strategy.agents.length} agents running in parallel — orchestrated seamlessly.
+            {strategy.agents.length} agents running in parallel · orchestrated seamlessly.
           </h1>
           <p className="lede" style={{ marginTop: 10, maxWidth: 540 }}>
             Each worker executes the skills you approved: <span className="mono">swap → approve → deposit</span>.

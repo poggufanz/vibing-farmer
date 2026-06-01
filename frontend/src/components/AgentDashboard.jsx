@@ -11,7 +11,7 @@ const u = (units) => Number(units || 0) / 1e6
 const fmt = (units) => u(units).toFixed(2)
 const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '')
 const formatTime = (ts, now = Date.now()) => {
-  if (!ts) return '—'
+  if (!ts) return '-'
   const { timestampFormat } = loadSettings()
   if (timestampFormat === 'absolute') {
     return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
@@ -41,7 +41,7 @@ const alertLine = (a) => {
     case 'harvest_failed':     return `${a.vaultName} · ${a.error}`
     case 'rebalance_proposal': return `${a.fromVault} ${a.fromApy}% → ${a.toProtocol} ${a.toApy}% (+${a.apyGain}%)`
     case 'apy_drift':          return `${a.vaultName} · ${a.baselineApy}% → ${a.currentApy}% (${a.driftPct}%)`
-    case 'risk_alert':         return `${a.vaultName} — security signal detected`
+    case 'risk_alert':         return `${a.vaultName} · security signal detected`
     default:                   return a.vaultName || ''
   }
 }
@@ -49,7 +49,7 @@ const alertLine = (a) => {
 const whyText = (a) => {
   switch (a.kind) {
     case 'apy_drift':          return `APY compressed ${a.driftPct}% since deposit (${a.baselineApy}% → ${a.currentApy}%). Consider rebalancing if the drop persists into the next monitoring cycle.`
-    case 'rebalance_proposal': return `${a.toProtocol} currently offers ${a.toApy}% vs your ${a.fromVault} position at ${a.fromApy}% — a ${a.apyGain}% gap. Rebalancing would capture that extra yield (break-even after gas: ~2 days).`
+    case 'rebalance_proposal': return `${a.toProtocol} currently offers ${a.toApy}% vs your ${a.fromVault} position at ${a.fromApy}% · a ${a.apyGain}% gap. Rebalancing would capture that extra yield (break-even after gas: ~2 days).`
     case 'risk_alert':         return `Severity ${a.severity} · classified by Venice AI. ${(a.searchAnswer || '').slice(0, 180)}`
     case 'harvest_ready':      return `${a.rewardsUsdc} USDC of yield has accrued and is ready to claim. Claiming resets the accrual clock.`
     default:                   return a.error || ''
