@@ -40,12 +40,17 @@ export function persistPositions(address, positions) {
  * Reads go through the dedicated read-only provider (getReadProvider) — NEVER the
  * wallet's BrowserProvider, which throws -32603 while a wallet_* RPC is pending.
  * Never throws — per-vault failures are isolated via Promise.allSettled.
+ *
+ * When batch txs contain multiple internal deposit calls, each call emits a separate
+ * DepositExecuted event. The on-chain balance read reflects all of them, so we must
+ * read from ALL vaults in VAULT_CATALOG to capture all deposits across all tx hashes.
  */
 export async function reconcilePositionsFromChain(address) {
   if (!address) return null
   const provider = getReadProvider()
 
   // Unique vault addresses (catalog maps multiple protocols to shared MockVaults).
+  // CRITICAL: must read from ALL unique vaults to capture deposits from all tx hashes.
   const seen = new Set()
   const vaults = VAULT_CATALOG.filter((v) => {
     const a = v.address?.toLowerCase()
@@ -57,6 +62,7 @@ export async function reconcilePositionsFromChain(address) {
   const results = await Promise.allSettled(
     vaults.map(async (v) => {
       const contract = new ethers.Contract(v.address, VAULT_ABI, provider)
+      // Shares are minted to the user (receiver=user in AgentVaultDepositor.executeAgentDeposit)
       const shares = await contract.balanceOf(address)
       if (shares === 0n) return null
       const assets = await contract.convertToAssets(shares)

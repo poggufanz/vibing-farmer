@@ -100,7 +100,7 @@ const mapVeniceToStrategy = (veniceResult, amount, risk) => {
         protocol: v.protocol || live.protocol || cat.protocol || PROTOCOLS[i] || "aave-v3",
         apy: String(v.expected_apy ?? live.apy ?? cat.apy ?? 4.8),
         drawdown: live.drawdown || cat.drawdown || "-1.8",
-        addr: v.address,
+        addr: cat.address || VAULT_CATALOG.find((c) => c.protocol === (v.protocol || ''))?.address || v.address,
         tvl: v.tvlFormatted || live.tvlFormatted || "N/A",
         isLiveData: live.source === "defiLlama",
         defillamaPool: live.defillamaPool || null,
@@ -311,9 +311,33 @@ const App = () => {
     const onEvent = () => { clearTimeout(timer); timer = setTimeout(sync, 1500); };
     const depFilter = contract.filters.DepositExecuted(null, realAddress); // (agentId, user, ...)
     const wdFilter = contract.filters.WithdrawExecuted(realAddress);       // (user, ...)
-    contract.on(depFilter, onEvent);
+
+    // Capture deposit event to save amounts (each internal call's amount tracked separately)
+    const onDepositEvent = (agentId, user, vault, amount, shares, event) => {
+      const vaultMeta = VAULT_CATALOG.find(v => v.address.toLowerCase() === vault.toLowerCase());
+      const amountUsdc = Number(amount) / 1e6;
+      if (amountUsdc > 0) {
+        saveTransaction({
+          txHash: event.transactionHash,
+          vaultName: vaultMeta?.name || `Vault ${vault.slice(0, 6)}…`,
+          vaultAddress: vault,
+          protocol: vaultMeta?.protocol,
+          apy: vaultMeta?.apy,
+          amountUsdc,
+          workerLabel: vaultMeta?.name || `Vault ${vault.slice(0, 10)}…`,
+          network: 'sepolia',
+        });
+      }
+      onEvent(); // Also trigger position sync after 1.5s debounce
+    };
+
+    contract.on(depFilter, onDepositEvent);
     contract.on(wdFilter, onEvent);
-    return () => { clearTimeout(timer); contract.off(depFilter, onEvent); contract.off(wdFilter, onEvent); };
+    return () => {
+      clearTimeout(timer);
+      contract.off(depFilter, onDepositEvent);
+      contract.off(wdFilter, onEvent);
+    };
   }, [realAddress]);
 
   useE(() => { localStorage.setItem('yv_agent_enabled', String(agentEnabled)); }, [agentEnabled]);
@@ -795,20 +819,44 @@ const App = () => {
     const seedPositions = {};
     (strategy?.agents || []).forEach((a) => {
       if (execMap[a.id]?.status === 'confirmed') {
-        seedPositions[a.vault.addr] = {
+        const addr = a.vault.addr;
+        const prev = seedPositions[addr];
+        const prevBal = BigInt(prev?.balance || '0');
+        const newBal = BigInt(Math.round(a.allocation * 1e6));
+        seedPositions[addr] = {
           vaultName: a.vault.name,
-          balance: String(Math.round(a.allocation * 1e6)),
-          unclaimedRewards: '0',
+          balance: (prevBal + newBal).toString(), // sum if multiple agents target same vault
+          unclaimedRewards: prev?.unclaimedRewards || '0',
         };
       }
     });
-    // SOURCE OF TRUTH: actual on-chain balanceOf -> convertToAssets (raw units). merge keeps
-    // the larger value, so real holdings (incl. prior deposits) win over the allocation seed.
+    // SOURCE OF TRUTH: actual on-chain balanceOf -> convertToAssets (raw units).
+    // If chain is available, use authoritative balances (can move up or down).
+    // If chain unavailable (simulated relay / not yet mined), ADD seed into existing
+    // positions — these are confirmed new deposits, so we sum, not take max.
     let chain = null;
     try { chain = await reconcilePositionsFromChain(realAddress); } catch { /* keep seed */ }
-    const finalPositions = chain ? mergePositions(seedPositions, chain) : seedPositions;
-    if (Object.keys(finalPositions).length > 0) {
-      setAgentData((d) => ({ ...d, positions: mergePositions(d.positions, finalPositions), lastUpdated: Date.now() }));
+    if (chain) {
+      const finalPositions = mergePositions(seedPositions, chain);
+      if (Object.keys(finalPositions).length > 0) {
+        setAgentData((d) => ({ ...d, positions: applyChainPositions(d.positions, finalPositions), lastUpdated: Date.now() }));
+      }
+    } else if (Object.keys(seedPositions).length > 0) {
+      // Simulated path: sum new allocations into existing positions
+      setAgentData((d) => {
+        const positions = { ...(d.positions || {}) };
+        for (const [addr, pos] of Object.entries(seedPositions)) {
+          const key = Object.keys(positions).find((k) => k.toLowerCase() === addr.toLowerCase()) || addr;
+          const curBal = BigInt(positions[key]?.balance || '0');
+          const newBal = BigInt(pos.balance || '0');
+          positions[key] = {
+            vaultName: pos.vaultName,
+            unclaimedRewards: positions[key]?.unclaimedRewards || pos.unclaimedRewards || '0',
+            balance: (curBal + newBal).toString(),
+          };
+        }
+        return { ...d, positions, lastUpdated: Date.now() };
+      });
     }
     addLog({ event: "OrchestratorPlanned", meta: `multi-agent deployment finalized · ${strategy?.agents?.length} positions opened` });
   };

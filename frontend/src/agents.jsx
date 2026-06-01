@@ -11,13 +11,19 @@ import React, {
 import ForceGraph2D from 'react-force-graph-2d';
 import { Icon } from './components.jsx';
 import { shortAddr } from './screens.jsx';
+import { VAULT_CATALOG } from './config.js';
 
 /* ---------- Strategy data — generated per-flow ---------- */
-const AGENT_PROTOCOLS = [
-  { name: "MockVault USDC-A",   protocol: "aave-v3",    apy: "8.2",  drawdown: "-1.8", addr: "0x72bC6b01A60e22ab8b9D62E8237B37633C36aBa5", role: "Conservative · lending" },
-  { name: "MockVault USDC-B",   protocol: "morpho-blue", apy: "12.7", drawdown: "-3.6", addr: "0x2BF6aa67D7a372ad0f4F45Bf2223156DF12eF9DF", role: "Balanced · liquidity provision" },
-  { name: "LeveredVault USDC",  protocol: "pendle-v2",   apy: "21.5", drawdown: "-7.2", addr: "0x2BF6aa67D7a372ad0f4F45Bf2223156DF12eF9DF", role: "Aggressive · leveraged yield" },
-];
+// Derived from VAULT_CATALOG so addresses stay in sync with config automatically.
+const ROLES = ["Conservative · lending", "Balanced · liquidity provision", "Aggressive · leveraged yield"];
+const AGENT_PROTOCOLS = VAULT_CATALOG.slice(0, 3).map((v, i) => ({
+  name: v.name,
+  protocol: v.protocol,
+  apy: String(v.apy),
+  drawdown: v.drawdown,
+  addr: v.address,
+  role: ROLES[i],
+}));
 
 const buildStrategy = (amount, risk) => {
   const total = Number(amount) || 100;
