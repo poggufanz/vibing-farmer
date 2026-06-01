@@ -113,8 +113,18 @@ const EVENT_STYLES = {
 
 const ActivityPanel = ({ logs }) => {
   const [openId, setOpenId] = useS(null);
+  const [page, setPage] = useS(1);
+
+  const pageSize = 5;
+  const totalPages = Math.ceil(logs.length / pageSize) || 1;
+  const currentPage = Math.min(page, totalPages);
+
+  const reversedLogs = logs.slice().reverse();
+  const startIndex = (currentPage - 1) * pageSize;
+  const pagedLogs = reversedLogs.slice(startIndex, startIndex + pageSize);
+
   return (
-    <div className="panel" style={{ borderBottom: "none", flex: 1 }}>
+    <div className="panel" style={{ borderBottom: "none", flex: 1, display: "flex", flexDirection: "column" }}>
       <div className="panel-head">
         <div className="panel-title">Activity</div>
         <span className="panel-meta">{logs.length ? `${logs.length} events · realtime` : "agent events · realtime"}</span>
@@ -122,39 +132,84 @@ const ActivityPanel = ({ logs }) => {
       {logs.length === 0 ? (
         <div className="empty">no events yet</div>
       ) : (
-        <div className="activity">
-          {logs.slice().reverse().map((l) => {
-            const sty = EVENT_STYLES[l.event] || EVENT_STYLES.OrchestratorPlanned;
-            const open = openId === l.id;
-            return (
-              <div key={l.id}>
-                <div className="act-row" style={{ cursor: "pointer" }} role="button" tabIndex={0} aria-expanded={open}
-                  onClick={() => setOpenId(open ? null : l.id)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(open ? null : l.id); } }}>
-                  <span className="act-marker mono" aria-hidden="true" style={{ color: sty.color }}>{sty.icon}</span>
-                  <div>
-                    <div className="act-title">
-                      <span className="act-event mono">{l.event}</span>
-                      {l.agent && <span className="act-agent mono">{l.agent}</span>}
-                    </div>
-                    <div className="act-meta">{l.meta}</div>
-                  </div>
-                  <span className="act-time">{l.time} {open ? "▴" : "▾"}</span>
-                </div>
-                {open && (
-                  <div className="act-meta" style={{ padding: "2px 0 8px 22px", fontSize: 10.5, lineHeight: 1.5, opacity: .85 }}>
-                    {l.detail || l.meta}
-                    {l.txHash && (
-                      <div style={{ marginTop: 3 }}>
-                        TX: <a href={`https://sepolia.etherscan.io/tx/${l.txHash}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--info)" }}>{shortAddr(l.txHash)} ↗</a>
+        <>
+          <div className="activity" style={{ flex: 1 }}>
+            {pagedLogs.map((l) => {
+              const sty = EVENT_STYLES[l.event] || EVENT_STYLES.OrchestratorPlanned;
+              const open = openId === l.id;
+              return (
+                <div key={l.id}>
+                  <div className="act-row" style={{ cursor: "pointer" }} role="button" tabIndex={0} aria-expanded={open}
+                    onClick={() => setOpenId(open ? null : l.id)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(open ? null : l.id); } }}>
+                    <span className="act-marker mono" aria-hidden="true" style={{ color: sty.color }}>{sty.icon}</span>
+                    <div>
+                      <div className="act-title">
+                        <span className="act-event mono">{l.event}</span>
+                        {l.agent && <span className="act-agent mono">{l.agent}</span>}
                       </div>
-                    )}
+                      <div className="act-meta">{l.meta}</div>
+                    </div>
+                    <span className="act-time">{l.time} {open ? "▴" : "▾"}</span>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                  {open && (
+                    <div className="act-meta" style={{ padding: "2px 0 8px 22px", fontSize: 10.5, lineHeight: 1.5, opacity: .85 }}>
+                      {l.detail || l.meta}
+                      {l.txHash && (
+                        <div style={{ marginTop: 3 }}>
+                          TX: <a href={`https://sepolia.etherscan.io/tx/${l.txHash}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--info)" }}>{shortAddr(l.txHash)} ↗</a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 0 4px 0',
+              borderTop: '1px solid var(--border)',
+              marginTop: 'auto'
+            }}>
+              <button
+                className="btn btn-ghost"
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 10,
+                  fontFamily: 'var(--font-mono)',
+                  textTransform: 'lowercase',
+                  letterSpacing: '0.04em'
+                }}
+                disabled={currentPage === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                ← prev
+              </button>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--text-faint)' }}>
+                page {currentPage} of {totalPages}
+              </span>
+              <button
+                className="btn btn-ghost"
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 10,
+                  fontFamily: 'var(--font-mono)',
+                  textTransform: 'lowercase',
+                  letterSpacing: '0.04em'
+                }}
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                next →
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

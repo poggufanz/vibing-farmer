@@ -350,7 +350,7 @@ const MemoryModal = ({ agentId, strategy, execMap, onClose }) => {
 
         <div className="memory-modal-foot">
           <div className="foot-note">
-            Memory di-store onchain via worker logs · auditable per skill version.
+            Memory stored onchain via worker logs · auditable per skill version.
           </div>
           <button className="btn btn-ghost" onClick={onClose}>Close</button>
         </div>
@@ -426,12 +426,14 @@ const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate }) => {
 
       <div className="action-row">
         <div className="foot-note">
-          Reasoning di-generate oleh <b>Venice AI</b>, privacy-first. Allocation di-tuning sesuai risk profile.
+          <span className="ai-attribution">
+            ● AI · live data
+          </span>
         </div>
         <div className="flex gap-2">
-          <button className="btn btn-ghost" onClick={onRegenerate}>Lihat alternatif</button>
+          <button className="btn btn-ghost" onClick={onRegenerate}>See alternatives</button>
           <button className="btn btn-primary" onClick={onProceed}>
-            Lanjut · connect wallet <Icon name="arrow" size={14} />
+            Proceed · connect wallet <Icon name="arrow" size={14} />
           </button>
         </div>
       </div>

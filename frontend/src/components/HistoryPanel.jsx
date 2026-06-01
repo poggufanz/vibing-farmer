@@ -8,6 +8,7 @@ import {
   getTransactions, getStrategies, getReasoningLog, clearAllHistory,
 } from '../history.js';
 import { loadSettings } from '../settingsStore.js';
+import { useNavigateTo } from '../router.js';
 
 function formatTime(ts) {
   const { timestampFormat } = loadSettings()
@@ -33,6 +34,7 @@ const Empty = ({ what }) => <div className="history-empty mono">no {what} yet</d
 
 /* ---------- Transactions (Etherscan-like table) ---------- */
 const TxList = ({ rows }) => {
+  const navigateTo = useNavigateTo();
   if (!rows.length) return <Empty what="transactions" />;
   return (
     <div className="tx-table">
@@ -42,11 +44,12 @@ const TxList = ({ rows }) => {
       {rows.map((r) => {
         const isWithdraw = r.type === 'withdraw';
         return (
-        <div key={r.id} className="tx-row">
+        <div key={r.id} className="tx-row" style={{ cursor: r.txHash ? 'pointer' : 'default' }} onClick={() => r.txHash && navigateTo('tx', r.txHash)}>
           <span className="tx-status" title="confirmed"><Icon name="check" size={13} /></span>
-          <a className="tx-hash mono" href={`https://sepolia.etherscan.io/tx/${r.txHash}`} target="_blank" rel="noopener noreferrer">
-            {short(r.txHash)} <Icon name="external" size={11} />
-          </a>
+          <span className="tx-hash mono" style={{ cursor: 'pointer', textDecoration: 'underline', color: 'var(--text-muted)' }}
+            onClick={(e) => { e.stopPropagation(); navigateTo('tx', r.txHash); }}>
+            {short(r.txHash)}
+          </span>
           <span className="tx-vault">
             {isWithdraw ? `Withdrew ← ${r.vaultName}` : `Deposited → ${r.vaultName}`}
             <span className="tx-sub mono">{[r.protocol, r.apy ? `${r.apy}% APY` : null, r.workerId || (isWithdraw ? 'manual withdraw' : null)].filter(Boolean).join(' · ')}</span>
@@ -110,6 +113,9 @@ const HistoryPanel = () => {
   const [tab, setTab] = useState('transactions');
   const [nonce, setNonce] = useState(0); // bump to re-read after clear
   const [data, setData] = useState({ transactions: [], strategies: [], reasoning: [] });
+  const [page, setPage] = useState(1);
+
+  const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
     setData({
@@ -119,38 +125,87 @@ const HistoryPanel = () => {
     });
   }, [nonce]);
 
+  const handleTabChange = (newTab) => {
+    setTab(newTab);
+    setPage(1);
+  };
+
   const counts = {
     transactions: data.transactions.length,
     strategies: data.strategies.length,
     reasoning: data.reasoning.length,
   };
 
-  const onClear = () => { clearAllHistory(); setNonce((n) => n + 1); };
+  const totalPages = Math.ceil(counts[tab] / ITEMS_PER_PAGE);
+  const onClear = () => { clearAllHistory(); setNonce((n) => n + 1); setPage(1); };
+
+  const currentRows = data[tab].slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   return (
-    <section className="history-page">
+    <section className="history-page enter">
       <div className="history-head">
         <div className="eyebrow">
           <span>History · on-chain explorer</span>
-          <span className="rule" />
-          <span>localStorage · sepolia</span>
         </div>
         <button className="perm-revoke" onClick={onClear}>clear all</button>
       </div>
 
       <div className="history-tabs">
         {TABS.map((t) => (
-          <button key={t.id} className={`history-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+          <button key={t.id} className={`history-tab ${tab === t.id ? 'active' : ''}`} onClick={() => handleTabChange(t.id)}>
             {t.label}<span className="history-tab-count">{counts[t.id]}</span>
           </button>
         ))}
       </div>
 
       <div className="history-body">
-        {tab === 'transactions' && <TxList rows={data.transactions} />}
-        {tab === 'strategies' && <StratList rows={data.strategies} />}
-        {tab === 'reasoning' && <ReasonList rows={data.reasoning} />}
+        {tab === 'transactions' && <TxList rows={currentRows} />}
+        {tab === 'strategies' && <StratList rows={currentRows} />}
+        {tab === 'reasoning' && <ReasonList rows={currentRows} />}
       </div>
+
+      {counts[tab] > ITEMS_PER_PAGE && (
+        <div className="history-pagination" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: 20,
+          paddingTop: 16,
+          borderTop: '1px solid var(--border)',
+        }}>
+          <button
+            className="btn btn-ghost"
+            style={{
+              padding: '6px 14px',
+              fontSize: 11,
+              fontFamily: 'var(--font-mono)',
+              textTransform: 'lowercase',
+              letterSpacing: '0.04em'
+            }}
+            disabled={page === 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            ← prev
+          </button>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+            page {page} of {totalPages}
+          </span>
+          <button
+            className="btn btn-ghost"
+            style={{
+              padding: '6px 14px',
+              fontSize: 11,
+              fontFamily: 'var(--font-mono)',
+              textTransform: 'lowercase',
+              letterSpacing: '0.04em'
+            }}
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          >
+            next →
+          </button>
+        </div>
+      )}
     </section>
   );
 };

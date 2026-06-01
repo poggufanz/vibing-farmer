@@ -478,9 +478,9 @@ const StrategyCard = ({ strategy, onProceed }) => {
       </div>
 
       <div className="action-row">
-        <div className="foot-note">
-          Reasoning di-generate oleh <b>Venice AI</b>, privacy-first. Allocation di-tuning sesuai risk profile.
-        </div>
+        <span className="ai-attribution">
+          ● AI · live data
+        </span>
         <div className="flex gap-2">
           <button className="btn btn-ghost">Lihat alternatif</button>
           <button className="btn btn-primary" onClick={onProceed}>

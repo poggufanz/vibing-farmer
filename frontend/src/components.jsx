@@ -2,6 +2,8 @@
    VIBING FARMER — v2 shared components & icons
    ============================================ */
 import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { getSidebarPath } from './router.js';
 import { t } from './settingsStore.js';
 
 /* ---------- Icons (Lucide-style, stroke 1.5) ---------- */
@@ -27,6 +29,10 @@ const Icon = ({ name, size = 16, className = "" }) => {
     edit: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></>,
     brain: <><path d="M9.5 2a2.5 2.5 0 0 1 2.5 2.5V20a2 2 0 0 1-4 0 2 2 0 0 1-2-2 2 2 0 0 1-1-3.732 2 2 0 0 1 .732-3 2.5 2.5 0 0 1 1-4.268A2.5 2.5 0 0 1 9.5 2zM14.5 2a2.5 2.5 0 0 0-2.5 2.5V20a2 2 0 0 0 4 0 2 2 0 0 0 2-2 2 2 0 0 0 1-3.732 2 2 0 0 0-.732-3 2.5 2.5 0 0 0-1-4.268A2.5 2.5 0 0 0 14.5 2z" /></>,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    panelLeftOpen: <><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18M14 9l3 3-3 3" /></>,
+    panelLeftClose: <><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18M17 15l-3-3 3-3" /></>,
+    panelRightOpen: <><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M15 3v18M10 15l-3-3 3-3" /></>,
+    panelRightClose: <><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M15 3v18M7 9l3 3-3 3" /></>,
   };
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
@@ -35,47 +41,50 @@ const Icon = ({ name, size = 16, className = "" }) => {
   );
 };
 
-/* ---------- Sidebar (minimal, no active-bar gimmick) ---------- */
-const Sidebar = ({ view = "flow", onNavigate }) => {
+/* ---------- Sidebar (self-contained with React Router) ---------- */
+const Sidebar = ({ extended, onToggle }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const activePath = getSidebarPath(location.pathname);
+
   const items = [
-    { key: "home", icon: "home", view: "home" },
-    { key: "vaults", icon: "grid", view: "flow" },
-    { key: "agent", icon: "network", view: "agent" },
-    { key: "history", icon: "layers", view: "history" },
-    { key: "settings", icon: "settings", view: "settings" },
+    { key: "home",     icon: "home",     path: "/home",     label: "home" },
+    { key: "vaults",   icon: "grid",     path: "/strategy", label: "strategy" },
+    { key: "agent",    icon: "network",  path: "/agent",    label: "dashboard" },
+    { key: "history",  icon: "layers",   path: "/history",  label: "history" },
+    { key: "settings", icon: "settings", path: "/settings", label: "settings" },
   ];
+
   return (
     <nav className="sidebar" aria-label="Primary">
       <div className="sb-logo" title="vibing/farmer">
         <img src="/vibing_farmer.logo.svg" alt="logo" style={{ width: 18, height: 18 }} />
+        <span className="sb-logo-text">vibing/farmer</span>
       </div>
-      {items.map((it) => {
-        const nav = !!it.view;
-        const active = nav && view === it.view;
-        return (
-          <button
-            key={it.key}
-            className={`sb-item ${active ? "active" : ""}`}
-            title={nav ? it.key : `${it.key} · soon`}
-            aria-label={it.key}
-            aria-disabled={!nav}
-            disabled={!nav}
-            onClick={nav ? () => onNavigate?.(it.view) : undefined}
-          >
-            <Icon name={it.icon} />
-          </button>
-        );
-      })}
-      <div className="sb-spacer" />
-      <button className="sb-item" title="notifications · soon" aria-label="notifications" disabled aria-disabled="true">
-        <Icon name="bell" />
+      {items.map((it) => (
+        <button
+          key={it.key}
+          className={`sb-item ${activePath === it.path ? "active" : ""}`}
+          title={it.label}
+          aria-label={it.label}
+          onClick={() => navigate(it.path)}
+        >
+          <Icon name={it.icon} />
+          <span className="sb-label">{it.label}</span>
+        </button>
+      ))}
+      <div className="sb-spacer" style={{ flex: 1 }} />
+      
+      <button className="sb-item sb-toggle" onClick={onToggle} title={extended ? "Collapse Sidebar" : "Expand Sidebar"}>
+        <Icon name={extended ? "panelLeftClose" : "panelLeftOpen"} style={{ transition: 'all 0.15s ease' }} />
+        <span className="sb-label">collapse</span>
       </button>
     </nav>
   );
 };
 
 /* ---------- Top bar — minimal, no chip soup ---------- */
-const TopBar = ({ walletConnected, onReset }) => {
+const TopBar = ({ walletConnected, onReset, railCollapsed, onToggleRail }) => {
   return (
     <header className="topbar">
       <div className="topbar-left">
@@ -94,6 +103,9 @@ const TopBar = ({ walletConnected, onReset }) => {
         </span>
         <button className="icon-btn" title="restart flow" aria-label="restart flow" onClick={onReset}><Icon name="refresh" /></button>
         <button className="icon-btn" title="new deposit" aria-label="new deposit" onClick={onReset}><Icon name="plus" /></button>
+        <button className="icon-btn" title={railCollapsed ? "Show Info Panel" : "Hide Info Panel"} aria-label="toggle info panel" onClick={onToggleRail}>
+          <Icon name={railCollapsed ? "panelRightOpen" : "panelRightClose"} style={{ transition: 'all 0.15s ease' }} />
+        </button>
       </div>
     </header>
   );

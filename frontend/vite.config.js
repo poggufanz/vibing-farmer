@@ -19,6 +19,12 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       rollupOptions: { external: [] }
     },
+    server: {
+      historyApiFallback: true,
+    },
+    preview: {
+      historyApiFallback: true,
+    },
     optimizeDeps: {
       include: ['react-force-graph-2d']
     }

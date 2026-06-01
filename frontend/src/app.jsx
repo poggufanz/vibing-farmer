@@ -24,6 +24,7 @@ import { generateStrategy } from './venice.js';
 import { OrchestratorAgent } from './orchestrator.js';
 import { makeAgentId } from './worker.js';
 import { VAULT_CATALOG, VENICE_TIMEOUT_MS } from './config.js';
+import { loadPersistedPositions, persistPositions, reconcilePositionsFromChain } from './positionsStore.js';
 import SkillDrawer from './components/SkillDrawer.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
 import { saveTransaction } from './history.js';
@@ -34,6 +35,9 @@ import SettingsPage from './components/SettingsPage.jsx';
 import { WalletPanel, PermissionPanel, ActivityPanel, SkillPanel, PalettePicker, PALETTES } from './components/RightRail.jsx';
 import { loadSettings, saveSetting } from './settingsStore.js';
 import { clearUserSkill } from './skillLoader.js';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import VaultDetailPage from './components/VaultDetailPage.jsx';
+import TxDetailPage from './components/TxDetailPage.jsx';
 
 /* ---------- Background agent settings (localStorage: yv_agent_settings) ---------- */
 const AGENT_SETTINGS_DEFAULTS = { autoHarvest: false, harvestMinUsdc: 1.0, apyDropPct: 20, rebalanceThresholdPct: 1.5, emergencyFull: false, emergencyPct: 50, riskMonitoring: true, positionInterval: 5, apyInterval: 10, riskInterval: 15, rewardInterval: 5 };
@@ -109,7 +113,8 @@ const App = () => {
   // stage: 'strategy' | 'connect' | 'skills' | 'permission' | 'execute' | 'done'
   const [stage, setStage] = useS("strategy");
   const [furthest, setFurthest] = useS(0); // furthest step index reached → rail can navigate to visited steps
-  const [view, setView] = useS("home"); // 'home' | 'flow' | 'agent' | 'history' | 'settings' — left sidebar nav
+  const navigate = useNavigate();
+  const location = useLocation();
   const [language, setLanguage] = useS(() => loadSettings().language); // UI i18n (labels only)
   const [amount, setAmount] = useS("100");
   const [risk, setRisk] = useS("med");
@@ -165,10 +170,47 @@ const App = () => {
   const [agentSettings, setAgentSettings] = useS(loadAgentSettings);
   const [agentData, setAgentData] = useS({ positions: {}, alerts: [], lastUpdated: null });
 
+  const [sbExtended, setSbExtended] = useS(() => localStorage.getItem('yv_sb_extended') === 'true');
+  const [railCollapsed, setRailCollapsed] = useS(() => localStorage.getItem('yv_rail_collapsed') === 'true');
+
+  const toggleSb = () => {
+    setSbExtended(prev => {
+      localStorage.setItem('yv_sb_extended', String(!prev));
+      return !prev;
+    });
+  };
+
+  const toggleRail = () => {
+    setRailCollapsed(prev => {
+      localStorage.setItem('yv_rail_collapsed', String(!prev));
+      return !prev;
+    });
+  };
+
   useE(() => {
     document.documentElement.dataset.palette = tweaks.palette;
     document.documentElement.dataset.density = tweaks.density;
   }, [tweaks.palette, tweaks.density]);
+
+  // Redirect old hash URLs (bookmarks like /#/home → /home)
+  useE(() => {
+    if (window.location.hash?.startsWith('#/')) {
+      const path = window.location.hash.replace('#', '');
+      window.history.replaceState(null, '', path);
+    }
+  }, []);
+
+  // Document title per route
+  useE(() => {
+    const titles = {
+      '/home':     'vibing / farmer',
+      '/strategy': 'New Strategy · vibing / farmer',
+      '/agent':    'Autonomous Agent · vibing / farmer',
+      '/history':  'History · vibing / farmer',
+      '/settings': 'Settings · vibing / farmer',
+    };
+    document.title = titles[location.pathname] || 'vibing / farmer';
+  }, [location.pathname]);
 
   // Record the furthest step reached so the rail can navigate to visited steps (and only those)
   useE(() => { setFurthest((f) => Math.max(f, STEPS.findIndex((s) => s.id === stage))); }, [stage]);
@@ -183,6 +225,33 @@ const App = () => {
   };
 
   /* ----- Background agent: persistence + lifecycle + handlers ----- */
+  // Restore positions on connect (instant from cache) then reconcile against chain.
+  // Fixes home resetting to "no positions" after reload/reconnect with same wallet.
+  useE(() => {
+    if (!realAddress) return;
+    const restored = loadPersistedPositions(realAddress);
+    if (Object.keys(restored).length) {
+      setAgentData((d) => ({ ...d, positions: { ...restored, ...d.positions } }));
+    }
+    let alive = true;
+    reconcilePositionsFromChain(realAddress)
+      .then((chain) => {
+        if (!alive || !chain) return; // null = no RPC / all reads failed → keep cache
+        persistPositions(realAddress, chain); // authoritative write (incl. empty)
+        setAgentData((d) => ({ ...d, positions: chain, lastUpdated: Date.now() }));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [realAddress]);
+
+  // Persist in-session position changes (deposits, withdraws). Skip empty pre-hydration
+  // writes so a fresh-connect {} can't clobber the cached snapshot before restore runs.
+  useE(() => {
+    if (!realAddress) return;
+    if (Object.keys(agentData.positions || {}).length === 0) return;
+    persistPositions(realAddress, agentData.positions);
+  }, [agentData.positions, realAddress]);
+
   useE(() => { localStorage.setItem('yv_agent_enabled', String(agentEnabled)); }, [agentEnabled]);
   useE(() => { localStorage.setItem('yv_agent_settings', JSON.stringify(agentSettings)); }, [agentSettings]);
   // Push threshold changes live (no worker restart → avoids polling churn on each keystroke)
@@ -428,6 +497,10 @@ const App = () => {
     setEditingTexts((prev) => ({ ...prev, [id]: { text: "", error: null } }));
   };
 
+  const handleSkillUpdate = (id, skillObj) => {
+    updateSkillState(id, { state: "pending", skill: skillObj });
+  };
+
   const handleSkillsContinue = () => setStage("permission");
 
   /* ----- PERMISSION (step 04) ----- */
@@ -646,12 +719,28 @@ const App = () => {
   /* ----- DONE (step 06) ----- */
   const handleExecDone = () => {
     setStage("done");
+    // Seed positions from confirmed workers so AgentDashboard is populated immediately
+    // without waiting for the background agent's first 5-minute poll.
+    // Background agent overwrites these with real on-chain balances on first check.
+    const seedPositions = {};
+    (strategy?.agents || []).forEach((a) => {
+      if (execMap[a.id]?.status === 'confirmed') {
+        seedPositions[a.vault.addr] = {
+          vaultName: a.vault.name,
+          balance: String(Math.round(a.allocation * 1e6)),
+          unclaimedRewards: '0',
+        };
+      }
+    });
+    if (Object.keys(seedPositions).length > 0) {
+      setAgentData((d) => ({ ...d, positions: { ...d.positions, ...seedPositions }, lastUpdated: Date.now() }));
+    }
     addLog({ event: "OrchestratorPlanned", meta: `multi-agent deployment finalized · ${strategy?.agents?.length} positions opened` });
   };
 
   const handleAgain = () => {
     setStage("strategy");
-    setView("flow");
+    navigate('/strategy');
     setFurthest(0);
     setStrategyPhase("input");
     setThinkingPhase(0);
@@ -759,12 +848,9 @@ const App = () => {
             agents={strategy?.agents || []}
             riskProfile={risk}
             skillStates={skillStates}
-            editingTexts={editingTexts}
             onApprove={handleSkillApprove}
             onApproveAll={handleApproveAll}
-            onEdit={handleSkillEdit}
-            onSave={handleSkillSave}
-            onReset={handleSkillReset}
+            onSkillUpdate={handleSkillUpdate}
             onContinue={handleSkillsContinue}
           />
         );
@@ -796,78 +882,88 @@ const App = () => {
   (strategy?.agents || []).forEach((a) => { agentVaultMeta[a.vault.addr.toLowerCase()] = { apy: Number(a.vault.apy), protocol: a.vault.protocol }; });
 
   return (
-    <div className="app">
-      <Sidebar view={view} onNavigate={setView} />
+    <div className={`app ${sbExtended ? 'sb-extended' : 'sb-minimized'} ${railCollapsed ? 'rail-collapsed' : ''}`}>
+      <Sidebar extended={sbExtended} onToggle={toggleSb} />
       <main className="main">
-        <TopBar walletConnected={walletPhase !== "none"} onReset={handleAgain} />
-        {view === "home" ? (
-          <HomePage
-            userAddress={realAddress}
-            positions={agentData.positions}
-            alerts={agentData.alerts}
-            vaultMeta={agentVaultMeta}
-            lastUpdated={agentData.lastUpdated}
-            agentActive={agentEnabled && stage === "done"}
-            autoHarvest={agentSettings.autoHarvest}
-            onConnect={handleConnect}
-            onStartStrategy={handleAgain}
-            onOpenAgent={() => setView("agent")}
-            onViewHistory={() => setView("history")}
-            onWithdrawSuccess={handleWithdrawSuccess}
-          />
-        ) : view === "settings" ? (
-          <SettingsPage
-            userAddress={realAddress}
-            walletPhase={walletPhase}
-            permActive={permActive}
-            permExpiresAt={permExpiresAt}
-            permissionCount={strategy?.agents?.length || 0}
-            agentEnabled={agentEnabled}
-            setAgentEnabled={setAgentEnabled}
-            agentSettings={agentSettings}
-            setAgentSettings={setAgentSettings}
-            skillSource={skillSource}
-            language={language}
-            onLanguageChange={handleLanguageChange}
-            onChangeSkill={() => setSkillDrawerOpen(true)}
-            onResetSkill={handleResetSkill}
-            onResetAgentSettings={handleResetAgentSettings}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
-            onSwitchNetwork={handleSwitchNetwork}
-            onRevoke={handleRevoke}
-          />
-        ) : view === "history" ? (
-          <HistoryPanel />
-        ) : view === "agent" ? (
-          <div className="stage">
-            <div style={{ maxWidth: 820, margin: "0 auto", width: "100%" }}>
-              <AgentDashboard
-                active={agentEnabled && stage === "done"}
-                positions={agentData.positions}
-                alerts={agentData.alerts}
-                vaultMeta={agentVaultMeta}
-                lastUpdated={agentData.lastUpdated}
-                userAddress={realAddress}
-                settings={agentSettings}
-                withdrawEnabled={stage === "done"}
-                onHarvest={handleHarvestNow}
-                onEmergencyWithdraw={handleEmergencyWithdraw}
-                onReview={handleReviewRebalance}
-                onDismiss={dismissAlert}
-                onWithdrawSuccess={handleWithdrawSuccess}
-                onNewStrategy={handleAgain}
-              />
+        <TopBar walletConnected={walletPhase !== "none"} onReset={handleAgain} railCollapsed={railCollapsed} onToggleRail={toggleRail} />
+        <Routes>
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={
+            <HomePage
+              userAddress={realAddress}
+              positions={agentData.positions}
+              alerts={agentData.alerts}
+              vaultMeta={agentVaultMeta}
+              lastUpdated={agentData.lastUpdated}
+              agentActive={agentEnabled && stage === "done"}
+              autoHarvest={agentSettings.autoHarvest}
+              onConnect={handleConnect}
+              onStartStrategy={handleAgain}
+              onOpenAgent={() => navigate('/agent')}
+              onViewHistory={() => navigate('/history')}
+              onWithdrawSuccess={handleWithdrawSuccess}
+            />
+          } />
+          <Route path="/strategy" element={
+            <>
+              <StepRail stage={stage} furthest={furthest} onStepClick={goBack} lang={language} />
+              <div className="stage" key={`${stage}-${strategyPhase}`}>
+                {renderStage()}
+              </div>
+            </>
+          } />
+          <Route path="/agent" element={
+            <div className="stage">
+              <div style={{ maxWidth: 820, margin: "0 auto", width: "100%" }}>
+                <AgentDashboard
+                  active={agentEnabled && stage === "done"}
+                  positions={agentData.positions}
+                  alerts={agentData.alerts}
+                  vaultMeta={agentVaultMeta}
+                  lastUpdated={agentData.lastUpdated}
+                  userAddress={realAddress}
+                  settings={agentSettings}
+                  withdrawEnabled={stage === "done"}
+                  onHarvest={handleHarvestNow}
+                  onEmergencyWithdraw={handleEmergencyWithdraw}
+                  onReview={handleReviewRebalance}
+                  onDismiss={dismissAlert}
+                  onWithdrawSuccess={handleWithdrawSuccess}
+                  onNewStrategy={handleAgain}
+                />
+              </div>
             </div>
-          </div>
-        ) : (
-          <>
-            <StepRail stage={stage} furthest={furthest} onStepClick={goBack} lang={language} />
-            <div className="stage" key={`${stage}-${strategyPhase}`}>
-              {renderStage()}
-            </div>
-          </>
-        )}
+          } />
+          <Route path="/history" element={<HistoryPanel />} />
+          <Route path="/settings" element={
+            <SettingsPage
+              userAddress={realAddress}
+              walletPhase={walletPhase}
+              permActive={permActive}
+              permExpiresAt={permExpiresAt}
+              permissionCount={strategy?.agents?.length || 0}
+              agentEnabled={agentEnabled}
+              setAgentEnabled={setAgentEnabled}
+              agentSettings={agentSettings}
+              setAgentSettings={setAgentSettings}
+              skillSource={skillSource}
+              language={language}
+              onLanguageChange={handleLanguageChange}
+              onChangeSkill={() => setSkillDrawerOpen(true)}
+              onResetSkill={handleResetSkill}
+              onResetAgentSettings={handleResetAgentSettings}
+              onConnect={handleConnect}
+              onDisconnect={handleDisconnect}
+              onSwitchNetwork={handleSwitchNetwork}
+              onRevoke={handleRevoke}
+            />
+          } />
+          <Route path="/vault/:protocol" element={
+            <VaultDetailPage positions={agentData.positions} />
+          } />
+          <Route path="/tx/:txHash" element={<TxDetailPage />} />
+          <Route path="*" element={<Navigate to="/home" replace />} />
+        </Routes>
       </main>
       <aside className="rail">
         <WalletPanel phase={walletPhase} address={realAddress} />
@@ -895,14 +991,14 @@ const App = () => {
       {slowConfirm && (
         <div className="modal-backdrop">
           <div className="modal" role="dialog" aria-modal="true">
-            <div className="modal-eyebrow">venice ai · timeout</div>
-            <h3 className="modal-title">AI masih memproses — lanjut nunggu?</h3>
+            <div className="modal-eyebrow">AI · timeout</div>
+            <h3 className="modal-title">AI is still processing — continue waiting?</h3>
             <p className="lede" style={{ marginTop: 8 }}>
-              Generation udah lewat {Math.round(VENICE_TIMEOUT_MS / 1000)} detik. Mau tunggu lebih lama, atau pakai strategy default aja?
+              Generation has exceeded {Math.round(VENICE_TIMEOUT_MS / 1000)} seconds. Do you want to keep waiting or use the default strategy instead?
             </p>
             <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={handleStopWaiting}>Pakai default</button>
-              <button className="btn btn-primary" onClick={handleKeepWaiting}>Lanjut nunggu</button>
+              <button className="btn btn-ghost" onClick={handleStopWaiting}>Use default</button>
+              <button className="btn btn-primary" onClick={handleKeepWaiting}>Keep waiting</button>
             </div>
           </div>
         </div>

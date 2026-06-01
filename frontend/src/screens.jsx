@@ -1,7 +1,7 @@
 /* ============================================
    VIBING FARMER — screens (multi-agent edition)
    ============================================ */
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icon } from './components.jsx';
 import { loadSettings, t } from './settingsStore.js';
 
@@ -20,11 +20,31 @@ const RISK_OPTIONS = [
 const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
   const { language: lang } = loadSettings()
   const valid = Number(amount) > 0 && risk;
+  const [prefill, setPrefill] = useState(null)
+  useEffect(() => {
+    const protocol = sessionStorage.getItem('yv_prefill_protocol')
+    const name = sessionStorage.getItem('yv_prefill_name')
+    const apy = sessionStorage.getItem('yv_prefill_apy')
+    if (protocol) {
+      setPrefill({ protocol, name, apy })
+      sessionStorage.removeItem('yv_prefill_protocol')
+      sessionStorage.removeItem('yv_prefill_name')
+      sessionStorage.removeItem('yv_prefill_apy')
+    }
+  }, [])
   return (
     <section className="card enter">
+      {prefill && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.04)', border: '1px solid var(--border)', borderRadius: 6, padding: '9px 14px', marginBottom: 16, fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>
+          <span style={{ color: 'var(--ok)', fontSize: 9 }}>●</span>
+          <span style={{ color: 'var(--text-muted)' }}>
+            Farming <strong style={{ color: 'inherit', fontWeight: 600, fontFamily: 'inherit' }}>{prefill.name}</strong> · {Number(prefill.apy).toFixed(1)}% APY
+          </span>
+        </div>
+      )}
       <div className="eyebrow">
         <span className="num">01</span>
-        <span>AI Strategy · venice ai · multi-agent</span>
+        <span>AI Strategy · live RAG · multi-agent</span>
         <span className="rule" />
         <span>06 steps</span>
       </div>
@@ -33,7 +53,7 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
         Set your deposit — let the orchestrator spawn the agents.
       </h1>
       <p className="lede">
-        Venice AI generates the strategy: how many worker agents are needed, which vault each agent handles,
+        AI generates the strategy: how many worker agents are needed, which vault each agent handles,
         and which skills they run. All transactions are relayed via 1Shot, so you pay zero gas. The permissions you grant
         are scoped per agent—no agent can act outside its designated vault boundaries.
       </p>
@@ -76,7 +96,9 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
 
       <div className="action-row">
         <div className="foot-note">
-          Venice AI · privacy-first · <b>no data retention</b>
+          <span className="ai-attribution">
+            ● AI · live data
+          </span>
         </div>
         <button className="btn btn-primary btn-lg" disabled={!valid} onClick={onSubmit}>
           {t(lang, 'getReco')} <Icon name="arrow" size={14} />
@@ -92,7 +114,7 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
 const THINK_STEPS = [
   { label: "Scanning 24 active vaults on Sepolia" },
   { label: "Structuring allocation per risk profile" },
-  { label: "Generating strategy via Venice AI" },
+  { label: "Generating strategy via AI" },
 ];
 
 const THINK_MSGS = [
@@ -124,7 +146,7 @@ const ThinkingCard = ({ phase, times = [] }) => {
     <section className="thinking enter">
       <div className="eyebrow">
         <span className="num">01</span>
-        <span>Venice AI · claude-opus-4-8 · orchestrator planning</span>
+        <span>AI Swarm · claude-opus-4-8 · orchestrator planning</span>
       </div>
       <h2 className="thinking-title">Formulating multi-agent strategy…</h2>
 
@@ -245,7 +267,13 @@ const MmDialog = ({ domain, title, rows, pending }) => (
   <div className="mm-pop enter">
     <div className="mm-pop-head">
       <div className="mm-brand">
-        <div className="mm-mark">MM</div>
+        <div className="mm-mark">
+          <img 
+            src="https://images.ctfassets.net/clixtyxoaeas/4ES1xXFPTzqLsOumTgHcMd/e5bcf8648eeea657850731684ee4942b/MetaMask-icon-fox-developer.svg" 
+            alt="MetaMask Logo" 
+            style={{ width: 14, height: 14, display: "block" }} 
+          />
+        </div>
         <span className="mm-name">MetaMask</span>
       </div>
       <span className="mm-domain">{domain}</span>
@@ -393,7 +421,13 @@ const MmPermissionModal = ({ strategy, onConfirm, onReject }) => {
         <div className="mm-pop" style={{ marginTop: 0 }}>
           <div className="mm-pop-head">
             <div className="mm-brand">
-              <div className="mm-mark">MM</div>
+              <div className="mm-mark">
+                <img 
+                  src="https://images.ctfassets.net/clixtyxoaeas/4ES1xXFPTzqLsOumTgHcMd/e5bcf8648eeea657850731684ee4942b/MetaMask-icon-fox-developer.svg" 
+                  alt="MetaMask Logo" 
+                  style={{ width: 14, height: 14, display: "block" }} 
+                />
+              </div>
               <span className="mm-name">MetaMask</span>
             </div>
             <span className="mm-domain">vibing-farmer.app</span>

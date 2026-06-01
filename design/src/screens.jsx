@@ -22,7 +22,7 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
     <section className="card enter">
       <div className="eyebrow">
         <span className="num">01</span>
-        <span>AI Strategy · venice ai · multi-agent</span>
+        <span>AI Strategy · live RAG · multi-agent</span>
         <span className="rule" />
         <span>06 steps</span>
       </div>
@@ -31,7 +31,7 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
         Set your deposit — let the orchestrator spawn the agents.
       </h1>
       <p className="lede">
-        Venice AI generates the strategy: how many worker agents are needed, which vault each agent handles,
+        AI generates the strategy: how many worker agents are needed, which vault each agent handles,
         and which skills they run. All transactions are relayed via 1Shot, so you pay zero gas. The permissions you grant
         are scoped per agent—no agent can act outside its designated vault boundaries.
       </p>
@@ -73,9 +73,9 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
       </div>
 
       <div className="action-row">
-        <div className="foot-note">
-          Venice AI · privacy-first · <b>no data retention</b>
-        </div>
+        <span className="ai-attribution">
+          ● AI · live data
+        </span>
         <button className="btn btn-primary btn-lg" disabled={!valid} onClick={onSubmit}>
           Get Recommendation <Icon name="arrow" size={14} />
         </button>
@@ -98,7 +98,7 @@ const ThinkingCard = ({ phase }) => {
     <section className="thinking enter">
       <div className="eyebrow">
         <span className="num">01</span>
-        <span>Venice AI · claude-opus-4-8 · orchestrator planning</span>
+        <span>AI Swarm · claude-opus-4-8 · orchestrator planning</span>
       </div>
       <h2 className="thinking-title">Formulating multi-agent strategy…</h2>
 

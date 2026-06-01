@@ -1,13 +1,47 @@
 /* ============================================
    VIBING FARMER — Skill Review (step 03)
-   Auto-generated skill cards per worker agent.
-   User can review, edit JSON, or approve each skill.
+   Human-readable skill cards. No raw JSON shown to user.
    ============================================ */
-import React, { useMemo as useMemoSk } from 'react';
-import { Icon } from './components.jsx';
+import React, { useState, useMemo } from 'react';
+import SkillDetailModal from './components/SkillDetailModal.jsx';
+import SkillEditModal from './components/SkillEditModal.jsx';
+
+/* ---------- Protocol display names ---------- */
+const PROTOCOL_NAMES = {
+  'pendle':      'Pendle PT-USDC',
+  'pendle-v2':   'Pendle v2 USDC',
+  'morpho-blue': 'Morpho Blue USDC',
+  'aave-v3':     'Aave v3 USDC',
+  'fluid':       'Fluid USDC',
+  'compound-v3': 'Compound v3 USDC',
+  'spark':       'Spark USDC',
+};
+
+export function formatProtocol(protocol) {
+  return PROTOCOL_NAMES[protocol] || protocol || 'Vault';
+}
+
+/* ---------- Translate skill JSON → human readable fields ---------- */
+export function translateSkill(agent, skill) {
+  const amountVal = agent.allocation
+    ? `${agent.allocation} USDC`
+    : skill.guards?.maxAmount || '—';
+
+  const action = `Deposit ${amountVal} to ${formatProtocol(agent.vault?.protocol)}`;
+  const steps = `${skill.steps?.length || 3} automated steps`;
+
+  const rawExpiry = String(skill.guards?.expiresIn || '86400').replace(/[^0-9]/g, '');
+  const expiresInSec = parseInt(rawExpiry, 10) || 86400;
+  const hours = Math.floor(expiresInSec / 3600);
+  const expiry = `${hours} hour${hours !== 1 ? 's' : ''}`;
+  const revocable = skill.guards?.revocable ? '· revocable' : '';
+  const risk = skill.guards?.riskProfile || agent.vault?.risk || 'medium';
+
+  return { action, steps, expiry, revocable, risk, amountVal };
+}
 
 /* ---------- Skill template generator ---------- */
-const buildSkillForAgent = (agent, riskProfile) => {
+export const buildSkillForAgent = (agent, riskProfile) => {
   const max = `${agent.allocation} USDC`;
   return {
     name: agent.skillName,
@@ -20,121 +54,70 @@ const buildSkillForAgent = (agent, riskProfile) => {
       chain: "sepolia",
     },
     steps: [
-      {
-        id: "swap",
-        action: "uniswap_v3_swap",
-        params: { tokenIn: "USDC", tokenOut: "USDC", maxSlippageBps: 5 },
-      },
-      {
-        id: "approve",
-        action: "erc20_approve",
-        params: { spender: agent.vault.addr, amount: "exact" },
-      },
-      {
-        id: "deposit",
-        action: "erc4626_deposit",
-        params: { asset: "USDC", shares: "auto" },
-      },
+      { id: "swap",    action: "uniswap_v3_swap",  params: { tokenIn: "USDC", tokenOut: "USDC", maxSlippageBps: 5 } },
+      { id: "approve", action: "erc20_approve",     params: { spender: agent.vault.addr, amount: "exact" } },
+      { id: "deposit", action: "erc4626_deposit",   params: { asset: "USDC", shares: "auto" } },
     ],
     guards: {
       maxAmount: max,
       maxGas: "200000",
-      expiresIn: "86400s",
+      expiresIn: "86400",
       revocable: true,
       riskProfile: riskProfile,
     },
   };
 };
 
-/* ---------- Read-only JSON renderer (syntax-tinted) ---------- */
-const JsonView = ({ value }) => {
-  const text = JSON.stringify(value, null, 2);
-  return (
-    <pre className="skill-json-view">{text}</pre>
-  );
-};
-
-/* ---------- Editable JSON textarea ---------- */
-const JsonEdit = ({ value, onChange, error }) => (
-  <div className={`skill-json-edit ${error ? "has-error" : ""}`}>
-    <textarea
-      spellCheck={false}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label="Skill JSON editor"
-    />
-    {error && <div className="skill-json-err">{error}</div>}
-  </div>
-);
-
 /* ---------- Single skill card ---------- */
-const SkillCard = ({ agent, skill, state, onApprove, onEdit, onSave, onReset, editingText }) => {
-  const stateLabel = {
-    pending: "needs review",
-    editing: "editing",
-    approved: "approved",
-  }[state] || state;
+const SkillCard = ({ agent, skill, state, onApprove, onViewDetail }) => {
+  const info = translateSkill(agent, skill);
+  const isApproved = state === 'approved';
 
   return (
-    <div className={`skill-card ${state}`}>
-      <div className="skill-card-head">
-        <div className="skill-card-id">
-          <span className="skill-card-idx">{agent.idx}</span>
-          <div>
-            <div className="skill-card-name">{agent.name}</div>
-            <div className="skill-card-meta">
-              {skill.name} · v{skill.version} · {agent.vault.protocol}
-            </div>
-          </div>
+    <div className={`skill-card2 ${isApproved ? 'approved' : 'pending'}`}>
+      <div className="skill-card2-head">
+        <span className="skill-card2-idx">{agent.idx}</span>
+        <div className="skill-card2-title">
+          <div className="skill-card2-name">{agent.name}</div>
+          <div className="skill-card2-risk">{info.risk}</div>
         </div>
-        <span className={`skill-card-status ${state}`}>{stateLabel}</span>
+        <span
+          className={`skill-card2-dot ${isApproved ? 'approved' : 'pending'}`}
+          aria-label={isApproved ? 'approved' : 'needs review'}
+        />
       </div>
 
-      <div className="skill-card-body">
-        {state === "editing" ? (
-          <JsonEdit
-            value={editingText.text}
-            onChange={(t) => onEdit(agent.id, t)}
-            error={editingText.error}
-          />
+      <div className="skill-card2-action">{info.action}</div>
+
+      <div className="skill-card2-steps">{info.steps}</div>
+
+      <div className="skill-card2-meta">
+        {info.expiry} {info.revocable}
+      </div>
+
+      <div className={`skill-card2-status ${isApproved ? 'approved' : 'pending'}`}>
+        {isApproved ? '✓ approved' : '● needs review'}
+      </div>
+
+      <div className="skill-card2-actions">
+        <button
+          className="btn btn-text skill-card2-detail-btn"
+          onClick={() => onViewDetail(agent.id)}
+        >
+          View details
+        </button>
+        {isApproved ? (
+          <button className="btn skill-card2-approve approved" disabled>
+            ✓ Approved
+          </button>
         ) : (
-          <JsonView value={skill} />
+          <button
+            className="btn btn-ghost skill-card2-approve"
+            onClick={() => onApprove(agent.id)}
+          >
+            ✓ Approve
+          </button>
         )}
-      </div>
-
-      <div className="skill-card-foot">
-        <div className="skill-card-foot-meta mono">
-          {skill.steps.length} steps · max <b>{skill.guards.maxAmount}</b> · gas&nbsp;cap&nbsp;{skill.guards.maxGas}
-        </div>
-        <div className="skill-card-actions">
-          {state === "approved" ? (
-            <button className="btn btn-text" onClick={() => onReset(agent.id)}>
-              re-open
-            </button>
-          ) : state === "editing" ? (
-            <>
-              <button className="btn btn-text" onClick={() => onReset(agent.id)}>
-                cancel
-              </button>
-              <button
-                className="btn btn-ghost"
-                disabled={!!editingText.error}
-                onClick={() => onSave(agent.id)}
-              >
-                save edits
-              </button>
-            </>
-          ) : (
-            <>
-              <button className="btn btn-text" onClick={() => onEdit(agent.id, JSON.stringify(skill, null, 2), /*start*/ true)}>
-                <Icon name="edit" size={12} /> edit JSON
-              </button>
-              <button className="btn btn-ghost" onClick={() => onApprove(agent.id)}>
-                <Icon name="check" size={12} /> approve
-              </button>
-            </>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -182,15 +165,20 @@ const DelegationChain = ({ agents }) => {
 };
 
 /* ---------- Skill review screen ---------- */
-const SkillReviewCard = ({ agents, riskProfile, skillStates, onApprove, onEdit, onSave, onReset, onApproveAll, onContinue, editingTexts }) => {
-  const skills = useMemoSk(() => {
+const SkillReviewCard = ({
+  agents, riskProfile, skillStates,
+  onApprove, onSkillUpdate, onApproveAll, onContinue,
+}) => {
+  const [detailAgentId, setDetailAgentId] = useState(null);
+  const [editAgentId, setEditAgentId] = useState(null);
+
+  const skills = useMemo(() => {
     const map = {};
     agents.forEach((a) => { map[a.id] = buildSkillForAgent(a, riskProfile); });
     return map;
   }, [agents, riskProfile]);
 
-  // Allow caller-overridden skills (after edits)
-  const effectiveSkills = useMemoSk(() => {
+  const effectiveSkills = useMemo(() => {
     const map = { ...skills };
     Object.entries(skillStates).forEach(([id, s]) => {
       if (s.skill) map[id] = s.skill;
@@ -198,14 +186,25 @@ const SkillReviewCard = ({ agents, riskProfile, skillStates, onApprove, onEdit, 
     return map;
   }, [skills, skillStates]);
 
-  const approvedCount = agents.filter((a) => skillStates[a.id]?.state === "approved").length;
+  const approvedCount = agents.filter((a) => skillStates[a.id]?.state === 'approved').length;
   const allApproved = approvedCount === agents.length;
+
+  const detailAgent = detailAgentId ? agents.find((a) => a.id === detailAgentId) : null;
+  const detailSkill = detailAgentId ? effectiveSkills[detailAgentId] : null;
+  const editAgent   = editAgentId   ? agents.find((a) => a.id === editAgentId)   : null;
+  const editSkill   = editAgentId   ? effectiveSkills[editAgentId]                : null;
+
+  const handleOpenEdit = () => {
+    const id = detailAgentId;
+    setDetailAgentId(null);
+    setEditAgentId(id);
+  };
 
   return (
     <section className="card enter">
       <div className="eyebrow">
         <span className="num">03</span>
-        <span>Review skills · {agents.length} agent{agents.length === 1 ? "" : "s"}</span>
+        <span>Review skills · {agents.length} agent{agents.length === 1 ? '' : 's'}</span>
         <span className="rule" />
         <span>{approvedCount}/{agents.length} approved</span>
       </div>
@@ -214,32 +213,27 @@ const SkillReviewCard = ({ agents, riskProfile, skillStates, onApprove, onEdit, 
         Review the skills each agent will run — before you grant permissions.
       </h1>
       <p className="lede">
-        The orchestrator generates a skill JSON for each worker—this is the action-level contract it executes.
-        You can inspect each step, adjust guards, or approve as is. Approved skills are used
-        verbatim at runtime; there is no hidden logic.
+        Each agent gets a skill defining exactly what it can do. Review the actions, adjust the limits, then approve. Approved skills are used verbatim at runtime.
       </p>
 
       <DelegationChain agents={agents} />
 
-      <div className="skill-stack">
+      <div className="skill-grid">
         {agents.map((a) => (
           <SkillCard
             key={a.id}
             agent={a}
             skill={effectiveSkills[a.id]}
-            state={skillStates[a.id]?.state || "pending"}
-            editingText={editingTexts[a.id] || { text: "", error: null }}
+            state={skillStates[a.id]?.state || 'pending'}
             onApprove={onApprove}
-            onEdit={onEdit}
-            onSave={onSave}
-            onReset={onReset}
+            onViewDetail={setDetailAgentId}
           />
         ))}
       </div>
 
       <div className="action-row">
         <div className="foot-note">
-          Skills are signed by your smart account. Edit the JSON carefully — schema validation runs on every save.
+          Skills are signed by your smart account. Edit limits before approving if needed.
         </div>
         <div className="flex gap-2">
           {!allApproved && (
@@ -248,14 +242,32 @@ const SkillReviewCard = ({ agents, riskProfile, skillStates, onApprove, onEdit, 
             </button>
           )}
           <button className="btn btn-primary" disabled={!allApproved} onClick={onContinue}>
-            Next · grant permission <Icon name="arrow" size={14} />
+            Next · grant permission →
           </button>
         </div>
       </div>
+
+      {detailAgent && detailSkill && (
+        <SkillDetailModal
+          agent={detailAgent}
+          skill={detailSkill}
+          state={skillStates[detailAgent.id]?.state || 'pending'}
+          onClose={() => setDetailAgentId(null)}
+          onApprove={() => { onApprove(detailAgent.id); setDetailAgentId(null); }}
+          onEdit={handleOpenEdit}
+        />
+      )}
+
+      {editAgent && editSkill && (
+        <SkillEditModal
+          agent={editAgent}
+          skill={editSkill}
+          onClose={() => setEditAgentId(null)}
+          onSave={(updated) => { onSkillUpdate(editAgent.id, updated); setEditAgentId(null); }}
+        />
+      )}
     </section>
   );
 };
 
-export {
-  SkillReviewCard, SkillCard, JsonView, JsonEdit, buildSkillForAgent,
-};
+export { SkillReviewCard };
