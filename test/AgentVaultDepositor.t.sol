@@ -334,6 +334,28 @@ contract AgentVaultDepositorTest is Test {
         depositor.executeHarvest(agentId1, user, address(vaultA), false);
     }
 
+    // ─── attestStrategy ───────────────────────────────────────────────────────
+
+    function test_attestStrategy_emits_event() public {
+        bytes32 strategyHash = keccak256("venice-strategy-payload");
+
+        vm.expectEmit(true, false, false, true);
+        emit AgentVaultDepositor.StrategyAttested(user, strategyHash, block.timestamp, "morpho-blue", 600000);
+
+        vm.prank(user);
+        depositor.attestStrategy(strategyHash, "morpho-blue", 600000);
+    }
+
+    function test_attestStrategy_no_state_change() public {
+        vm.prank(user);
+        depositor.attestStrategy(keccak256("x"), "aave-v3", 1);
+
+        // attestation must not create or mutate any permission
+        (address vault,,,, bool active,,) = depositor.agentPermissions(user, agentId1);
+        assertEq(vault, address(0));
+        assertFalse(active);
+    }
+
     // ─── Fuzz Tests ───────────────────────────────────────────────────────────
 
     function testFuzz_deposit_within_limit_succeeds(uint256 amount) public {

@@ -175,7 +175,7 @@ const ThinkingCard = ({ phase, times = [] }) => {
 /* ============================================
    02 — Connect & EIP-7702 upgrade
    ============================================ */
-const ConnectCard = ({ phase, error, onConnect, onUpgrade, onDone, onCancel }) => {
+const ConnectCard = ({ phase, error, mmVersion, onConnect, onUpgrade, onDone, onCancel }) => {
   return (
     <section className="card enter">
       <div className="eyebrow">
@@ -193,6 +193,20 @@ const ConnectCard = ({ phase, error, onConnect, onUpgrade, onDone, onCancel }) =
         activating it as a smart account without changing wallets. Afterwards, the orchestrator can spawn worker
         agents, each with scoped permissions.
       </p>
+
+      {mmVersion && mmVersion.type !== "none" && (
+        <div className="mono" style={{ fontSize: 11, marginTop: 14, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", color: mmVersion.supportsERC7715 ? "var(--ok)" : "var(--warn)" }}>
+          <span style={{ fontSize: 8 }}>●</span>
+          {mmVersion.isFlask ? (
+            <span>MetaMask Flask {mmVersion.version} ✓ · ERC-7715 supported</span>
+          ) : (
+            <>
+              <span>MetaMask stable detected · Flask required for permissions</span>
+              <a href="https://metamask.io/flask/" target="_blank" rel="noopener noreferrer" className="accent" style={{ textDecoration: "none" }}>Switch to Flask →</a>
+            </>
+          )}
+        </div>
+      )}
 
       {phase === "idle" && (
         <div className="action-row">

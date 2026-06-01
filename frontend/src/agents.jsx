@@ -362,8 +362,9 @@ const MemoryModal = ({ agentId, strategy, execMap, onClose }) => {
 /* ============================================
    Strategy card (step 02 result) — multi-agent
    ============================================ */
-const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate }) => {
+const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate, strategyHash, attestation, attesting }) => {
   const customSkill = skillSource === "user-local" || skillSource === "user-file";
+  const shortHash = (h) => h ? `${h.slice(0, 10)}...` : "";
   return (
     <section className="rec-card enter">
       <div className="eyebrow">
@@ -423,6 +424,33 @@ const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate }) => {
           </div>
         ))}
       </div>
+
+      {(attestation || attesting || strategyHash) && (
+        <div className="mono" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 16, padding: "9px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", fontSize: 11, color: "var(--text-muted)" }}>
+          {attestation ? (
+            <>
+              <span style={{ color: "var(--ok)", fontSize: 8 }}>●</span>
+              <span>Strategy attested on-chain</span>
+              <span style={{ color: "var(--text-faint)" }}>·</span>
+              <span>Hash: {attestation.hash}</span>
+              <a href={attestation.etherscanUrl} target="_blank" rel="noopener noreferrer" className="accent" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                Verify on Etherscan <Icon name="external" size={11} />
+              </a>
+              <span style={{ color: "var(--text-faint)", marginLeft: "auto" }}>Powered by ERC-8004 · tamper-proof AI reasoning</span>
+            </>
+          ) : attesting ? (
+            <>
+              <span style={{ color: "var(--text-faint)", fontSize: 8 }}>○</span>
+              <span>Attesting strategy on-chain…</span>
+            </>
+          ) : (
+            <>
+              <span style={{ color: "var(--text-faint)", fontSize: 8 }}>○</span>
+              <span>Strategy hash: {shortHash(strategyHash)} (local only)</span>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="action-row">
         <div className="foot-note">

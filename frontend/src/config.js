@@ -32,6 +32,7 @@ export const DEPOSITOR_ABI = [
   'function executeAgentDeposit(bytes32 agentId, address user, address vault, uint256 amount) external',
   'function executeWithdraw(bytes32 agentId, address user, address vault, uint256 amount) external',
   'function executeHarvest(bytes32 agentId, address user, address vault, bool recompound) external',
+  'function attestStrategy(bytes32 strategyHash, string vaultProtocol, uint256 allocatedAmount) external',
   'function agentPermissions(address user, bytes32 agentId) external view returns (address vault, uint256 maxAmount, uint256 usedAmount, uint256 expiresAt, bool active, bool allowWithdraw, bool allowHarvest)',
   'event AgentStarted(bytes32 indexed agentId, address indexed user, address vault)',
   'event SwapExecuted(bytes32 indexed agentId, address indexed user, uint256 amountIn, uint256 amountOut)',
@@ -41,7 +42,8 @@ export const DEPOSITOR_ABI = [
   'event AgentFailed(bytes32 indexed agentId, address indexed user, string reason)',
   'event WithdrawExecuted(address indexed user, address vault, uint256 amount, uint256 shares)',
   'event HarvestExecuted(address indexed user, address vault, uint256 rewards)',
-  'event HarvestRecompounded(address indexed user, address vault, uint256 rewards)'
+  'event HarvestRecompounded(address indexed user, address vault, uint256 rewards)',
+  'event StrategyAttested(address indexed user, bytes32 strategyHash, uint256 timestamp, string vaultProtocol, uint256 allocatedAmount)'
 ]
 
 // MockVault ABI — reads + harvest/withdraw flows for Background Agents (monitor, harvest, emergency withdraw)

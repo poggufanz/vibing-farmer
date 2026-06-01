@@ -94,6 +94,7 @@ export function saveStrategy({
   vaultDataSource,     // 'defiLlama' | 'fallback'
   marketContextUsed,   // boolean
   blendedApy,          // weighted average APY
+  strategyHash,        // bytes32 keccak256 of AI strategy + reasoning (on-chain attestation)
 }) {
   addEntry(KEYS.strategies, {
     type: 'strategy',
@@ -106,6 +107,7 @@ export function saveStrategy({
     vaultDataSource,
     marketContextUsed,
     blendedApy,
+    strategyHash,
     timestamp: Date.now(),
   })
 }

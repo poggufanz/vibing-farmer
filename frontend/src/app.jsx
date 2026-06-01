@@ -19,8 +19,12 @@ import {
   useTweaks, TweaksPanel, TweakSection, TweakRadio,
 } from './tweaks-panel.jsx';
 
-import { connectWallet, requestERC7715Permission, signSiweForVenice, switchToSepolia } from './wallet.js';
+import { connectWallet, requestERC7715Permission, signSiweForVenice, switchToSepolia, getProvider } from './wallet.js';
 import { generateStrategy } from './venice.js';
+import { attestStrategyOnChain, formatAttestation } from './attestation.js';
+import { detectMetaMaskVersion } from './flaskDetect.js';
+import FlaskGate from './components/FlaskGate.jsx';
+import OnboardingFlow from './components/OnboardingFlow.jsx';
 import { OrchestratorAgent } from './orchestrator.js';
 import { makeAgentId } from './worker.js';
 import { VAULT_CATALOG, VENICE_TIMEOUT_MS } from './config.js';
@@ -128,6 +132,9 @@ const App = () => {
   const genAbortRef = useR(null);
   const slowTimerRef = useR(null);
   const [strategy, setStrategy] = useS(null);
+  const [rawStrategy, setRawStrategy] = useS(null); // raw Venice result (carries strategyHash) for on-chain attestation
+  const [strategyAttestation, setStrategyAttestation] = useS(null);
+  const [attesting, setAttesting] = useS(false);
   const [skillSource, setSkillSource] = useS("default");
   const [marketLive, setMarketLive] = useS(null); // Tavily live market context used? null until first generation
   const [vaultLive, setVaultLive] = useS(null); // DeFiLlama live vault data used? null until first generation
@@ -164,6 +171,23 @@ const App = () => {
   const [realAddress, setRealAddress] = useS(null);
   const [permContext, setPermContext] = useS(null);
   const [veniceAuth, setVeniceAuth] = useS(null);
+  const [mmVersion, setMmVersion] = useS(null); // MetaMask flavor/version — Flask detection (once on mount)
+  const [onboarded, setOnboarded] = useS(() => localStorage.getItem('yv_onboarded') === 'true');
+
+  // Detect MetaMask flavor/version once on mount — Flask gate for ERC-7715.
+  useE(() => { detectMetaMaskVersion().then(setMmVersion); }, []);
+
+  // Strategy Attestation — NON-BLOCKING, best-effort. Fires once a wallet provider
+  // exists (post-connect) and the AI strategy carries a deterministic hash. Any
+  // failure/rejection is swallowed by attestStrategyOnChain → strategy still executes.
+  useE(() => {
+    const provider = getProvider();
+    if (!rawStrategy?.strategyHash || !provider || strategyAttestation || attesting) return;
+    setAttesting(true);
+    attestStrategyOnChain(rawStrategy, provider)
+      .then((a) => setStrategyAttestation(formatAttestation(a)))
+      .finally(() => setAttesting(false));
+  }, [rawStrategy, realAddress]);
 
   // Background agent
   const [agentEnabled, setAgentEnabled] = useS(() => localStorage.getItem('yv_agent_enabled') !== 'false');
@@ -346,6 +370,8 @@ const App = () => {
     let cancelled = false;
     setThinkTimes([]);
     setThinkingPhase(0);
+    setStrategyAttestation(null);
+    setRawStrategy(null);
     const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     const freeze = (i, st) => setThinkTimes((a) => { const n = [...a]; n[i] = (performance.now() - st) / 1000; return n; });
 
@@ -380,6 +406,7 @@ const App = () => {
         setSkillSource(veniceResult.skillSource || "default");
         setMarketLive(!!veniceResult.marketContextUsed);
         setVaultLive(veniceResult.vaultDataSource === "defiLlama");
+        setRawStrategy(veniceResult); // carries strategyHash → attestation effect picks it up once a provider exists
         if (veniceResult.generatedBy !== "fallback") {          s = mapVeniceToStrategy(veniceResult, amount, risk);
           addLog({ event: "OrchestratorPlanned", meta: `strategy via ${veniceResult.generatedBy} · ${(veniceResult.strategy_summary || veniceResult.rationale)?.slice(0, 60)}` });
         }
@@ -745,6 +772,9 @@ const App = () => {
     setStrategyPhase("input");
     setThinkingPhase(0);
     setStrategy(null);
+    setRawStrategy(null);
+    setStrategyAttestation(null);
+    setAttesting(false);
     setSkillStates({});
     setEditingTexts({});
     setConnectPhase("idle");
@@ -839,9 +869,9 @@ const App = () => {
           return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} onSubmit={handleSubmitPreference} />;
         if (strategyPhase === "thinking")
           return <ThinkingCard phase={thinkingPhase} times={thinkTimes} />;
-        return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} />;
+        return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} strategyHash={rawStrategy?.strategyHash} attestation={strategyAttestation} attesting={attesting} />;
       case "connect":
-        return <ConnectCard phase={connectPhase} error={connectError} onConnect={handleConnect} onUpgrade={handleUpgrade} onDone={handleConnectDone} onCancel={() => { setConnectPhase("idle"); setStage("strategy"); }} />;
+        return <ConnectCard phase={connectPhase} error={connectError} mmVersion={mmVersion} onConnect={handleConnect} onUpgrade={handleUpgrade} onDone={handleConnectDone} onCancel={() => { setConnectPhase("idle"); setStage("strategy"); }} />;
       case "skills":
         return (
           <SkillReviewCard
@@ -855,6 +885,8 @@ const App = () => {
           />
         );
       case "permission":
+        if (mmVersion && !mmVersion.supportsERC7715)
+          return <FlaskGate detectedType={mmVersion.type} onRetry={() => detectMetaMaskVersion().then(setMmVersion)} />;
         return <PermissionCard strategy={strategy} phase={permPhase} error={permError} onGrant={handleGrant} onConfirm={handlePermConfirm} onReject={handlePermReject} />;
       case "execute":
         return (
@@ -880,6 +912,19 @@ const App = () => {
   // APY/meta per vault for the agent dashboard (positions events don't carry APY)
   const agentVaultMeta = {};
   (strategy?.agents || []).forEach((a) => { agentVaultMeta[a.vault.addr.toLowerCase()] = { apy: Number(a.vault.apy), protocol: a.vault.protocol }; });
+
+  // APY-first onboarding — full-screen takeover for first-time users (not yet onboarded).
+  // Screen 1 (value prop, no wallet) → connect → Screen 2 (how it works) → main app.
+  // "Skip intro" or "Got it" persists yv_onboarded=true so it never shows again.
+  if (!onboarded) {
+    return (
+      <OnboardingFlow
+        connected={!!realAddress}
+        onConnect={handleConnect}
+        onComplete={() => { localStorage.setItem('yv_onboarded', 'true'); setOnboarded(true); }}
+      />
+    );
+  }
 
   return (
     <div className={`app ${sbExtended ? 'sb-extended' : 'sb-minimized'} ${railCollapsed ? 'rail-collapsed' : ''}`}>

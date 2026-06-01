@@ -1,5 +1,6 @@
 import { ethers } from 'ethers'
 import { SEPOLIA_CHAIN_ID_HEX, AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, VAULT_ABI, USDC_SEPOLIA } from './config.js'
+import { requireFlask } from './flaskDetect.js'
 
 let ethersProvider = null
 let account = null
@@ -43,6 +44,15 @@ export function getAccount() {
   return account
 }
 
+/**
+ * Get the ethers BrowserProvider set up by connectWallet().
+ * Used by attestation.js for read/sign access. Null until connected.
+ * @returns {ethers.BrowserProvider|null}
+ */
+export function getProvider() {
+  return ethersProvider
+}
+
 /** Prompt MetaMask to switch to Ethereum Sepolia. */
 export async function switchToSepolia() {
   if (!window.ethereum) throw new Error('MetaMask Flask not found.')
@@ -61,6 +71,14 @@ export async function switchToSepolia() {
 export async function requestERC7715Permission(expirySeconds = 86400) {
   if (!window.ethereum) throw new Error('MetaMask Flask not found.')
   if (!account) throw new Error('Wallet not connected. Call connectWallet() first.')
+
+  // Gate: ERC-7715 needs MetaMask Flask 13.5+. Surface FLASK_REQUIRED:<type> for the UI gate.
+  try {
+    await requireFlask()
+  } catch (err) {
+    if (err.message?.startsWith('FLASK_REQUIRED')) throw new Error(err.message)
+    throw err
+  }
 
   const result = await window.ethereum.request({
     method: 'wallet_requestExecutionPermissions',
