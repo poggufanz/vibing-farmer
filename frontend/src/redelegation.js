@@ -21,7 +21,11 @@ import { USDC_SEPOLIA } from './config.js'
  * Private key from VITE_ORCHESTRATOR_PRIVATE_KEY in .env (frontend/.env.local).
  */
 export async function createOrchestratorAccount() {
-  const orchestratorEOA = privateKeyToAccount(import.meta.env.VITE_ORCHESTRATOR_PRIVATE_KEY)
+  const rawKey = import.meta.env.VITE_ORCHESTRATOR_PRIVATE_KEY
+  if (!rawKey || rawKey === '0x...' || rawKey === '0x') {
+    throw new Error('[A2A] VITE_ORCHESTRATOR_PRIVATE_KEY not set — skipping redelegation')
+  }
+  const orchestratorEOA = privateKeyToAccount(rawKey)
 
   const publicClient = createPublicClient({
     chain,
