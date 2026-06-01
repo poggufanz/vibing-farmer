@@ -54,7 +54,7 @@ export function showAgentDetail(agent) {
     </div>
     <div class="detail-section">
       <div class="detail-key">Vault</div>
-      <div class="detail-val mono">${agent.vault || '—'}</div>
+      <div class="detail-val mono">${agent.vault || '-'}</div>
     </div>
     <div class="detail-section">
       <div class="detail-key">Skills</div>

@@ -71,8 +71,8 @@ export default function TxDetailPage() {
     { label: 'Vault',       value: tx.vaultName },
     { label: 'Protocol',    value: tx.protocol },
     { label: 'Amount',      value: `${tx.amountUsdc} USDC` },
-    { label: 'APY',         value: tx.apy ? `${tx.apy}%` : '—' },
-    { label: 'Worker',      value: tx.workerId || '—' },
+    { label: 'APY',         value: tx.apy ? `${tx.apy}%` : '-' },
+    { label: 'Worker',      value: tx.workerId || '-' },
     { label: 'Gas paid by', value: tx.gasPayedBy || '1shot-relayer', highlight: true },
     { label: 'Network',     value: `${tx.network || 'sepolia'} testnet` },
   ]

@@ -11,7 +11,7 @@ import { loadSettings, saveSetting, SETTINGS_DEFAULTS } from '../settingsStore.j
 import { getHistorySummary, clearTransactions, clearStrategies, clearReasoningLog, clearAllHistory } from '../history.js'
 import { fmtRemaining } from '../ui.js'
 
-const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '—')
+const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '-')
 const eyebrow = { fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: '.06em', color: 'var(--text-faint)', textTransform: 'uppercase' }
 const card = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px 18px' }
 const miniBtn = { appearance: 'none', border: '.5px solid var(--border-strong)', borderRadius: 5, background: 'rgba(255,255,255,.06)', color: 'inherit', font: 'inherit', fontSize: 11, padding: '5px 10px', cursor: 'pointer' }
@@ -278,7 +278,7 @@ export default function SettingsPage({
                 <button type="button" style={miniBtn} onClick={onSwitchNetwork}>Switch network</button>
               </Row>
               <Divider />
-              <Row label="Active Permissions" desc={permActive ? `${permissionCount} permission · ${fmtRemaining(permExpiresAt) || '—'} remaining · erc-7715 · batch` : 'no active permission'}>
+              <Row label="Active Permissions" desc={permActive ? `${permissionCount} permission · ${fmtRemaining(permExpiresAt) || '-'} remaining · erc-7715 · batch` : 'no active permission'}>
                 {permActive && <button type="button" style={dangerBtn} onClick={onRevoke}>Revoke all</button>}
               </Row>
               <Divider />
@@ -317,7 +317,7 @@ export default function SettingsPage({
           <Row label="Agent settings"><button type="button" style={miniBtn} onClick={() => onResetAgentSettings?.()}>Reset to defaults</button></Row>
           <Divider />
           <SubLabel>Privacy Notes</SubLabel>
-          {['Venice AI — no data retention. Queries not stored.', 'Tavily — search queries sent to Tavily API.', 'DeFiLlama — public API, no wallet data sent.', '1Shot relay — transaction data visible on-chain.', 'All other data stored locally in your browser only.'].map((n) => (
+          {['Venice AI · no data retention. Queries not stored.', 'Tavily · search queries sent to Tavily API.', 'DeFiLlama · public API, no wallet data sent.', '1Shot relay · transaction data visible on-chain.', 'All other data stored locally in your browser only.'].map((n) => (
             <div key={n} style={{ fontSize: 11.5, color: 'var(--text-muted)', padding: '3px 0', display: 'flex', gap: 8 }}><span style={{ color: 'var(--text-faint)' }}>●</span>{n}</div>
           ))}
         </Section>

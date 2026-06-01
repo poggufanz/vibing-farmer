@@ -55,7 +55,7 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
       <p className="lede">
         AI generates the strategy: how many worker agents are needed, which vault each agent handles,
         and which skills they run. All transactions are relayed via 1Shot, so you pay zero gas. The permissions you grant
-        are scoped per agent—no agent can act outside its designated vault boundaries.
+        are scoped per agent · no agent can act outside its designated vault boundaries.
       </p>
 
       <div className="amount-block">
@@ -186,7 +186,7 @@ const ConnectCard = ({ phase, error, mmVersion, onConnect, onUpgrade, onDone, on
       </div>
 
       <h1 className="h-display">
-        Upgrade your account to a smart account — single signature, reversible.
+        Upgrade your account to a smart account · single signature, reversible.
       </h1>
       <p className="lede">
         Your MetaMask account is currently a standard EOA. EIP-7702 sets delegation code on your existing account,
@@ -352,7 +352,7 @@ const PermissionCard = ({ strategy, onGrant, phase, error, onConfirm, onReject }
       </div>
 
       <h1 className="h-display">
-        Authorize {agents.length} agents — each scoped to their own vault.
+        Authorize {agents.length} agents · each scoped to their own vault.
       </h1>
       <p className="lede">
         These permissions are batched in a single signature, but each worker receives its own scope: a specific vault,

@@ -23,7 +23,7 @@ export default function FlaskGate({ detectedType, onRetry }) {
       <h1 className="h-display" style={{ marginTop: 8 }}>Set up Flask to grant advanced permissions.</h1>
       <p className="lede" style={{ margin: '12px auto 0', maxWidth: 460 }}>
         Vibing Farmer uses <span className="mono">ERC-7715</span> Advanced Permissions, which require
-        MetaMask Flask — the developer build of MetaMask.
+        MetaMask Flask · the developer build of MetaMask.
         {detectedType === 'stable' && ' We detected regular MetaMask in this profile.'}
         {detectedType === 'none' && ' We did not detect any wallet in this browser.'}
       </p>

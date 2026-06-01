@@ -25,7 +25,7 @@ export function formatProtocol(protocol) {
 export function translateSkill(agent, skill) {
   const amountVal = agent.allocation
     ? `${agent.allocation} USDC`
-    : skill.guards?.maxAmount || '—';
+    : skill.guards?.maxAmount || '-';
 
   const action = `Deposit ${amountVal} to ${formatProtocol(agent.vault?.protocol)}`;
   const steps = `${skill.steps?.length || 3} automated steps`;
@@ -210,7 +210,7 @@ const SkillReviewCard = ({
       </div>
 
       <h1 className="h-display">
-        Review the skills each agent will run — before you grant permissions.
+        Review the skills each agent will run · before you grant permissions.
       </h1>
       <p className="lede">
         Each agent gets a skill defining exactly what it can do. Review the actions, adjust the limits, then approve. Approved skills are used verbatim at runtime.

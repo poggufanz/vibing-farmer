@@ -55,7 +55,7 @@ export default function VaultDetailPage({ positions = {} }) {
   }
 
   const apy = liveData?.apy ?? catalog.apy
-  const tvl = liveData?.tvlFormatted ?? '—'
+  const tvl = liveData?.tvlFormatted ?? '-'
   const riskColor = catalog.risk === 'low' ? 'var(--ok)' : catalog.risk === 'medium' ? '#f59e0b' : '#f97316'
 
   // User position — match by contract address
@@ -127,7 +127,7 @@ export default function VaultDetailPage({ positions = {} }) {
         <div style={sectionLabel}>RISK PROFILE</div>
         <div style={{ fontSize: 13, marginTop: 8, lineHeight: 1.55, color: 'var(--text-muted)' }}>
           <span style={{ color: riskColor, fontWeight: 500 }}>{catalog.risk}</span>
-          {' — '}
+          {' · '}
           {catalog.description}
           {catalog.drawdown && (
             <span style={{ color: 'var(--text-faint)' }}>

@@ -16,7 +16,7 @@ const SEED = VAULT_CATALOG.slice(0, 3).map((v) => ({ name: v.name, protocol: v.p
 const HOW_STEPS = [
   { n: '①', title: 'Venice AI picks the best vault for your risk profile', quote: 'Like having a DeFi advisor who actually knows the market' },
   { n: '②', title: 'You approve ONE permission with clear limits', quote: 'Like giving a debit card with a spending limit to an assistant', meta: 'Max amount: you decide · Vault: you decide · Revoke anytime' },
-  { n: '③', title: 'Agent executes automatically — you pay zero gas', quote: '1Shot relayer covers all gas fees' },
+  { n: '③', title: 'Agent executes automatically · you pay zero gas', quote: '1Shot relayer covers all gas fees' },
   { n: '④', title: 'Background agent monitors 24/7', quote: 'APY drops? You get alerted. Risk detected? Emergency exit ready.' },
 ]
 

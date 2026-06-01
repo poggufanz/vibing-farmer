@@ -15,7 +15,7 @@ const POLL_MS = 10 * 60 * 1000
 const u = (x) => Number(x || 0) / 1e6
 const fmtAmt = (n) => (+Number(n || 0).toFixed(2)).toString()
 const formatTime = (ts, now = Date.now()) => {
-  if (!ts) return '—'
+  if (!ts) return '-'
   const { timestampFormat } = loadSettings()
   if (timestampFormat === 'absolute') {
     return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
@@ -161,7 +161,7 @@ export default function HomePage({
             <span>vibing</span><span className="slash">/</span><span className="vibing">farmer</span>
           </div>
           <p className="lede" style={{ margin: '18px auto 0', fontSize: 14 }}>
-            Autonomous yield farming. Set permission once — agent farms forever.
+            Autonomous yield farming. Set permission once · agent farms forever.
           </p>
           <button className="btn btn-primary" style={{ marginTop: 24 }} onClick={onConnect}>{t(lang, 'connectWallet')}</button>
           <div className="mono" style={{ marginTop: 20, fontSize: 11, color: 'var(--text-faint)' }}>
@@ -278,7 +278,7 @@ export default function HomePage({
               </div>
               <p className="lede" style={{ fontSize: 13, marginTop: 12, maxWidth: 520 }}>
                 Start your first strategy to begin farming. AI will recommend the best vault for
-                your risk profile. Agent will execute automatically — you pay zero gas.
+                your risk profile. Agent will execute automatically · you pay zero gas.
               </p>
               <button className="btn btn-primary" style={{ marginTop: 18 }} onClick={onStartStrategy}>Start Strategy →</button>
             </div>
@@ -464,12 +464,12 @@ export default function HomePage({
                           ) : v.poolId ? (
                             <span className="sparkline-loading">····</span>
                           ) : (
-                            <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>—</span>
+                            <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>-</span>
                           )}
                         </span>
-                        <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>{v.tvlFormatted || '—'}</span>
+                        <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>{v.tvlFormatted || '-'}</span>
                         <span className="mono" style={{ fontSize: 11, color: riskColor }}>
-                          {v.risk === 'medium' ? 'med' : (v.risk || '—')}
+                          {v.risk === 'medium' ? 'med' : (v.risk || '-')}
                         </span>
                         <span>
                           {active && bal !== null
