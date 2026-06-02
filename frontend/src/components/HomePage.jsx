@@ -10,6 +10,7 @@ import { generateSparkline, calcApyStats } from '../sparkline.js'
 import { VAULT_CATALOG } from '../config.js'
 import { loadSettings, t } from '../settingsStore.js'
 import { useNavigateTo } from '../router.js'
+import { YieldLine } from './SignatureMark.jsx'
 
 const POLL_MS = 10 * 60 * 1000
 const u = (x) => Number(x || 0) / 1e6
@@ -155,17 +156,19 @@ export default function HomePage({
   if (!userAddress) {
     return (
       <div className="enter" style={{ flex: 1, display: 'grid', placeItems: 'center', padding: 28, textAlign: 'center' }}>
-        <div style={{ maxWidth: 420 }}>
-          <img src="/vibing_farmer.logo.svg" alt="Vibing Farmer Logo" style={{ width: 80, height: 80, margin: '0 auto 24px', display: 'block' }} />
-          <div className="brand" style={{ justifyContent: 'center', fontSize: 22 }}>
+        <div style={{ maxWidth: 440 }}>
+          <div style={{ width: 300, maxWidth: '100%', margin: '0 auto 26px' }}>
+            <YieldLine height={120} />
+          </div>
+          <div className="brand brand--hero" style={{ justifyContent: 'center' }}>
             <span>vibing</span><span className="slash">/</span><span className="vibing">farmer</span>
           </div>
           <p className="lede" style={{ margin: '18px auto 0', fontSize: 14 }}>
             Autonomous yield farming. Set your permission once, and the agent farms for you.
           </p>
-          <button className="btn btn-primary" style={{ marginTop: 24 }} onClick={onConnect}>{t(lang, 'connectWallet')}</button>
-          <div className="mono" style={{ marginTop: 20, fontSize: 11, color: 'var(--text-faint)' }}>
-            relayer: 1Shot · gas: 0 · network: sepolia
+          <button className="btn btn-primary btn-lg" style={{ marginTop: 24 }} onClick={onConnect}>{t(lang, 'connectWallet')}</button>
+          <div className="mono" style={{ marginTop: 20, fontSize: 11, color: 'var(--text-faint)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span className="live-dot" />relayer 1Shot · gas 0 · network sepolia
           </div>
         </div>
       </div>

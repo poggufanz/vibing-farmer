@@ -5,10 +5,22 @@
 // Self-fetches DeFiLlama data so APY is visible with zero wallet interaction.
 import React, { useState, useEffect } from 'react'
 import { Icon } from '../components.jsx'
+import { YieldLine } from './SignatureMark.jsx'
+import { useCountUp, riseDelay } from '../motion.js'
 import { fetchDeFiLlamaVaults } from '../defiLlama.js'
 import { fetchApyHistoryBatch } from '../apyHistory.js'
 import { generateSparkline, calcApyStats } from '../sparkline.js'
 import { VAULT_CATALOG } from '../config.js'
+
+// APY value that counts up from 0 on mount.
+function ApyValue({ value, delay = 0 }) {
+  const n = useCountUp(Number(value) || 0, { duration: 1000, delay })
+  return (
+    <span className="mono tnum accent" style={{ fontSize: 13, fontWeight: 600, minWidth: 64, textAlign: 'right' }}>
+      {n.toFixed(1)}% APY
+    </span>
+  )
+}
 
 const FLASK_URL = 'https://metamask.io/flask/'
 const SEED = VAULT_CATALOG.slice(0, 3).map((v) => ({ name: v.name, protocol: v.protocol, apy: v.apy, poolId: null }))
@@ -27,7 +39,7 @@ function ValueScreen({ vaults, histories, onConnect }) {
     <div className="enter" style={scrollWrap}>
       <div className="onb-split">
         <div className="onb-left">
-          <div className="brand" style={{ fontSize: 20 }}>
+          <div className="brand brand--hero">
             <span>vibing</span><span className="slash">/</span><span className="vibing">farmer</span>
           </div>
 
@@ -45,19 +57,20 @@ function ValueScreen({ vaults, histories, onConnect }) {
         </div>
 
         <div className="onb-right">
-          <div className="onb-rates-label">Live vault rates</div>
+          <div className="onb-sig"><YieldLine height={120} /></div>
+          <div className="onb-rates-label"><span className="live-dot" />Live vault rates</div>
           <div className="onb-rates">
-            {vaults.map((v) => {
+            {vaults.map((v, i) => {
               const stats = v.poolId && histories[v.poolId] ? calcApyStats(histories[v.poolId]) : null
               return (
-                <div key={v.name} className="onb-rate-row">
+                <div key={v.name} className="onb-rate-row rise" style={riseDelay(i, 90, 250)}>
                   <span style={{ flex: 1, fontSize: 13 }}>{v.name}</span>
                   {stats && <span dangerouslySetInnerHTML={{ __html: generateSparkline(stats.values, { width: 56, height: 22 }) }} />}
-                  <span className="mono tnum accent" style={{ fontSize: 13, fontWeight: 600, minWidth: 64, textAlign: 'right' }}>{Number(v.apy).toFixed(1)}% APY</span>
+                  <ApyValue value={v.apy} delay={350 + i * 90} />
                 </div>
               )
             })}
-            <div className="onb-rate-row onb-rate-idle">
+            <div className="onb-rate-row onb-rate-idle rise" style={riseDelay(vaults.length, 90, 250)}>
               <span style={{ flex: 1, fontSize: 13, color: 'var(--text-muted)' }}>vs leaving in wallet</span>
               <span className="mono tnum" style={{ fontSize: 13, color: 'var(--text-faint)' }}>0.0% APY</span>
             </div>
