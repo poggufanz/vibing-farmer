@@ -27,7 +27,7 @@ const SCENE_2 = {
   features: [
     'AI picks the optimal vault',
     'One permission, scoped & revocable',
-    '1Shot relayer pays all gas — you pay $0',
+    '1Shot relayer pays all gas. You pay $0',
     'Agent monitors 24/7, exits on risk',
   ],
 }
@@ -90,7 +90,6 @@ function Player({ src = '/demo.mp4' }) {
         <span className="vf-dot" />
         <span className="vf-dot" />
         <span className="vf-dot" />
-        <span className="vf-player__label"></span>
       </div>
       <div className="vf-player__stage">
         <div className="vf-player__glow" aria-hidden="true" />
@@ -131,10 +130,7 @@ function SceneText({ data, side, active }) {
       <ul className="vf-features">
         {data.features.map((f) => (
           <motion.li key={f} className="vf-feature" variants={lineV}>
-            <span className="vf-feature__bullet" aria-hidden="true">
-              ●
-            </span>
-            <span>{f}</span>
+            {f}
           </motion.li>
         ))}
       </ul>
@@ -159,10 +155,10 @@ function OutroContent({ onStart }) {
     <>
       <p className="vf-outro__eyebrow">the vault is open</p>
       <h2 className="vf-outro__title">
-        Ready to make your money <em>move?</em>
+        The agents run. <em>You don't have to.</em>
       </h2>
       <p className="vf-outro__sub">
-        Autonomous yield, scoped permissions, zero gas. Set once — vibe forever.
+        Autonomous yield, scoped permissions, zero gas. Set once. Vibe forever.
       </p>
       <CtaBlock onStart={onStart} />
     </>
@@ -178,10 +174,7 @@ function StaticHero({ onStart }) {
       <section className="vf-static__scene">
         <Wordmark />
         <Player />
-        <p className="vf-tagline">set once. vibe forever.</p>
-        <p className="vf-scrollhint" aria-hidden="true">
-          scroll to explore ↓
-        </p>
+        <p className="vf-tagline">Set once. Vibe forever.</p>
       </section>
 
       <section className="vf-static__scene vf-static__scene--split">
@@ -269,12 +262,9 @@ function ScrollHero({ onStart, scrollContainer }) {
           <Player src={SCENE_VIDEO[scene]} />
         </motion.div>
 
-        {/* scene 1 tagline + hint */}
+        {/* scene 1 tagline */}
         <motion.div className="vf-stage__intro" style={{ opacity: introOpacity }}>
-          <p className="vf-tagline">set once. vibe forever.</p>
-          <p className="vf-scrollhint" aria-hidden="true">
-            scroll to explore ↓
-          </p>
+          <p className="vf-tagline">Set once. Vibe forever.</p>
         </motion.div>
 
       </div>
@@ -311,7 +301,7 @@ export default function LandingHero({ onStart }) {
   }, [])
 
   // Static layout only on real small screens. Desktop always animates —
-  // OS "reduce motion" no longer suppresses the scroll morph (demo-first).
+  // the scroll-morph is the product's core demo, shown to every visitor.
   const useStatic = isMobile
   const containerRef = useRef(null)
 
@@ -420,13 +410,6 @@ function StyleTag() {
   background: var(--text-faint, #56564f);
   opacity: 0.6;
 }
-.vf-player__label {
-  margin-left: auto;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  color: var(--text-muted, #95958a);
-}
 .vf-player__stage {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -484,19 +467,6 @@ function StyleTag() {
   font-size: clamp(1.05rem, 2.2vw, 1.5rem);
   color: var(--text-muted, #95958a);
 }
-.vf-scrollhint {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--text-faint, #56564f);
-  animation: vf-bob 2.4s ease-in-out infinite;
-}
-@keyframes vf-bob {
-  0%, 100% { transform: translateY(0); opacity: 0.55; }
-  50% { transform: translateY(5px); opacity: 1; }
-}
-
 /* ---------- scene text ---------- */
 .vf-headline {
   display: flex;
@@ -509,19 +479,14 @@ function StyleTag() {
   color: var(--text, #ecebe1);
   margin-bottom: 1.6rem;
 }
-.vf-features { list-style: none; display: flex; flex-direction: column; gap: 0.7rem; }
+.vf-features { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; }
 .vf-feature {
-  display: flex;
-  align-items: baseline;
-  gap: 0.7ch;
   font-family: var(--font-mono, monospace);
   font-size: clamp(0.8rem, 1.1vw, 0.95rem);
+  line-height: 1.4;
   color: var(--text-muted, #95958a);
-}
-.vf-feature__bullet {
-  color: var(--vf-accent);
-  font-size: 0.6em;
-  transform: translateY(-0.2em);
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--border-accent, rgba(207,255,61,0.4));
 }
 
 /* ---------- CTA ---------- */
@@ -682,7 +647,7 @@ function StyleTag() {
 .vf-static .vf-scene-text { position: static; transform: none; width: 100%; max-width: 520px; }
 .vf-static .vf-headline,
 .vf-static .vf-features { align-items: center; }
-.vf-static .vf-feature { justify-content: center; }
+.vf-static .vf-feature { text-align: center; border-left: none; padding-left: 0; }
 
 /* gentle entrance for static scenes */
 @media (prefers-reduced-motion: no-preference) {
@@ -701,9 +666,6 @@ function StyleTag() {
   .vf-scene-text .vf-features { align-items: flex-start; text-align: left; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .vf-scrollhint { animation: none; }
-}
 `}</style>
   )
 }
