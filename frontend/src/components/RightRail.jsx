@@ -12,9 +12,9 @@ const WalletPanel = ({ phase, address }) => {
       <div className="panel">
         <div className="panel-head">
           <div className="panel-title">Wallet</div>
-          <span className="panel-meta">not connected</span>
+          <span className="panel-meta">Not connected</span>
         </div>
-        <div className="empty">not connected yet</div>
+        <div className="empty">Not connected yet</div>
       </div>
     );
   }
@@ -23,20 +23,20 @@ const WalletPanel = ({ phase, address }) => {
     <div className="panel">
       <div className="panel-head">
         <div className="panel-title">Wallet</div>
-        <span className="panel-meta">{isSmart ? "smart account" : "eoa"}</span>
+        <span className="panel-meta">{isSmart ? "Smart account" : "EOA"}</span>
       </div>
       <div className="wallet-row">
         <div>
           <div className="wallet-addr">{shortAddr(address)}</div>
           <div className={`wallet-type ${isSmart ? "active" : ""}`}>
-            {isSmart ? "eip-7702 active" : "regular eoa"}
+            {isSmart ? "EIP-7702 active" : "Regular EOA"}
           </div>
         </div>
         <div className="wallet-actions">
           <button
             className="wallet-action"
-            title={copied ? "copied" : "copy address"}
-            aria-label="copy address"
+            title={copied ? "Copied" : "Copy address"}
+            aria-label="Copy address"
             onClick={async () => {
               try { await navigator.clipboard.writeText(address); setCopied(true); setTimeout(() => setCopied(false), 1200); }
               catch (e) { console.warn("[wallet] clipboard failed:", e); }
@@ -46,8 +46,8 @@ const WalletPanel = ({ phase, address }) => {
           </button>
           <a
             className="wallet-action"
-            title="view on etherscan"
-            aria-label="view on etherscan"
+            title="View on Etherscan"
+            aria-label="View on Etherscan"
             href={`https://sepolia.etherscan.io/address/${address}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -66,10 +66,10 @@ const PermissionPanel = ({ active, strategy, onRevoke, expiresAt }) => {
     <div className="panel">
       <div className="panel-head">
         <div className="panel-title">Active permissions</div>
-        <span className="panel-meta">erc-7715 · batch</span>
+        <span className="panel-meta">ERC-7715 · batch</span>
       </div>
       <div className={`perm-status ${active ? "active" : ""}`}>
-        {active ? `${agents.length} permission · ${fmtRemaining(expiresAt) || '-'}` : "no active permission"}
+        {active ? `${agents.length} permission · ${fmtRemaining(expiresAt) || '-'}` : "No active permission"}
       </div>
       {active && agents.length > 0 && (
         <>
@@ -86,7 +86,7 @@ const PermissionPanel = ({ active, strategy, onRevoke, expiresAt }) => {
             ))}
           </div>
           <button className="perm-revoke" onClick={onRevoke}>
-            revoke all permissions
+            Revoke all permissions
           </button>
         </>
       )}
@@ -127,10 +127,10 @@ const ActivityPanel = ({ logs }) => {
     <div className="panel" style={{ borderBottom: "none", flex: 1, display: "flex", flexDirection: "column" }}>
       <div className="panel-head">
         <div className="panel-title">Activity</div>
-        <span className="panel-meta">{logs.length ? `${logs.length} events · realtime` : "agent events · realtime"}</span>
+        <span className="panel-meta">{logs.length ? `${logs.length} events · realtime` : "Agent events · realtime"}</span>
       </div>
       {logs.length === 0 ? (
-        <div className="empty">no events yet</div>
+        <div className="empty">No events yet</div>
       ) : (
         <>
           <div className="activity" style={{ flex: 1 }}>
@@ -182,16 +182,15 @@ const ActivityPanel = ({ logs }) => {
                   padding: '4px 10px',
                   fontSize: 10,
                   fontFamily: 'var(--font-mono)',
-                  textTransform: 'lowercase',
                   letterSpacing: '0.04em'
                 }}
                 disabled={currentPage === 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
-                ← prev
+                ← Prev
               </button>
               <span className="mono" style={{ fontSize: 10, color: 'var(--text-faint)' }}>
-                page {currentPage} of {totalPages}
+                Page {currentPage} of {totalPages}
               </span>
               <button
                 className="btn btn-ghost"
@@ -199,13 +198,12 @@ const ActivityPanel = ({ logs }) => {
                   padding: '4px 10px',
                   fontSize: 10,
                   fontFamily: 'var(--font-mono)',
-                  textTransform: 'lowercase',
                   letterSpacing: '0.04em'
                 }}
                 disabled={currentPage >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               >
-                next →
+                Next →
               </button>
             </div>
           )}
@@ -221,15 +219,15 @@ const SkillPanel = ({ skillSource, marketLive, vaultLive, onCustomize }) => {
     <div className="panel">
       <div className="panel-head">
         <div className="panel-title">Vault Advisor Skill</div>
-        <button className="panel-meta skill-customize" onClick={onCustomize}>customize →</button>
+        <button className="panel-meta skill-customize" onClick={onCustomize}>Customize →</button>
       </div>
       <div className="perm-status active">
-        {custom ? "Custom Strategy" : "Default Strategy by Vibing Farmer"}
+        {custom ? "Custom strategy" : "Default strategy by Vibing Farmer"}
       </div>
       <div className="skill-sub">
-        {custom ? "active · user-defined" : "4 vaults · expert framework"}
-        {marketLive != null && ` · ${marketLive ? "🌐 live market data" : "📚 static context"}`}
-        {vaultLive != null && ` · ${vaultLive ? "📊 live vault data" : "🗂 cached vaults"}`}
+        {custom ? "Active · user-defined" : "4 vaults · expert framework"}
+        {marketLive != null && ` · ${marketLive ? "Live market data" : "Static context"}`}
+        {vaultLive != null && ` · ${vaultLive ? "Live vault data" : "Cached vaults"}`}
       </div>
     </div>
   );

@@ -14,52 +14,54 @@ const FLASK_URL = 'https://metamask.io/flask/'
 const SEED = VAULT_CATALOG.slice(0, 3).map((v) => ({ name: v.name, protocol: v.protocol, apy: v.apy, poolId: null }))
 
 const HOW_STEPS = [
-  { n: '①', title: 'Venice AI picks the best vault for your risk profile', quote: 'Like having a DeFi advisor who actually knows the market' },
-  { n: '②', title: 'You approve ONE permission with clear limits', quote: 'Like giving a debit card with a spending limit to an assistant', meta: 'Max amount: you decide · Vault: you decide · Revoke anytime' },
-  { n: '③', title: 'Agent executes automatically · you pay zero gas', quote: '1Shot relayer covers all gas fees' },
-  { n: '④', title: 'Background agent monitors 24/7', quote: 'APY drops? You get alerted. Risk detected? Emergency exit ready.' },
+  { n: '01', title: 'Venice AI picks the best vault for your risk.', sub: 'Live market data, not guesswork.' },
+  { n: '02', title: 'You approve one permission with hard limits.', sub: 'Max amount and vault are yours to set. Revoke anytime.' },
+  { n: '03', title: 'Agents execute automatically. You pay zero gas.', sub: '1Shot relayer covers the gas.' },
+  { n: '04', title: 'Background agent monitors 24/7.', sub: 'APY drops or risk spikes, you get alerted.' },
 ]
 
-const wrap = { flex: 1, minHeight: 0, overflowY: 'auto', display: 'grid', placeItems: 'center', padding: 28, textAlign: 'center' }
+const scrollWrap = { minHeight: '100vh', overflowY: 'auto', display: 'grid', placeItems: 'center', padding: '40px 32px' }
 
 function ValueScreen({ vaults, histories, onConnect }) {
   return (
-    <div className="enter" style={wrap}>
-      <div style={{ maxWidth: 460, width: '100%' }}>
-        <div className="brand" style={{ justifyContent: 'center', fontSize: 20 }}>
-          <span>vibing</span><span className="slash">/</span><span className="vibing">farmer</span>
-        </div>
+    <div className="enter" style={scrollWrap}>
+      <div className="onb-split">
+        <div className="onb-left">
+          <div className="brand" style={{ fontSize: 20 }}>
+            <span>vibing</span><span className="slash">/</span><span className="vibing">farmer</span>
+          </div>
 
-        <h1 className="h-display" style={{ marginTop: 22, fontSize: 30 }}>Your USDC. Earning yield.</h1>
-        <p className="lede" style={{ margin: '8px auto 0' }}>Zero gas. One permission.</p>
+          <h1 className="h-display onb-h1">Your USDC should be earning.</h1>
+          <p className="lede onb-sub">Set your limits once. Agents farm the best vaults for you, gas-free.</p>
 
-        <div className="mono" style={{ fontSize: 11, color: 'var(--text-faint)', textTransform: 'lowercase', letterSpacing: '-0.01em', margin: '28px 0 10px', textAlign: 'left' }}>
-          live vault rates right now
-        </div>
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
-          {vaults.map((v, i) => {
-            const stats = v.poolId && histories[v.poolId] ? calcApyStats(histories[v.poolId]) : null
-            return (
-              <div key={v.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: i ? '1px solid var(--border)' : 'none' }}>
-                <span style={{ flex: 1, textAlign: 'left', fontSize: 13 }}>{v.name}</span>
-                {stats && <span dangerouslySetInnerHTML={{ __html: generateSparkline(stats.values, { width: 56, height: 22 }) }} />}
-                <span className="mono tnum accent" style={{ fontSize: 13, fontWeight: 600, minWidth: 64, textAlign: 'right' }}>{Number(v.apy).toFixed(1)}% APY</span>
-              </div>
-            )
-          })}
-          <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
-            <span style={{ flex: 1, textAlign: 'left', fontSize: 13, color: 'var(--text-muted)' }}>vs leaving in wallet</span>
-            <span className="mono tnum" style={{ fontSize: 13, color: 'var(--text-faint)' }}>0.0% APY</span>
+          <button className="btn btn-primary btn-lg onb-cta" onClick={onConnect}>
+            Connect wallet &amp; start farming <Icon name="arrow" size={14} />
+          </button>
+
+          <div className="foot-note onb-foot">
+            Already have MetaMask Flask? Connect above.<br />
+            Need Flask? <a href={FLASK_URL} target="_blank" rel="noopener noreferrer" className="onb-link">Download in 2 minutes</a>
           </div>
         </div>
 
-        <button className="btn btn-primary btn-lg" style={{ marginTop: 24 }} onClick={onConnect}>
-          Connect wallet &amp; start farming <Icon name="arrow" size={14} />
-        </button>
-
-        <div className="foot-note" style={{ marginTop: 18 }}>
-          Already have MetaMask Flask? Connect above.<br />
-          Need Flask? <a href={FLASK_URL} target="_blank" rel="noopener noreferrer" className="accent" style={{ textDecoration: 'none' }}>Download in 2 minutes →</a>
+        <div className="onb-right">
+          <div className="onb-rates-label">Live vault rates</div>
+          <div className="onb-rates">
+            {vaults.map((v) => {
+              const stats = v.poolId && histories[v.poolId] ? calcApyStats(histories[v.poolId]) : null
+              return (
+                <div key={v.name} className="onb-rate-row">
+                  <span style={{ flex: 1, fontSize: 13 }}>{v.name}</span>
+                  {stats && <span dangerouslySetInnerHTML={{ __html: generateSparkline(stats.values, { width: 56, height: 22 }) }} />}
+                  <span className="mono tnum accent" style={{ fontSize: 13, fontWeight: 600, minWidth: 64, textAlign: 'right' }}>{Number(v.apy).toFixed(1)}% APY</span>
+                </div>
+              )
+            })}
+            <div className="onb-rate-row onb-rate-idle">
+              <span style={{ flex: 1, fontSize: 13, color: 'var(--text-muted)' }}>vs leaving in wallet</span>
+              <span className="mono tnum" style={{ fontSize: 13, color: 'var(--text-faint)' }}>0.0% APY</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -68,24 +70,23 @@ function ValueScreen({ vaults, histories, onConnect }) {
 
 function HowItWorksScreen({ onDone, onSkip }) {
   return (
-    <div className="enter" style={wrap}>
-      <div style={{ maxWidth: 520, width: '100%' }}>
+    <div className="enter" style={scrollWrap}>
+      <div style={{ maxWidth: 540, width: '100%', textAlign: 'left' }}>
         <h1 className="h-display" style={{ fontSize: 28 }}>How Vibing Farmer works</h1>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18, margin: '28px 0', textAlign: 'left' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, margin: '28px 0' }}>
           {HOW_STEPS.map((s) => (
-            <div key={s.n} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              <span className="mono accent" style={{ fontSize: 18, lineHeight: '22px', flex: 'none' }}>{s.n}</span>
+            <div key={s.n} style={{ display: 'flex', gap: 16, alignItems: 'baseline' }}>
+              <span className="mono accent" style={{ fontSize: 13, fontWeight: 600, flex: 'none', minWidth: 22 }}>{s.n}</span>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>{s.title}</div>
-                <div className="lede" style={{ fontSize: 12.5, marginTop: 4, fontStyle: 'italic' }}>"{s.quote}"</div>
-                {s.meta && <div className="mono" style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{s.meta}</div>}
+                <div style={{ fontSize: 14.5, fontWeight: 500, letterSpacing: '-0.01em' }}>{s.title}</div>
+                <div className="lede" style={{ fontSize: 12.5, marginTop: 3 }}>{s.sub}</div>
               </div>
             </div>
           ))}
         </div>
-        <div className="action-row" style={{ justifyContent: 'center', gap: 10 }}>
-          <button className="btn btn-ghost" onClick={onSkip}>Skip intro <Icon name="arrow" size={13} /></button>
-          <button className="btn btn-primary btn-lg" onClick={onDone}>Got it, let's start <Icon name="arrow" size={14} /></button>
+        <div className="action-row" style={{ gap: 10 }}>
+          <button className="btn btn-ghost" onClick={onSkip}>Skip intro</button>
+          <button className="btn btn-primary btn-lg" onClick={onDone}>Start farming <Icon name="arrow" size={14} /></button>
         </div>
       </div>
     </div>

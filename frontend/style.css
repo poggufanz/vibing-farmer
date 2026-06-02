@@ -43,7 +43,7 @@
   --font-display: "Geist", "Söhne", system-ui, sans-serif;
   --font-body: "Geist", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Geist Mono", ui-monospace, monospace;
-  --font-script: "Instrument Serif", "Times New Roman", serif;
+  --font-script: "Newsreader", "Times New Roman", serif;
 
   /* Tabular numbers everywhere they appear in data context */
   --num-feat: "tnum" 1, "lnum" 1, "ss01" 1;
@@ -277,8 +277,7 @@ input, select, textarea {
   margin-left: 0;
   font-family: var(--font-mono);
   font-size: 11px;
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .app.sb-extended .sb-label {
@@ -2493,7 +2492,6 @@ input, select, textarea {
   font-size: 11px;
   color: var(--text-faint);
   letter-spacing: -0.01em;
-  text-transform: lowercase;
 }
 
 .memory-log {
@@ -2894,4 +2892,56 @@ details.yv-collapse[open] > summary .yv-caret {
 
 @media (prefers-reduced-motion: reduce) {
   .yv-caret { transition: none; }
+}
+
+/* ---------- Onboarding: editorial split (de-AI rebuild) ---------- */
+.onb-split {
+  width: 100%;
+  max-width: 960px;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 56px;
+  align-items: center;
+}
+.onb-left { text-align: left; }
+.onb-h1 {
+  font-size: clamp(30px, 2.6vw, 46px);
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  margin-top: 20px;
+}
+.onb-sub { font-size: 15px; margin-top: 14px; max-width: 34ch; }
+.onb-cta { margin-top: 26px; }
+.onb-foot { margin-top: 18px; line-height: 1.7; }
+.onb-link {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 1px;
+  transition: border-color .15s, color .15s;
+}
+.onb-link:hover { border-color: var(--accent); color: var(--accent); }
+.onb-rates-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+}
+.onb-rates {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.onb-rate-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+}
+.onb-rate-row + .onb-rate-row { border-top: 1px solid var(--border); }
+.onb-rate-idle { background: rgba(255,255,255,0.012); }
+@media (max-width: 820px) {
+  .onb-split { grid-template-columns: 1fr; gap: 30px; max-width: 460px; }
 }

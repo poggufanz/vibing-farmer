@@ -179,16 +179,15 @@ const HistoryPanel = () => {
               padding: '6px 14px',
               fontSize: 11,
               fontFamily: 'var(--font-mono)',
-              textTransform: 'lowercase',
               letterSpacing: '0.04em'
             }}
             disabled={page === 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
-            ← prev
+            ← Prev
           </button>
           <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>
-            page {page} of {totalPages}
+            Page {page} of {totalPages}
           </span>
           <button
             className="btn btn-ghost"
@@ -196,13 +195,12 @@ const HistoryPanel = () => {
               padding: '6px 14px',
               fontSize: 11,
               fontFamily: 'var(--font-mono)',
-              textTransform: 'lowercase',
               letterSpacing: '0.04em'
             }}
             disabled={page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
           >
-            next →
+            Next →
           </button>
         </div>
       )}
