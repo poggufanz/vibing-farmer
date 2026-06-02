@@ -83,7 +83,7 @@ function PlayButton() {
 }
 
 // The player itself — pure presentation. Animation lives on the wrapper.
-function Player() {
+function Player({ src = '/demo.mp4' }) {
   return (
     <div className="vf-player">
       <div className="vf-player__chrome">
@@ -91,18 +91,20 @@ function Player() {
         <span className="vf-dot" />
         <span className="vf-dot" />
         <span className="vf-player__label"></span>
-      </div>    
-    <div className="vf-player__stage">
-      <div className="vf-player__glow" aria-hidden="true" />
+      </div>
+      <div className="vf-player__stage">
+        <div className="vf-player__glow" aria-hidden="true" />
+        {/* key={src} → swapping the per-scene video remounts cleanly. */}
         <video
-          src="/demo.mp4"
+          key={src}
+          src={src}
           autoPlay
-          loop 
-          muted         
+          loop
+          muted
           playsInline
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
-    </div>
+      </div>
     </div>
   )
 }
@@ -203,6 +205,9 @@ function StaticHero({ onStart }) {
 
 /* -------------------------- scroll-driven -------------------------- */
 
+// Per-scene video. All /demo.mp4 for now — swap freely later.
+const SCENE_VIDEO = { 1: '/demo.mp4', 2: '/demo.mp4', 3: '/demo.mp4' }
+
 function ScrollHero({ onStart, scrollContainer }) {
   const ref = useRef(null)
   // Track scroll inside our own fixed container — the app locks body/#root
@@ -230,7 +235,7 @@ function ScrollHero({ onStart, scrollContainer }) {
     [0, 0.5, 0, 0.5, 0, 0]
   )
 
-  // Scene activation from scroll position (drives the stagger).
+  // Scene activation from scroll position (drives stagger + which video plays).
   const [scene, setScene] = useState(1)
   useMotionValueEvent(scrollYProgress, 'change', (p) => {
     const next = p < 0.2 ? 1 : p < 0.6 ? 2 : 3
@@ -254,14 +259,14 @@ function ScrollHero({ onStart, scrollContainer }) {
         {/* scene 3 text — left side, in 0.6+ */}
         <SceneText data={SCENE_3} side="left" active={scene === 3} />
 
-        {/* the moving player */}
+        {/* the moving player — video crossfades per scene */}
         <motion.div className="vf-stage__player" style={{ x, scale, rotateY }}>
           <motion.div
             className="vf-stage__trail"
             style={{ opacity: trailOpacity }}
             aria-hidden="true"
           />
-          <Player />
+          <Player src={SCENE_VIDEO[scene]} />
         </motion.div>
 
         {/* scene 1 tagline + hint */}
@@ -694,8 +699,6 @@ function StyleTag() {
 @media (min-width: 761px) {
   .vf-scene-text .vf-headline,
   .vf-scene-text .vf-features { align-items: flex-start; text-align: left; }
-  .vf-scene-text--left .vf-headline,
-  .vf-scene-text--left .vf-features { align-items: flex-start; }
 }
 
 @media (prefers-reduced-motion: reduce) {
