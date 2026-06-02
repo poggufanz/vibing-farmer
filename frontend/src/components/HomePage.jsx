@@ -167,7 +167,7 @@ export default function HomePage({
             Autonomous yield farming. Set your permission once, and the agent farms for you.
           </p>
           <button className="btn btn-primary btn-lg" style={{ marginTop: 24 }} onClick={onConnect}>{t(lang, 'connectWallet')}</button>
-          <div className="mono" style={{ marginTop: 20, fontSize: 11, color: 'var(--text-faint)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <div className="mono" style={{ marginTop: 22, fontSize: 11, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <span className="live-dot" />relayer 1Shot · gas 0 · network sepolia
           </div>
         </div>
