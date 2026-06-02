@@ -37,6 +37,7 @@ import { saveTransaction } from './history.js';
 import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEvent, harvestVault, emergencyWithdraw } from './agents/agentController.js';
 import AgentDashboard from './components/AgentDashboard.jsx';
 import HomePage from './components/HomePage.jsx';
+import LandingHero from './components/LandingHero.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import { WalletPanel, PermissionPanel, ActivityPanel, SkillPanel, PalettePicker, PALETTES } from './components/RightRail.jsx';
 import { loadSettings, saveSetting } from './settingsStore.js';
@@ -187,6 +188,7 @@ const App = () => {
   const [veniceAuth, setVeniceAuth] = useS(null);
   const [mmVersion, setMmVersion] = useS(null); // MetaMask flavor/version — Flask detection (once on mount)
   const [onboarded, setOnboarded] = useS(() => localStorage.getItem('yv_onboarded') === 'true');
+  const [skipLanding, setSkipLanding] = useS(() => localStorage.getItem('yv_skip_landing') === 'true');
 
   // Detect MetaMask flavor/version once on mount — Flask gate for ERC-7715.
   useE(() => { detectMetaMaskVersion().then(setMmVersion); }, []);
@@ -1008,6 +1010,21 @@ const App = () => {
   // APY/meta per vault for the agent dashboard (positions events don't carry APY)
   const agentVaultMeta = {};
   (strategy?.agents || []).forEach((a) => { agentVaultMeta[a.vault.addr.toLowerCase()] = { apy: Number(a.vault.apy), protocol: a.vault.protocol }; });
+
+  // Landing takeover — first-time, not-yet-connected visitors see the scroll
+  // hero before anything else. "Start farming" persists yv_skip_landing and
+  // sets the URL to /strategy, which surfaces once onboarding (connect) completes.
+  if (!skipLanding && !realAddress) {
+    return (
+      <LandingHero
+        onStart={() => {
+          localStorage.setItem('yv_skip_landing', 'true');
+          setSkipLanding(true);
+          navigate('/strategy');
+        }}
+      />
+    );
+  }
 
   // APY-first onboarding — full-screen takeover for first-time users (not yet onboarded).
   // Screen 1 (value prop, no wallet) → connect → Screen 2 (how it works) → main app.

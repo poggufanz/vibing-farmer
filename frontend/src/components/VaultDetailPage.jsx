@@ -11,7 +11,7 @@ const short = (a) => (a ? `${a.slice(0, 10)}…${a.slice(-8)}` : '')
 
 const backBtn = { appearance: 'none', border: 0, background: 'transparent', font: 'inherit', fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }
 const divider = { borderTop: '1px solid var(--border)', margin: '20px 0' }
-const sectionLabel = { fontSize: 9.5, color: 'var(--text-faint)', textTransform: 'lowercase', letterSpacing: '-0.01em', fontFamily: 'var(--font-mono)' }
+const sectionLabel = { fontSize: 11, color: 'var(--text-muted)', textTransform: 'capitalize', letterSpacing: '0.01em', fontWeight: 500 }
 const metricCard = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '10px 12px' }
 const pillBtn = { appearance: 'none', border: '.5px solid rgba(255,255,255,.18)', borderRadius: 5, background: 'rgba(255,255,255,.06)', color: 'inherit', font: 'inherit', fontSize: 10.5, padding: '4px 9px', cursor: 'pointer' }
 const extLink = { color: 'var(--text-muted)', fontSize: 11, textDecoration: 'underline' }

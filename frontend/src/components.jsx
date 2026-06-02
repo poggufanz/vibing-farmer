@@ -48,11 +48,11 @@ const Sidebar = ({ extended, onToggle }) => {
   const activePath = getSidebarPath(location.pathname);
 
   const items = [
-    { key: "home",     icon: "home",     path: "/home",     label: "home" },
-    { key: "vaults",   icon: "grid",     path: "/strategy", label: "strategy" },
-    { key: "agent",    icon: "network",  path: "/agent",    label: "dashboard" },
-    { key: "history",  icon: "layers",   path: "/history",  label: "history" },
-    { key: "settings", icon: "settings", path: "/settings", label: "settings" },
+    { key: "home",     icon: "home",     path: "/home",     label: "Home" },
+    { key: "vaults",   icon: "grid",     path: "/strategy", label: "Strategy" },
+    { key: "agent",    icon: "network",  path: "/agent",    label: "Dashboard" },
+    { key: "history",  icon: "layers",   path: "/history",  label: "History" },
+    { key: "settings", icon: "settings", path: "/settings", label: "Settings" },
   ];
 
   return (
@@ -77,7 +77,7 @@ const Sidebar = ({ extended, onToggle }) => {
       
       <button className="sb-item sb-toggle" onClick={onToggle} title={extended ? "Collapse Sidebar" : "Expand Sidebar"}>
         <Icon name={extended ? "panelLeftClose" : "panelLeftOpen"} style={{ transition: 'all 0.15s ease' }} />
-        <span className="sb-label">collapse</span>
+        <span className="sb-label">Collapse</span>
       </button>
     </nav>
   );

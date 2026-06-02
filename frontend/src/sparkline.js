@@ -47,6 +47,8 @@ export function generateSparkline(values, opts = {}) {
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"
          xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block">
       <polyline
+        class="spark-line"
+        pathLength="1"
         points="${points.join(' ')}"
         fill="none"
         stroke="${lineColor}"
@@ -55,7 +57,7 @@ export function generateSparkline(values, opts = {}) {
         stroke-linejoin="round"
         opacity="0.85"
       />
-      <circle cx="${dotX}" cy="${dotY}" r="2" fill="${lineColor}" />
+      <circle class="spark-dot" cx="${dotX}" cy="${dotY}" r="2" fill="${lineColor}" />
     </svg>
   `
 }
