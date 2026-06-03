@@ -36,3 +36,15 @@ export function checkTurbulence(state, thresholds) {
   }
   return { pass: true, name: 'turbulence' }
 }
+
+/** Anti-churn guard: enforce a minimum gap between rebalances. */
+export function checkCooldown(state, thresholds) {
+  if (state.timeSinceLastRebalance < thresholds.MIN_COOLDOWN_HOURS) {
+    return {
+      pass: false,
+      name: 'cooldown',
+      reason: `Cooldown active: ${state.timeSinceLastRebalance.toFixed(1)}h since last rebalance (min: ${thresholds.MIN_COOLDOWN_HOURS}h)`,
+    }
+  }
+  return { pass: true, name: 'cooldown' }
+}

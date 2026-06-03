@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentPortfolioAPY, checkTurbulence } from './gates.js'
+import { getCurrentPortfolioAPY, checkTurbulence, checkCooldown } from './gates.js'
 
 describe('getCurrentPortfolioAPY', () => {
   it('returns 0 when there are no positions', () => {
@@ -41,5 +41,25 @@ describe('checkTurbulence', () => {
 
   it('fails exactly at the threshold (>=)', () => {
     expect(checkTurbulence({ turbulenceIndex: 0.75 }, thresholds).pass).toBe(false)
+  })
+})
+
+describe('checkCooldown', () => {
+  const thresholds = { MIN_COOLDOWN_HOURS: 12 }
+
+  it('passes when enough time has elapsed since last rebalance', () => {
+    const result = checkCooldown({ timeSinceLastRebalance: 24 }, thresholds)
+    expect(result.pass).toBe(true)
+    expect(result.name).toBe('cooldown')
+  })
+
+  it('passes on first boot (Infinity)', () => {
+    expect(checkCooldown({ timeSinceLastRebalance: Infinity }, thresholds).pass).toBe(true)
+  })
+
+  it('fails when still inside the cooldown window', () => {
+    const result = checkCooldown({ timeSinceLastRebalance: 6 }, thresholds)
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('Cooldown')
   })
 })
