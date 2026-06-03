@@ -205,6 +205,13 @@ export function isUnsupportedByOneShot() {
   return !ONESHOT_SUPPORTED_CHAINS.has(String(SEPOLIA_CHAIN_ID))
 }
 
+/** True when the Managed API proxy should handle deposits.
+ *  On Base Sepolia we skip the EIP-5792 batch so each worker calls relayDeposit
+ *  → managed API proxy → real gas-abstracted 1Shot tx. */
+export function useManagedRelay() {
+  return String(SEPOLIA_CHAIN_ID) === '84532'
+}
+
 /** Build a {to,data} grantAgentPermission call for EIP-5792 batching. */
 export async function buildGrantCall({ agentId, vault, maxAmount, expiresAt }) {
   return { to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: await encodeGrantAgentPermission(agentId, vault, maxAmount, expiresAt) }

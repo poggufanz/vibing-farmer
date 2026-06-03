@@ -192,6 +192,7 @@ export default function EcosystemPage() {
 
   const launchApp = () => {
     localStorage.setItem('yv_skip_landing', 'true')
+    localStorage.setItem('yv_onboarded', 'true')
     navigate('/strategy')
   }
 

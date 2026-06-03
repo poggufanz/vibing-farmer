@@ -1030,7 +1030,9 @@ const App = () => {
       <LandingHero
         onStart={() => {
           localStorage.setItem('yv_skip_landing', 'true');
+          localStorage.setItem('yv_onboarded', 'true');
           setSkipLanding(true);
+          setOnboarded(true);
           navigate('/strategy');
         }}
       />

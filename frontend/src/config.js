@@ -1,7 +1,4 @@
-// Contract addresses — Base Sepolia deploy
-// ⚠️ TODO(base-sepolia): these are the OLD Ethereum Sepolia addresses. Redeploy
-// AgentVaultDepositor + MockVaults to Base Sepolia (84532) and paste the new
-// addresses here (see script/Deploy.s.sol --rpc-url https://sepolia.base.org).
+// Contract addresses — Base Sepolia (84532) deploy 2026-06-03
 export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0xcAD4A07Db284AB55518AF406fD18877b2AC5A442'
 export const MOCK_VAULT_A_ADDRESS = '0x5a5e02F53CDbBc2E413e14105Cbf93c8504b8E17'
 export const MOCK_VAULT_B_ADDRESS = '0xc1f99AA5ce77BDfF69f9a20361aB8937F9f17139'

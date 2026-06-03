@@ -2,7 +2,7 @@ import { WorkerAgent, makeAgentId } from './worker.js'
 import { generateAgentSkills } from './venice.js'
 import { saveSkill } from './skills.js'
 import { batchCalls } from './wallet.js'
-import { isUnsupportedByOneShot, buildGrantCall, buildDepositCall } from './relay.js'
+import { isUnsupportedByOneShot, useManagedRelay, buildGrantCall, buildDepositCall } from './relay.js'
 
 /**
  * Orchestrator Agent — receives Venice plan, dispatches Worker Agents in parallel.
@@ -67,7 +67,7 @@ export class OrchestratorAgent {
     // Single-confirmation batch: grant + deposit for ALL agents in one wallet popup
     // (EIP-5792). null if wallet lacks it → workers fall back to per-agent signing.
     let batchedHash = null
-    if (isUnsupportedByOneShot()) {
+    if (isUnsupportedByOneShot() && !useManagedRelay()) {
       const expiresAt = Math.floor(Date.now() / 1000) + 3600
       const calls = []
       for (const p of vaultPlans) {

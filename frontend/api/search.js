@@ -5,6 +5,8 @@ const TAVILY_URL = 'https://api.tavily.com/search'
 
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
   'http://localhost:4173',
   ...(process.env.ALLOWED_ORIGIN ? process.env.ALLOWED_ORIGIN.split(',').map(o => o.trim()) : []),
 ].filter(Boolean)

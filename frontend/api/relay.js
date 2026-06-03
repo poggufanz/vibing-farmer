@@ -25,6 +25,8 @@ const CHAIN_ID = 84532 // Base Sepolia
 
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
   'http://localhost:4173',
   // Add your Vercel domain after deploy:
   // 'https://yield-vibing.vercel.app',

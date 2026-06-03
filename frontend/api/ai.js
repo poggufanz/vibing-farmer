@@ -5,6 +5,8 @@ const DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions'
 
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
   'http://localhost:4173',
   // Add your Vercel domain after deploy:
   // 'https://yield-vibing.vercel.app',

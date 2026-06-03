@@ -25,9 +25,9 @@ export default function NavBar() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
-  // Enter the app the same way LandingHero's "Start farming" does.
   const launchApp = () => {
     localStorage.setItem('yv_skip_landing', 'true')
+    localStorage.setItem('yv_onboarded', 'true')
     navigate('/strategy')
   }
 
