@@ -54,5 +54,15 @@ export function createAutonomousLoop(deps) {
     }
   }
 
-  return { runOneCycle }
+  async function runOneCycleSafe() {
+    try {
+      return await runOneCycle()
+    } catch (err) {
+      // Crash recovery — log but never let one bad cycle kill the loop.
+      logger.error?.(`Cycle error: ${err.message}`)
+      return { outcome: 'error', error: err.message }
+    }
+  }
+
+  return { runOneCycle, runOneCycleSafe }
 }

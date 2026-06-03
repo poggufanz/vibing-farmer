@@ -117,3 +117,26 @@ describe('runOneCycle — simulation short-circuit', () => {
     expect(stages.runCouncil).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('runOneCycleSafe — crash recovery', () => {
+  it('catches a thrown stage error and returns an error envelope instead of throwing', async () => {
+    const boom = new Error('DeFiLlama 503')
+    const stages = makeStages({
+      fetchState: vi.fn(async () => { throw boom }),
+    })
+    const errorLog = vi.fn()
+    const loop = makeLoop(stages, { logger: { error: errorLog, log: () => {} } })
+
+    const result = await loop.runOneCycleSafe()
+
+    expect(result.outcome).toBe('error')
+    expect(result.error).toBe('DeFiLlama 503')
+    expect(errorLog).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns the normal cycle result when nothing throws', async () => {
+    const loop = makeLoop(makeStages())
+    const result = await loop.runOneCycleSafe()
+    expect(result.outcome).toBe('executed')
+  })
+})
