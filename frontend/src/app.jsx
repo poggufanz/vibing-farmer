@@ -381,7 +381,7 @@ const App = () => {
       userAddress: realAddress,
       activeVaults,
       rpcUrl: import.meta.env.VITE_RPC_URL,
-      tavilyKey: import.meta.env.VITE_TAVILY_API_KEY,
+      // Tavily key no longer passed to client — risk scan routes through /api/search proxy.
       supportedProtocols: ['aave-v3', 'morpho-blue', 'spark', 'fluid'],
       thresholds: agentSettings,
     });

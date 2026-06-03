@@ -2,6 +2,17 @@
 
 const SKILLS_STORAGE_KEY = 'yv_skills'
 
+// Escape before interpolating into innerHTML — skill JSON is user-editable and
+// agentId is externally supplied; unescaped they enable DOM XSS.
+function esc(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 /**
  * Build skill object for an agent.
  * @param {string} agentId
@@ -78,14 +89,14 @@ export function approveSkill(agentId) {
 export function renderSkillEditor(agentId, skill, container, onApprove) {
   container.innerHTML = `
     <div class="skill-editor">
-      <div class="skill-editor-header">Skills: ${agentId.slice(0, 12)}...</div>
-      <textarea id="skill-json-${agentId}" class="skill-json-editor">${JSON.stringify(skill, null, 2)}</textarea>
-      <button class="btn-approve-skill" data-agent="${agentId}">Approve Skills</button>
+      <div class="skill-editor-header">Skills: ${esc(String(agentId).slice(0, 12))}...</div>
+      <textarea class="skill-json-editor">${esc(JSON.stringify(skill, null, 2))}</textarea>
+      <button class="btn-approve-skill">Approve Skills</button>
     </div>
   `
   container.querySelector('.btn-approve-skill').addEventListener('click', () => {
     try {
-      const textarea = container.querySelector(`#skill-json-${agentId}`)
+      const textarea = container.querySelector('.skill-json-editor')
       const updated = JSON.parse(textarea.value)
       updated.approvedByUser = true
       saveSkill(agentId, updated)

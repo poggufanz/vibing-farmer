@@ -131,13 +131,14 @@ async function runRewardCheck() {
 
 // ─── Monitor 4: Risk Watcher (Tavily security news) ───────────────────────────
 async function runRiskCheck() {
-  if (!config?.tavilyKey || config.thresholds.riskMonitoring === false) return
+  if (config?.thresholds?.riskMonitoring === false) return
   try {
     for (const vault of config.activeVaults) {
       const query = `${vault.protocol} exploit hack vulnerability depeg 2026`
-      const res = await fetch('https://api.tavily.com/search', {
+      // Server-side proxy — Tavily key stays on the server (see api/search.js).
+      const res = await fetch('/api/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.tavilyKey}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, search_depth: 'basic', max_results: 3, include_answer: true }),
       })
       const data = await res.json()

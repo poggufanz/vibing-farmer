@@ -12,20 +12,29 @@ import {
 import { createCaveatBuilder, hashDelegation } from '@metamask/smart-accounts-kit/utils'
 import { parseUnits, createPublicClient, http } from 'viem'
 import { sepolia as chain } from 'viem/chains'
-import { privateKeyToAccount } from 'viem/accounts'
+import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { USDC_SEPOLIA } from './config.js'
+
+// Ephemeral, per-session orchestrator key. Generated client-side in memory and
+// NEVER persisted, NEVER bundled. SECURITY: a static VITE_ORCHESTRATOR_PRIVATE_KEY
+// would be inlined into the client bundle by Vite and readable by any visitor —
+// a standing-authority key leak. An ephemeral key has no standing authority: it
+// only signs redelegations scoped under the user's freshly-signed root delegation
+// for the current session, then is discarded on reload.
+let sessionOrchestratorKey = null
+function getSessionOrchestratorKey() {
+  if (!sessionOrchestratorKey) sessionOrchestratorKey = generatePrivateKey()
+  return sessionOrchestratorKey
+}
 
 /**
  * Creates the orchestrator smart account.
- * Orchestrator is a backend-controlled smart account — NOT the user's MetaMask.
- * Private key from VITE_ORCHESTRATOR_PRIVATE_KEY in .env (frontend/.env.local).
+ * Orchestrator is an ephemeral per-session smart account — NOT the user's MetaMask,
+ * and NOT a long-lived backend key. Its private key lives only in memory for the
+ * current tab session and is regenerated on reload.
  */
 export async function createOrchestratorAccount() {
-  const rawKey = import.meta.env.VITE_ORCHESTRATOR_PRIVATE_KEY
-  if (!rawKey || rawKey === '0x...' || rawKey === '0x') {
-    throw new Error('[A2A] VITE_ORCHESTRATOR_PRIVATE_KEY not set — skipping redelegation')
-  }
-  const orchestratorEOA = privateKeyToAccount(rawKey)
+  const orchestratorEOA = privateKeyToAccount(getSessionOrchestratorKey())
 
   const publicClient = createPublicClient({
     chain,

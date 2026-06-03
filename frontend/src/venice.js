@@ -78,15 +78,15 @@ function resolveProvider(veniceAuth, devApiKey) {
  */
 export async function generateStrategy({ amount, riskLevel, numVaults, veniceAuth, devApiKey, signal }) {
   const settings = loadSettings()
-  const effectiveTavilyKey = settings.tavilyApiKey || import.meta.env.VITE_TAVILY_API_KEY
   const useStaticVaults = settings.vaultDataSource === 'static'
   const marketContextEnabled = settings.marketContext !== false
 
-  // Load skill + market context + real vault data ALL IN PARALLEL (no added latency)
+  // Load skill + market context + real vault data ALL IN PARALLEL (no added latency).
+  // Market context goes through the /api/search proxy — Tavily key stays server-side.
   const [skill, marketContext, liveVaults] = await Promise.all([
     loadVaultSkill(),
     marketContextEnabled
-      ? fetchMarketContext(effectiveTavilyKey, riskLevel).catch(() => null)
+      ? fetchMarketContext(riskLevel).catch(() => null)
       : Promise.resolve(null),
     useStaticVaults
       ? Promise.resolve(null)

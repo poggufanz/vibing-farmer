@@ -55,6 +55,7 @@ contract AgentVaultDepositor is ReentrancyGuard {
     error InvalidExpiry();
     error WithdrawNotPermitted();
     error HarvestNotPermitted();
+    error UnauthorizedCaller();
 
     /// @notice Grant permission to an agent to deposit into a specific vault.
     ///         Withdraw/harvest are opt-in via setAgentCapabilities (default false).
@@ -121,6 +122,11 @@ contract AgentVaultDepositor is ReentrancyGuard {
         AgentPermission storage perm = agentPermissions[user][agentId];
 
         // CHECKS — revert immediately on any violation
+        // Caller authorization: only the permission owner may drive their own
+        // permission. Every on-chain execution path is user-signed (EIP-7702
+        // account / user EOA); without this, ANY address could trigger deposits,
+        // burn a user's allowance, or grief the yield clock.
+        if (msg.sender != user) revert UnauthorizedCaller();
         if (!perm.active) revert PermissionNotActive();
         if (block.timestamp >= perm.expiresAt) revert PermissionExpired();
         if (perm.vault != vault) revert VaultMismatch();
@@ -151,7 +157,9 @@ contract AgentVaultDepositor is ReentrancyGuard {
         nonReentrant
     {
         AgentPermission storage perm = agentPermissions[user][agentId];
+        if (msg.sender != user) revert UnauthorizedCaller();
         if (!perm.active) revert PermissionNotActive();
+        if (block.timestamp >= perm.expiresAt) revert PermissionExpired();
         if (!perm.allowWithdraw) revert WithdrawNotPermitted();
         if (perm.vault != vault) revert VaultMismatch();
 
@@ -166,7 +174,9 @@ contract AgentVaultDepositor is ReentrancyGuard {
         nonReentrant
     {
         AgentPermission storage perm = agentPermissions[user][agentId];
+        if (msg.sender != user) revert UnauthorizedCaller();
         if (!perm.active) revert PermissionNotActive();
+        if (block.timestamp >= perm.expiresAt) revert PermissionExpired();
         if (!perm.allowHarvest) revert HarvestNotPermitted();
         if (perm.vault != vault) revert VaultMismatch();
 

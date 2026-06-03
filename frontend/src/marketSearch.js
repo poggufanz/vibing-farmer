@@ -2,7 +2,9 @@
 // Fetches real-time DeFi market context via Tavily before strategy generation.
 // Output is injected into Venice AI system prompt as live market intelligence.
 
-const TAVILY_ENDPOINT = 'https://api.tavily.com/search'
+// Server-side proxy — the Tavily key stays on the server (see api/search.js).
+// No API key in the client bundle.
+const SEARCH_PROXY_URL = '/api/search'
 const TAVILY_TIMEOUT_MS = 8000
 
 /**
@@ -10,13 +12,10 @@ const TAVILY_TIMEOUT_MS = 8000
  * Returns a concise summary string ready to inject into Venice AI prompt.
  * Never throws — on any failure returns null (caller uses static fallback).
  *
- * @param {string} apiKey - VITE_TAVILY_API_KEY
  * @param {'low'|'medium'|'high'} riskLevel - user's risk preference
  * @returns {Promise<string|null>} market context summary or null
  */
-export async function fetchMarketContext(apiKey, riskLevel) {
-  if (!apiKey) return null
-
+export async function fetchMarketContext(riskLevel) {
   const queries = {
     low: 'DeFi stablecoin lending yield safe protocols 2026 current APY',
     medium: 'DeFi yield farming USDC Morpho Aave market conditions 2026',
@@ -29,26 +28,22 @@ export async function fetchMarketContext(apiKey, riskLevel) {
   const timeoutId = setTimeout(() => controller.abort(), TAVILY_TIMEOUT_MS)
 
   try {
-    const res = await fetch(TAVILY_ENDPOINT, {
+    const res = await fetch(SEARCH_PROXY_URL, {
       method: 'POST',
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query,
         search_depth: 'basic',       // basic = faster, cheaper
         max_results: 3,              // 3 sources cukup untuk context
         include_answer: true,        // Tavily AI summary — inject langsung
-        include_raw_content: false,  // raw content terlalu panjang untuk prompt
       }),
     })
 
     clearTimeout(timeoutId)
 
     if (!res.ok) {
-      console.warn('[MarketSearch] Tavily error:', res.status)
+      console.warn('[MarketSearch] search proxy error:', res.status)
       return null
     }
 
