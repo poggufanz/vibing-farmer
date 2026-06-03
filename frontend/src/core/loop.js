@@ -38,6 +38,11 @@ export function createAutonomousLoop(deps) {
     }
 
     const sim = await stages.runSimulation(gate.candidates, state)
+    if (sim.expectedValue < config.minExpectedValueUSD) {
+      logger.log?.(`[${cycleId}] sim rejected: E[value]=$${sim.expectedValue}`)
+      return { cycleId, outcome: 'sim_rejected', expectedValue: sim.expectedValue }
+    }
+
     const verdicts = await stages.runCouncil(sim, state, config, playbook)
     const consensus = stages.evaluateConsensus(verdicts)
     await stages.executeRebalance(consensus, sim, state, config)

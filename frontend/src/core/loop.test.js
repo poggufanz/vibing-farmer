@@ -87,3 +87,33 @@ describe('runOneCycle — gate short-circuit', () => {
     expect(stages.runSimulation).toHaveBeenCalledWith([{ id: 'pool-7' }], expect.anything())
   })
 })
+
+describe('runOneCycle — simulation short-circuit', () => {
+  it('stops when expected value is below the configured minimum', async () => {
+    const stages = makeStages({
+      loadConfig: vi.fn(async () => ({ minExpectedValueUSD: 10 })),
+      runSimulation: vi.fn(async () => ({ expectedValue: 4 })), // below 10
+    })
+    const loop = makeLoop(stages)
+
+    const result = await loop.runOneCycle()
+
+    expect(result.outcome).toBe('sim_rejected')
+    expect(result.expectedValue).toBe(4)
+    expect(stages.runCouncil).not.toHaveBeenCalled()
+    expect(stages.executeRebalance).not.toHaveBeenCalled()
+  })
+
+  it('proceeds to council when expected value meets the minimum', async () => {
+    const stages = makeStages({
+      loadConfig: vi.fn(async () => ({ minExpectedValueUSD: 10 })),
+      runSimulation: vi.fn(async () => ({ expectedValue: 10 })), // exactly at threshold passes
+    })
+    const loop = makeLoop(stages)
+
+    const result = await loop.runOneCycle()
+
+    expect(result.outcome).toBe('executed')
+    expect(stages.runCouncil).toHaveBeenCalledTimes(1)
+  })
+})
