@@ -2,11 +2,11 @@
 // ⚠️ TODO(base-sepolia): these are the OLD Ethereum Sepolia addresses. Redeploy
 // AgentVaultDepositor + MockVaults to Base Sepolia (84532) and paste the new
 // addresses here (see script/Deploy.s.sol --rpc-url https://sepolia.base.org).
-export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0xf1441BBC2fa6D37Ce7A5f6254a6A443B281d38f4'
-export const MOCK_VAULT_A_ADDRESS = '0x735f3a63D5be965E6B7564a2befeca0E316d09Ad'
-export const MOCK_VAULT_B_ADDRESS = '0x79007794Eb31B6a8439C38B604827012DBc0D771'
-export const MOCK_VAULT_C_ADDRESS = '0xAABfc44939E6437446E6FBD4A4e3816C877e371C'
-export const MOCK_VAULT_D_ADDRESS = '0xdef19fED6Da53D3757779d27b9A2640547c30b6F'
+export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0xcAD4A07Db284AB55518AF406fD18877b2AC5A442'
+export const MOCK_VAULT_A_ADDRESS = '0x5a5e02F53CDbBc2E413e14105Cbf93c8504b8E17'
+export const MOCK_VAULT_B_ADDRESS = '0xc1f99AA5ce77BDfF69f9a20361aB8937F9f17139'
+export const MOCK_VAULT_C_ADDRESS = '0xfCab208782D0dAC2978BA411b01C45243DE63855'
+export const MOCK_VAULT_D_ADDRESS = '0x398b619382D319FeCC08c85E87320672d0104D59'
 
 // Network — Base Sepolia (84532). 1Shot Managed API supports this testnet
 // (keyless permissionless relayer is mainnet-only — see relay.js).
