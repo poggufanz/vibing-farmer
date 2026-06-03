@@ -34,12 +34,16 @@ const ALLOWED_ORIGINS = [
 ].filter(Boolean)
 
 // executeAgentDeposit signature — must match AgentVaultDepositor.sol exactly.
+// 1Shot NewSolidityStructParam shape: `type` is the BASE enum
+// (address/bool/bytes/int/string/uint/struct) — bit/byte width goes in `typeSize`,
+// and `index` (ordinal position) is REQUIRED. bytes32 → {type:'bytes',typeSize:32};
+// uint256 → {type:'uint',typeSize:256}. Wrong shape → ZodError → 502.
 const DEPOSIT_FN = 'executeAgentDeposit'
 const DEPOSIT_INPUTS = [
-  { name: 'agentId', type: 'bytes32' },
-  { name: 'user', type: 'address' },
-  { name: 'vault', type: 'address' },
-  { name: 'amount', type: 'uint256' },
+  { name: 'agentId', type: 'bytes', typeSize: 32, index: 0 },
+  { name: 'user', type: 'address', index: 1 },
+  { name: 'vault', type: 'address', index: 2 },
+  { name: 'amount', type: 'uint', typeSize: 256, index: 3 },
 ]
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
@@ -205,7 +209,9 @@ export default async function handler(req, res) {
 
     return bad(res, 'Unknown action')
   } catch (err) {
-    // Never echo internal/upstream detail to the client.
+    // Log full detail server-side (vite terminal / serverless logs) for debugging —
+    // ZodError from a malformed contractMethod create surfaces here. Never echo to client.
+    console.error('[api/relay] error:', err?.message || err, err?.issues || '')
     res.statusCode = 502
     return res.end(JSON.stringify({ error: 'Relay proxy failed' }))
   }
