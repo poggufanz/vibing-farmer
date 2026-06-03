@@ -145,7 +145,7 @@ function CtaBlock({ onStart }) {
       <button className="vf-cta__btn" onClick={onStart}>
         Start farming <span aria-hidden="true">→</span>
       </button>
-      <p className="vf-cta__sub">Sepolia testnet · MetaMask Flask</p>
+      <p className="vf-cta__sub">Base Sepolia testnet · MetaMask Flask</p>
     </div>
   )
 }

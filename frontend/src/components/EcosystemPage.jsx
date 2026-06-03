@@ -68,15 +68,15 @@ const PARTNERS = [
     accentColor: '#10B981',
   },
   {
-    name: 'Ethereum Sepolia',
-    subtitle: 'EVM Testnet',
+    name: 'Base Sepolia',
+    subtitle: 'L2 Testnet',
     category: 'CHAIN',
     description:
-      'All Vibing Farmer contracts are deployed and verified on Ethereum Sepolia. Every transaction, permission, and attestation is publicly verifiable on-chain.',
-    tags: ['Chain ID 11155111', 'EVM', 'Verified'],
-    link: 'https://sepolia.etherscan.io',
+      'All Vibing Farmer contracts are deployed and verified on Base Sepolia. Every transaction, permission, and attestation is publicly verifiable on-chain.',
+    tags: ['Chain ID 84532', 'OP Stack L2', 'Verified'],
+    link: 'https://sepolia.basescan.org',
     icon: '◆',
-    accentColor: '#627EEA',
+    accentColor: '#0052FF',
   },
 ]
 
@@ -111,7 +111,7 @@ const DIAGRAM_HTML =
     │
     │  <span class="eco-d-accent">Gas: $0 (1Shot · EIP-7710)</span>
     ▼
-<span class="eco-d-muted">Ethereum Sepolia</span>`
+<span class="eco-d-muted">Base Sepolia</span>`
 
 /* ------------------------------------------------------------------ */
 /* components                                                            */
@@ -238,7 +238,7 @@ export default function EcosystemPage() {
             ref={diagramRef}
             className="eco-diagram"
             role="img"
-            aria-label="Architecture: user wallet via EIP-7702 to smart account with ERC-7715 permission; Venice AI + DeFiLlama + Tavily generate strategy; AgentVaultDepositor.sol dispatches parallel workers to ERC-4626 vaults; 1Shot EIP-7710 relayer pays all gas on Ethereum Sepolia"
+            aria-label="Architecture: user wallet via EIP-7702 to smart account with ERC-7715 permission; Venice AI + DeFiLlama + Tavily generate strategy; AgentVaultDepositor.sol dispatches parallel workers to ERC-4626 vaults; 1Shot EIP-7710 relayer pays all gas on Base Sepolia"
           >
             <pre
               className="eco-diagram__pre"

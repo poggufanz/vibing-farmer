@@ -907,7 +907,7 @@ const App = () => {
     addLog({ event: "PermissionRevoked", meta: "wallet disconnected · session cleared" });
   };
   const handleSwitchNetwork = async () => {
-    try { await switchToSepolia(); addLog({ event: "Connected", meta: "network · Sepolia" }); }
+    try { await switchToSepolia(); addLog({ event: "Connected", meta: "network · Base Sepolia" }); }
     catch (e) { addLog({ event: "AgentFailed", meta: `switch network failed: ${e.message}` }); }
   };
   const handleResetAgentSettings = () => { setAgentSettings({ ...AGENT_SETTINGS_DEFAULTS }); setAgentEnabled(true); };

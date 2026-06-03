@@ -55,8 +55,8 @@ export default function TxDetailPage() {
         <button onClick={() => { if (window.history.length > 1) window.history.back(); else navigateTo('history'); }} style={backBtn}>← Back</button>
         <div className="mono" style={{ marginTop: 28, color: 'var(--text-muted)', fontSize: 14 }}>transaction not found</div>
         <div style={{ marginTop: 16, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <a href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" style={extLink}>
-            View on Etherscan ↗
+          <a href={`https://sepolia.basescan.org/tx/${txHash}`} target="_blank" rel="noopener noreferrer" style={extLink}>
+            View on Basescan ↗
           </a>
           <button onClick={() => { if (window.history.length > 1) window.history.back(); else navigateTo('history'); }} style={{ ...backBtn, textDecoration: 'none' }}>← Back</button>
         </div>
@@ -74,7 +74,7 @@ export default function TxDetailPage() {
     { label: 'APY',         value: tx.apy ? `${tx.apy}%` : '-' },
     { label: 'Worker',      value: tx.workerId || '-' },
     { label: 'Gas paid by', value: tx.gasPayedBy || '1shot-relayer', highlight: true },
-    { label: 'Network',     value: `${tx.network || 'sepolia'} testnet` },
+    { label: 'Network',     value: `${tx.network || 'base sepolia'} testnet` },
   ]
 
   return (
@@ -105,8 +105,8 @@ export default function TxDetailPage() {
           <button style={{ ...backBtn, fontSize: 11, color: copied ? 'var(--ok)' : 'var(--text-muted)' }} onClick={handleCopy}>
             {copied ? 'copied!' : '[copy]'}
           </button>
-          <a href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" style={extLink}>
-            View on Sepolia Etherscan ↗
+          <a href={`https://sepolia.basescan.org/tx/${txHash}`} target="_blank" rel="noopener noreferrer" style={extLink}>
+            View on Base Sepolia Basescan ↗
           </a>
         </div>
       </div>

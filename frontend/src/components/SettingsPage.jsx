@@ -274,7 +274,7 @@ export default function SettingsPage({
                 <button type="button" style={miniBtn} onClick={onDisconnect}>Disconnect</button>
               </Row>
               <Divider />
-              <Row label={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--ok)' }} />Sepolia testnet</span>} desc={`Chain ID: ${SEPOLIA_CHAIN_ID}`}>
+              <Row label={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--ok)' }} />Base Sepolia testnet</span>} desc={`Chain ID: ${SEPOLIA_CHAIN_ID}`}>
                 <button type="button" style={miniBtn} onClick={onSwitchNetwork}>Switch network</button>
               </Row>
               <Divider />
@@ -327,7 +327,7 @@ export default function SettingsPage({
           <div className="brand" style={{ fontSize: 18 }}><span>vibing</span><span className="slash">/</span><span className="vibing">farmer</span></div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Autonomous DeFi yield farming agent</div>
           <div style={{ marginTop: 12 }}>
-            {[['Version', '1.0.0-beta'], ['Network', 'Ethereum Sepolia'], ['Contracts', 'verified on Sourcify']].map(([k, v]) => (
+            {[['Version', '1.0.0-beta'], ['Network', 'Base Sepolia'], ['Contracts', 'verified on Sourcify']].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0' }}><span style={{ color: 'var(--text-muted)' }}>{k}</span><span className="mono">{v}</span></div>
             ))}
           </div>

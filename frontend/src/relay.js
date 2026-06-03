@@ -52,6 +52,56 @@ export async function encodeGrantAgentPermission(agentId, vault, maxAmount, expi
 // user-signed tx (see relayGrantPermission / relayDeposit) — real txs, just not gas-abstracted.
 const ONESHOT_SUPPORTED_CHAINS = new Set(['1', '8453', '42161', '10', '137', '56', '59144'])
 
+// Server-side Managed-API proxy (key+secret + funded server wallet stay on the server).
+// This is the path that makes 1Shot real on Base Sepolia. See api/relay.js.
+const RELAY_PROXY_URL = '/api/relay'
+
+/**
+ * Relay a deposit through the 1Shot Managed API proxy (real, gas-abstracted).
+ * Returns null when the proxy isn't configured or fails → caller falls back to
+ * a user-signed on-chain tx. Never throws.
+ * @returns {Promise<{txHash: string, status: string, relayer?: string} | null>}
+ */
+export async function relayDepositManaged({ agentId, user, vault, amount }) {
+  try {
+    const res = await fetch(RELAY_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'deposit',
+        to: AGENT_VAULT_DEPOSITOR_ADDRESS,
+        agentId, user, vault, amount: amount.toString(),
+      }),
+    })
+    if (!res.ok) return null // 503 not-configured, 4xx/5xx → fall back on-chain
+    const data = await res.json()
+    if (data.configured === false || data.error) return null
+    return {
+      txHash: data.txHash || data.transactionId || 'pending',
+      status: data.txHash ? 'relayed' : 'submitted',
+      relayer: data.relayer,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Server wallet (1Shot relayer) address for the current chain — fund it for gas. null if unconfigured. */
+export async function getRelayerAddress() {
+  try {
+    const res = await fetch(RELAY_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'wallet' }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.address || null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Submit via the 1Shot KEYLESS EIP-7710 relayer. Mainnet-only.
  * On unsupported chains (incl. Base Sepolia) callers use the on-chain fallback instead,
@@ -137,8 +187,12 @@ export async function relayGrantPermission({ agentId, vault, maxAmount, expiresA
  * @returns {Promise<{txHash: string}>}
  */
 export async function relayDeposit({ agentId, user, vault, amount, permissionContext }) {
-  // Sepolia not supported by 1Shot → broadcast real tx via user signer (tx.wait for real timing)
+  // Base Sepolia: keyless relayer can't serve it → try the Managed-API proxy first
+  // (real, gas-abstracted via the 1Shot server wallet), then fall back to a
+  // user-signed on-chain tx if the proxy isn't configured/funded.
   if (!ONESHOT_SUPPORTED_CHAINS.has(String(SEPOLIA_CHAIN_ID))) {
+    const managed = await relayDepositManaged({ agentId, user, vault, amount })
+    if (managed) return managed
     const txHash = await executeAgentDepositOnChain(agentId, user, vault, amount)
     return { txHash, status: 'onchain' }
   }

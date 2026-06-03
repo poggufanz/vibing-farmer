@@ -161,11 +161,11 @@ export default function VaultDetailPage({ positions = {} }) {
 
       {/* Contract address */}
       <div>
-        <div style={sectionLabel}>CONTRACT (Sepolia testnet)</div>
+        <div style={sectionLabel}>CONTRACT (Base Sepolia testnet)</div>
         <div className="mono" style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <span>{short(catalog.address)}</span>
-          <a href={`https://sepolia.etherscan.io/address/${catalog.address}`} target="_blank" rel="noopener noreferrer" style={extLink}>
-            View on Etherscan ↗
+          <a href={`https://sepolia.basescan.org/address/${catalog.address}`} target="_blank" rel="noopener noreferrer" style={extLink}>
+            View on Basescan ↗
           </a>
         </div>
       </div>

@@ -63,7 +63,7 @@ export default function SkillDetailModal({ agent, skill, state, onClose, onAppro
             {shortAddr(vaultAddr)} · {network}
             {vaultAddr && (
               <a
-                href={`https://sepolia.etherscan.io/address/${vaultAddr}`}
+                href={`https://sepolia.basescan.org/address/${vaultAddr}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="skill-detail-link"

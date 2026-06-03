@@ -112,7 +112,7 @@ const InputScreen = ({ amount, setAmount, risk, setRisk, onSubmit }) => {
    01b — AI Thinking (strategy generation)
    ============================================ */
 const THINK_STEPS = [
-  { label: "Scanning 24 active vaults on Sepolia" },
+  { label: "Scanning 24 active vaults on Base Sepolia" },
   { label: "Structuring allocation per risk profile" },
   { label: "Generating strategy via AI" },
 ];
@@ -210,7 +210,7 @@ const ConnectCard = ({ phase, error, mmVersion, onConnect, onUpgrade, onDone, on
 
       {phase === "idle" && (
         <div className="action-row">
-          <div className="foot-note">Ensure MetaMask Flask is connected to the <b>Sepolia</b> testnet.</div>
+          <div className="foot-note">Ensure MetaMask Flask is connected to the <b>Base Sepolia</b> testnet.</div>
           <button className="btn btn-primary btn-lg" onClick={onConnect}>
             Connect MetaMask <Icon name="arrow" size={14} />
           </button>
@@ -223,7 +223,7 @@ const ConnectCard = ({ phase, error, mmVersion, onConnect, onUpgrade, onDone, on
           title="Connection request"
           rows={[
             { k: "request", v: "eth_requestAccounts" },
-            { k: "network", v: "Sepolia · 11155111" },
+            { k: "network", v: "Base Sepolia · 84532" },
             { k: "status", v: "awaiting user…" },
           ]}
           pending
@@ -237,7 +237,7 @@ const ConnectCard = ({ phase, error, mmVersion, onConnect, onUpgrade, onDone, on
             title="EIP-7702 authorization"
             rows={[
               { k: "delegate to", v: "MetaMask Smart Account v1.2", accent: true },
-              { k: "chainId", v: "11155111" },
+              { k: "chainId", v: "84532" },
               { k: "nonce", v: "7" },
               { k: "expiry", v: "ephemeral · single tx" },
             ]}
@@ -524,17 +524,17 @@ const SuccessCard = ({ strategy, onAgain, address }) => {
 
       <div className="action-row" style={{ marginTop: 36 }}>
         <div className="foot-note">
-          Etherscan · <span style={{ color: "var(--text)" }}>{agents.length * 3} tx confirmed</span> ·
+          Basescan · <span style={{ color: "var(--text)" }}>{agents.length * 3} tx confirmed</span> ·
           gas paid by <b>1Shot relayer</b>
         </div>
         <div className="flex gap-2">
           <a
             className="btn btn-ghost"
-            href={address ? `https://sepolia.etherscan.io/address/${address}` : "https://sepolia.etherscan.io"}
+            href={address ? `https://sepolia.basescan.org/address/${address}` : "https://sepolia.basescan.org"}
             target="_blank"
             rel="noopener noreferrer"
           >
-            View on Etherscan <Icon name="external" size={13} />
+            View on Basescan <Icon name="external" size={13} />
           </a>
           <button className="btn btn-primary" onClick={onAgain}>
             Deposit again <Icon name="plus" size={14} />

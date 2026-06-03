@@ -79,7 +79,7 @@ export function formatAttestation(attestation) {
     hash: attestation.strategyHash.slice(0, 10) + '...',
     fullHash: attestation.strategyHash,
     txHash: attestation.txHash,
-    etherscanUrl: `https://sepolia.etherscan.io/tx/${attestation.txHash}`,
+    etherscanUrl: `https://sepolia.basescan.org/tx/${attestation.txHash}`,
     label: 'Strategy attested on-chain',
   }
 }
