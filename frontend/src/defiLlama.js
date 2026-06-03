@@ -1,6 +1,6 @@
 // defiLlama.js
 // Fetches real vault data from DeFiLlama Yields API.
-// Maps real protocol names to MockVault addresses for Sepolia execution.
+// Maps real protocol names to MockVault addresses for Base Sepolia execution.
 // Never throws — returns fallback catalog on any failure.
 
 import { MOCK_VAULT_A_ADDRESS, MOCK_VAULT_B_ADDRESS } from './config.js'
@@ -8,7 +8,7 @@ import { MOCK_VAULT_A_ADDRESS, MOCK_VAULT_B_ADDRESS } from './config.js'
 const DEFILLAMA_ENDPOINT = 'https://yields.llama.fi/pools'
 const DEFILLAMA_TIMEOUT_MS = 10000
 
-// Protocols we support + their MockVault mapping on Sepolia
+// Protocols we support + their MockVault mapping on Base Sepolia
 // Real protocol → MockVault address for execution
 const PROTOCOL_VAULT_MAP = {
   'aave-v3':    MOCK_VAULT_A_ADDRESS,
@@ -88,7 +88,7 @@ export async function fetchDeFiLlamaVaults() {
       defillamaPool: pool.pool, // real mainnet pool address (display only)
       poolId: pool.pool, // DeFiLlama pool UUID — used for APY history fetch
 
-      // Execution info (MockVault on Sepolia)
+      // Execution info (MockVault on Base Sepolia)
       address: PROTOCOL_VAULT_MAP[pool.project],
 
       // Risk metadata

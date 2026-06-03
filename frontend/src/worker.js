@@ -17,7 +17,7 @@ export class WorkerAgent {
    * @param {string} config.sessionId
    * @param {function} config.onEvent - (eventName, data) => void
    */
-  constructor({ agentId, user, vault, amount, permissionContext, sessionId, onEvent, batchedHash }) {
+  constructor({ agentId, user, vault, amount, permissionContext, sessionId, onEvent, batchedHash, grantsBatched }) {
     this.agentId = agentId
     this.user = user
     this.vault = vault
@@ -25,7 +25,8 @@ export class WorkerAgent {
     this.permissionContext = permissionContext
     this.sessionId = sessionId
     this.onEvent = onEvent || (() => {})
-    this.batchedHash = batchedHash || null
+    this.batchedHash = batchedHash || null   // full batch: skip grant + deposit
+    this.grantsBatched = grantsBatched || false // hybrid: skip grant only, relay deposit
     this.memoryEntries = []
   }
 
@@ -37,8 +38,8 @@ export class WorkerAgent {
     try {
       this.emit('started', { agentId: this.agentId, vault: this.vault })
 
-      // Step 1: Grant on-chain permission (skipped when already executed in a batch)
-      if (!this.batchedHash) {
+      // Step 1: Grant on-chain permission (skipped when already batched)
+      if (!this.batchedHash && !this.grantsBatched) {
         this.emit('step', { agentId: this.agentId, step: 'grant-permission', status: 'pending' })
         const expiresAt = Math.floor(Date.now() / 1000) + 3600
         const grantResult = await relayGrantPermission({
@@ -66,7 +67,7 @@ export class WorkerAgent {
 
       // Step 4: Deposit — batched (already on-chain) or via relay
       this.emit('step', { agentId: this.agentId, step: 'deposit', status: 'pending' })
-      const depositResult = this.batchedHash
+      const depositResult = (this.batchedHash && !this.grantsBatched)
         ? { txHash: this.batchedHash, status: 'onchain' }
         : await relayDeposit({
             agentId: this.agentId,

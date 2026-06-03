@@ -17,9 +17,9 @@ export function getReadProvider() {
   if (_readProvider) return _readProvider
 
   const rpcUrl = import.meta.env.VITE_RPC_URL
-    || 'https://ethereum-sepolia-rpc.publicnode.com'
+    || 'https://sepolia.base.org'
 
-  // staticNetwork: the URL dictates the chain (Sepolia), so skip the per-call
+  // staticNetwork: the URL dictates the chain (Base Sepolia), so skip the per-call
   // eth_chainId validation round trip. ethers v6 successor to StaticJsonRpcProvider.
   // Safe ONLY because this provider never points at MetaMask.
   const network = ethers.Network.from(SEPOLIA_CHAIN_ID)

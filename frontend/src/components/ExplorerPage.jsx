@@ -1,7 +1,7 @@
 // ExplorerPage.jsx
 // Public on-chain verification surface for Vibing Farmer. No wallet required —
 // judges and users can audit every deployed contract, live stat, and strategy
-// attestation against Sepolia directly.
+// attestation against Base Sepolia directly.
 //
 // Aesthetic: matches LandingHero's editorial-finance terminal — dark canvas,
 // single acid accent, mono for every address/hash/stat. Inherits palette tokens
@@ -24,7 +24,7 @@ import NavBar from './NavBar.jsx'
 
 /* ----------------------------- constants ----------------------------- */
 
-const ETHERSCAN_ADDR = 'https://sepolia.etherscan.io/address/'
+const ETHERSCAN_ADDR = 'https://sepolia.basescan.org/address/'
 const SOURCIFY = `https://sourcify.dev/#/lookup/${SEPOLIA_CHAIN_ID}/`
 
 // Demo wallet whose deposits seed the public "total deposits" stat.
@@ -255,7 +255,7 @@ export default function ExplorerPage() {
         <header className="ex-header">
           <div className="ex-header__top">
             <h1 className="ex-title">Explorer</h1>
-            <span className="ex-net"><span className="ex-net__dot" /> Sepolia testnet · live</span>
+            <span className="ex-net"><span className="ex-net__dot" /> Base Sepolia testnet · live</span>
           </div>
           <p className="ex-lede">
             On-chain verification for Vibing Farmer. Every contract, transaction, and
@@ -277,7 +277,7 @@ export default function ExplorerPage() {
         <section className="ex-section" aria-labelledby="ex-stats">
           <div className="ex-section__head">
             <h2 id="ex-stats" className="ex-section__title">Live Stats</h2>
-            <span className="ex-section__note">fetched from Sepolia RPC · updated live</span>
+            <span className="ex-section__note">fetched from Base Sepolia RPC · updated live</span>
           </div>
           <div className="ex-stats">
             <StatBlock label="Total Deposits" value={depositsLabel} loading={loadingDeposits} />

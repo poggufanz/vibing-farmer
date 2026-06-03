@@ -2,6 +2,12 @@
   "functions": {
     "api/ai.js": {
       "maxDuration": 30
+    },
+    "api/search.js": {
+      "maxDuration": 30
+    },
+    "api/relay.js": {
+      "maxDuration": 30
     }
   },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],

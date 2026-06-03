@@ -46,9 +46,9 @@ const WalletPanel = ({ phase, address }) => {
           </button>
           <a
             className="wallet-action"
-            title="View on Etherscan"
-            aria-label="View on Etherscan"
-            href={`https://sepolia.etherscan.io/address/${address}`}
+            title="View on Basescan"
+            aria-label="View on Basescan"
+            href={`https://sepolia.basescan.org/address/${address}`}
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -157,7 +157,7 @@ const ActivityPanel = ({ logs }) => {
                       {l.detail || l.meta}
                       {l.txHash && (
                         <div style={{ marginTop: 3 }}>
-                          TX: <a href={`https://sepolia.etherscan.io/tx/${l.txHash}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--info)" }}>{shortAddr(l.txHash)} ↗</a>
+                          TX: <a href={`https://sepolia.basescan.org/tx/${l.txHash}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--info)" }}>{shortAddr(l.txHash)} ↗</a>
                         </div>
                       )}
                     </div>

@@ -1,21 +1,23 @@
-// Contract addresses — Ethereum Sepolia deploy
-export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0xf1441BBC2fa6D37Ce7A5f6254a6A443B281d38f4'
-export const MOCK_VAULT_A_ADDRESS = '0x735f3a63D5be965E6B7564a2befeca0E316d09Ad'
-export const MOCK_VAULT_B_ADDRESS = '0x79007794Eb31B6a8439C38B604827012DBc0D771'
-export const MOCK_VAULT_C_ADDRESS = '0xAABfc44939E6437446E6FBD4A4e3816C877e371C'
-export const MOCK_VAULT_D_ADDRESS = '0xdef19fED6Da53D3757779d27b9A2640547c30b6F'
+// Contract addresses — Base Sepolia (84532) deploy 2026-06-03
+export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0xcAD4A07Db284AB55518AF406fD18877b2AC5A442'
+export const MOCK_VAULT_A_ADDRESS = '0x5a5e02F53CDbBc2E413e14105Cbf93c8504b8E17'
+export const MOCK_VAULT_B_ADDRESS = '0xc1f99AA5ce77BDfF69f9a20361aB8937F9f17139'
+export const MOCK_VAULT_C_ADDRESS = '0xfCab208782D0dAC2978BA411b01C45243DE63855'
+export const MOCK_VAULT_D_ADDRESS = '0x398b619382D319FeCC08c85E87320672d0104D59'
 
-// Network — Ethereum Sepolia (demo); for mainnet use Base (8453) or Base Sepolia (84532)
-export const SEPOLIA_CHAIN_ID = 11155111
-export const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7'
+// Network — Base Sepolia (84532). 1Shot Managed API supports this testnet
+// (keyless permissionless relayer is mainnet-only — see relay.js).
+// Constant name kept as SEPOLIA_* to avoid churn across ~10 importers.
+export const SEPOLIA_CHAIN_ID = 84532
+export const SEPOLIA_CHAIN_ID_HEX = '0x14a34'
 
-// USDC — Ethereum Sepolia (Circle official testnet)
-export const USDC_SEPOLIA = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238'
+// USDC — Base Sepolia (Circle official testnet, 6 decimals, FiatTokenProxy)
+export const USDC_SEPOLIA = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
 
 // APIs
 export const ONE_SHOT_RELAYER_URL = 'https://relayer.1shotapi.com/relayers'
 export const VENICE_BASE_URL = 'https://api.venice.ai/api/v1'
-export const VENICE_MODEL = 'claude-opus-4-8'
+export const VENICE_MODEL = 'deepseek-v4-flash'
 export const VENICE_TIMEOUT_MS = 60000
 
 // DeepSeek — OpenAI-compatible, used as dev fallback when Venice x402 not funded

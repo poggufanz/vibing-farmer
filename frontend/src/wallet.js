@@ -6,6 +6,33 @@ import { getReadProvider } from './readProvider.js'
 let ethersProvider = null
 let account = null
 
+// Base Sepolia (84532) params for wallet_addEthereumChain — the chain may not be
+// pre-registered in the user's MetaMask, so switch can fail with 4902 (unknown chain).
+const BASE_SEPOLIA_PARAMS = {
+  chainId: SEPOLIA_CHAIN_ID_HEX,
+  chainName: 'Base Sepolia',
+  nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: ['https://sepolia.base.org'],
+  blockExplorerUrls: ['https://sepolia.basescan.org'],
+}
+
+/** Switch to Base Sepolia, adding the chain to MetaMask first if it's unknown (4902). */
+async function switchOrAddChain() {
+  try {
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }],
+    })
+  } catch (e) {
+    // 4902 = chain not added to MetaMask → add it, which also switches.
+    if (e?.code === 4902 || /Unrecognized chain|not added/i.test(e?.message || '')) {
+      await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [BASE_SEPOLIA_PARAMS] })
+    } else {
+      throw e
+    }
+  }
+}
+
 /**
  * Connect MetaMask Flask, switch to Sepolia if needed.
  * Returns connected account address.
@@ -18,16 +45,13 @@ export async function connectWallet() {
   const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
   account = accounts[0]
 
-  // Ensure Ethereum Sepolia
+  // Ensure Base Sepolia (add the chain if MetaMask doesn't know it yet)
   const chainId = await window.ethereum.request({ method: 'eth_chainId' })
   if (chainId !== SEPOLIA_CHAIN_ID_HEX) {
     try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }]
-      })
+      await switchOrAddChain()
     } catch (e) {
-      throw new Error(`Switch to Sepolia in MetaMask. Current: ${chainId}`)
+      throw new Error(`Switch to Base Sepolia in MetaMask. Current: ${chainId}`)
     }
   }
 
@@ -54,13 +78,10 @@ export function getProvider() {
   return ethersProvider
 }
 
-/** Prompt MetaMask to switch to Ethereum Sepolia. */
+/** Prompt MetaMask to switch to Base Sepolia (adds the chain if unknown). */
 export async function switchToSepolia() {
   if (!window.ethereum) throw new Error('MetaMask Flask not found.')
-  await window.ethereum.request({
-    method: 'wallet_switchEthereumChain',
-    params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }],
-  })
+  await switchOrAddChain()
 }
 
 /**

@@ -2,7 +2,7 @@ import { WorkerAgent, makeAgentId } from './worker.js'
 import { generateAgentSkills } from './venice.js'
 import { saveSkill } from './skills.js'
 import { batchCalls } from './wallet.js'
-import { isUnsupportedByOneShot, buildGrantCall, buildDepositCall } from './relay.js'
+import { isUnsupportedByOneShot, useManagedRelay, buildGrantCall, buildDepositCall } from './relay.js'
 
 /**
  * Orchestrator Agent — receives Venice plan, dispatches Worker Agents in parallel.
@@ -64,17 +64,29 @@ export class OrchestratorAgent {
     )
     this.onEvent('orchestrator-step', { step: 'generating-skills', status: 'done' })
 
-    // Single-confirmation batch: grant + deposit for ALL agents in one wallet popup
-    // (EIP-5792). null if wallet lacks it → workers fall back to per-agent signing.
-    let batchedHash = null
+    // Batch strategy (EIP-5792):
+    //   Managed relay active (Base Sepolia): batch GRANTS only (1 popup) → deposits via 1Shot relay
+    //   No managed relay: batch GRANTS + DEPOSITS together (1 popup, user pays gas)
+    let batchedHash = null   // set → workers skip both grant AND deposit (legacy full-batch)
+    let grantsBatched = false // set → workers skip grant only, still relay deposit via 1Shot
     if (isUnsupportedByOneShot()) {
       const expiresAt = Math.floor(Date.now() / 1000) + 3600
-      const calls = []
+      const grantCalls = []
+      const depositCalls = []
       for (const p of vaultPlans) {
-        calls.push(await buildGrantCall({ agentId: p.agentId, vault: p.vault, maxAmount: p.amountUnits, expiresAt }))
-        calls.push(await buildDepositCall({ agentId: p.agentId, user: this.user, vault: p.vault, amount: p.amountUnits }))
+        grantCalls.push(await buildGrantCall({ agentId: p.agentId, vault: p.vault, maxAmount: p.amountUnits, expiresAt }))
+        depositCalls.push(await buildDepositCall({ agentId: p.agentId, user: this.user, vault: p.vault, amount: p.amountUnits }))
       }
-      batchedHash = await batchCalls(calls)
+      if (useManagedRelay()) {
+        // Batch grants only — 1 popup for all permissions, relay handles deposits.
+        // Only mark batched if EIP-5792 actually ran (null = wallet lacks it →
+        // workers fall back to per-agent grant so permission is never silently skipped).
+        const h = await batchCalls(grantCalls)
+        grantsBatched = h !== null
+      } else {
+        // Full batch: grants + deposits in 1 popup (user pays gas, no relay)
+        batchedHash = await batchCalls([...grantCalls, ...depositCalls])
+      }
     }
 
     // ── A2A coordination: orchestrator redelegates a scoped subset to each worker ──
@@ -123,7 +135,8 @@ export class OrchestratorAgent {
           permissionContext: this.permissionContext,
           sessionId: this.sessionId,
           onEvent: this.onEvent,
-          batchedHash
+          batchedHash,
+          grantsBatched
         })
         return worker.execute().then((res) => {
           // Worker redeemed its redelegation to execute the deposit → A2A redeem proof
