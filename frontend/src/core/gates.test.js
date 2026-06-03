@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentPortfolioAPY } from './gates.js'
+import { getCurrentPortfolioAPY, checkTurbulence } from './gates.js'
 
 describe('getCurrentPortfolioAPY', () => {
   it('returns 0 when there are no positions', () => {
@@ -20,5 +20,26 @@ describe('getCurrentPortfolioAPY', () => {
       ],
     }
     expect(getCurrentPortfolioAPY(state)).toBe(5)
+  })
+})
+
+describe('checkTurbulence', () => {
+  const thresholds = { TURBULENCE_CRITICAL: 0.75 }
+
+  it('passes when turbulence is below the critical threshold', () => {
+    const result = checkTurbulence({ turbulenceIndex: 0.5 }, thresholds)
+    expect(result.pass).toBe(true)
+    expect(result.name).toBe('turbulence')
+  })
+
+  it('fails when turbulence meets or exceeds the critical threshold', () => {
+    const result = checkTurbulence({ turbulenceIndex: 0.8 }, thresholds)
+    expect(result.pass).toBe(false)
+    expect(result.name).toBe('turbulence')
+    expect(result.reason).toContain('turbulence')
+  })
+
+  it('fails exactly at the threshold (>=)', () => {
+    expect(checkTurbulence({ turbulenceIndex: 0.75 }, thresholds).pass).toBe(false)
   })
 })

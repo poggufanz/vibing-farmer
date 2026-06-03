@@ -24,3 +24,15 @@ export function getCurrentPortfolioAPY(state) {
     0,
   )
 }
+
+/** FinRL turbulence guard: when the market is too chaotic, do nothing. */
+export function checkTurbulence(state, thresholds) {
+  if (state.turbulenceIndex >= thresholds.TURBULENCE_CRITICAL) {
+    return {
+      pass: false,
+      name: 'turbulence',
+      reason: `Market turbulence too high: ${(state.turbulenceIndex * 100).toFixed(1)}% (max: ${(thresholds.TURBULENCE_CRITICAL * 100).toFixed(0)}%)`,
+    }
+  }
+  return { pass: true, name: 'turbulence' }
+}
