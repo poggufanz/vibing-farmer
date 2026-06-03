@@ -12,7 +12,7 @@ Most yield farming is repetitive work: find a vault, swap the asset, approve the
 
 ## How it works
 
-1. **Strategy generation** — Venice AI (`llama-3.3-70b`) takes your deposit amount, risk level, and vault count, then outputs an allocation plan and a skill file per agent.
+1. **Strategy generation** — AI takes your deposit amount, risk level, and vault count, then outputs an allocation plan and a skill file per agent.
 2. **User review** — You read and optionally edit the generated skill JSON before any transaction is signed.
 3. **Smart account upgrade** — One EIP-7702 signature upgrades your MetaMask Flask EOA into a smart account.
 4. **Scoped permission** — An ERC-7715 batch permission request binds each worker agent to a single vault and spend cap.
@@ -28,7 +28,7 @@ Most yield farming is repetitive work: find a vault, swap the asset, approve the
 User input (amount · risk level · vault count)
                 │
                 ▼
-        Venice AI (llama-3.3-70b)
+        Venice AI
           ├── Multi-vault allocation
           └── Skill JSON per agent (swap + deposit constraints)
                 │
@@ -78,8 +78,8 @@ Test suite: 57 / 57 passing · Coverage: 93.3%
 | Smart contracts | Solidity ^0.8.24, OpenZeppelin, Foundry |
 | Frontend | React 18, Vite 5, React Router v6, Framer Motion |
 | Web3 | MetaMask Smart Accounts Kit v1.6.0, Viem v2, ethers.js v6 |
-| AI | Venice AI `llama-3.3-70b` — OpenAI-compatible, zero-retention TEE |
-| AI fallback | DeepSeek `deepseek-v4-flash` via server-side proxy (`/api/ai`) |
+| AI | Venice AI — OpenAI-compatible, zero-retention TEE |
+| AI fallback | DeepSeek via server-side proxy (`/api/ai`) |
 | Live yield data | DeFiLlama API — APY, TVL, 7-day history, sparklines |
 | Gas abstraction | 1Shot API — EIP-7710 permissionless relayer, no API key |
 | Wallet | MetaMask Flask 13.9+ (EIP-7702 + ERC-7715) |
