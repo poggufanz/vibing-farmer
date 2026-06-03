@@ -15,7 +15,7 @@ export const USDC_SEPOLIA = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238'
 // APIs
 export const ONE_SHOT_RELAYER_URL = 'https://relayer.1shotapi.com/relayers'
 export const VENICE_BASE_URL = 'https://api.venice.ai/api/v1'
-export const VENICE_MODEL = 'claude-opus-4-8'
+export const VENICE_MODEL = 'deepseek-v4-flash'
 export const VENICE_TIMEOUT_MS = 60000
 
 // DeepSeek — OpenAI-compatible, used as dev fallback when Venice x402 not funded
