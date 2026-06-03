@@ -83,7 +83,7 @@ Test suite: 57 / 57 passing · Coverage: 93.3%
 | Live yield data | DeFiLlama API — APY, TVL, 7-day history, sparklines |
 | Gas abstraction | 1Shot API — EIP-7710 permissionless relayer, no API key |
 | Wallet | MetaMask Flask 13.9+ (EIP-7702 + ERC-7715) |
-| Network | Ethereum Sepolia (chain ID 11155111) |
+| Network | Base Sepolia (chain ID 84532) |
 
 ---
 
