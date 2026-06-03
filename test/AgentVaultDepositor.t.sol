@@ -10,13 +10,18 @@ contract AgentVaultDepositorTest is Test {
     MockVault vaultA;
     MockVault vaultB;
 
-    address user = address(0xBEEF);
+    // user IS the test contract: every execute* path is now caller-authorized
+    // (msg.sender == user), mirroring the real flow where the user's own account
+    // signs executions. Unauthorized-caller rejection is covered explicitly below.
+    address user;
+    address constant STRANGER = address(0xBAD);
     bytes32 agentId1 = keccak256("agent-1");
     bytes32 agentId2 = keccak256("agent-2");
     uint256 maxAmount = 100e6; // 100 USDC
     uint256 expiry; // set in setUp
 
     function setUp() public {
+        user = address(this);
         depositor = new AgentVaultDepositor();
         vaultA = new MockVault("MockVault USDC-A", address(0), 480); // 4.8% APY
         vaultB = new MockVault("MockVault USDC-B", address(0), 610); // 6.1% APY
@@ -292,8 +297,11 @@ contract AgentVaultDepositorTest is Test {
     // ─── executeHarvest ───────────────────────────────────────────────────────
 
     function test_executeHarvest_recompound_deposits_back() public {
+        // Long expiry: harvest accrues a full year of yield, so the permission must
+        // outlive the warp (expiry guard would otherwise revert first).
+        uint256 longExpiry = block.timestamp + 366 days;
         vm.startPrank(user);
-        depositor.grantAgentPermission(agentId1, address(vaultA), maxAmount, expiry);
+        depositor.grantAgentPermission(agentId1, address(vaultA), maxAmount, longExpiry);
         depositor.setAgentCapabilities(agentId1, false, true);
         vm.stopPrank();
 
@@ -307,8 +315,9 @@ contract AgentVaultDepositorTest is Test {
     }
 
     function test_executeHarvest_no_recompound_emits() public {
+        uint256 longExpiry = block.timestamp + 366 days;
         vm.startPrank(user);
-        depositor.grantAgentPermission(agentId1, address(vaultA), maxAmount, expiry);
+        depositor.grantAgentPermission(agentId1, address(vaultA), maxAmount, longExpiry);
         depositor.setAgentCapabilities(agentId1, false, true);
         vm.stopPrank();
 
@@ -324,12 +333,14 @@ contract AgentVaultDepositorTest is Test {
     }
 
     function test_executeHarvest_reverts_without_permission() public {
+        uint256 longExpiry = block.timestamp + 366 days;
         vm.prank(user);
-        depositor.grantAgentPermission(agentId1, address(vaultA), maxAmount, expiry);
+        depositor.grantAgentPermission(agentId1, address(vaultA), maxAmount, longExpiry);
         depositor.executeAgentDeposit(agentId1, user, address(vaultA), 50e6);
         vm.warp(block.timestamp + 365 days);
 
-        // allowHarvest defaults false
+        // allowHarvest defaults false — expiry guard passes (longExpiry), so the
+        // HarvestNotPermitted check is what reverts.
         vm.expectRevert(AgentVaultDepositor.HarvestNotPermitted.selector);
         depositor.executeHarvest(agentId1, user, address(vaultA), false);
     }
@@ -354,6 +365,65 @@ contract AgentVaultDepositorTest is Test {
         (address vault,,,, bool active,,) = depositor.agentPermissions(user, agentId1);
         assertEq(vault, address(0));
         assertFalse(active);
+    }
+
+    // ─── Caller Authorization (msg.sender == user) ──────────────────────────────
+
+    function test_executeAgentDeposit_reverts_unauthorized_caller() public {
+        vm.prank(user);
+        depositor.grantAgentPermission(agentId1, address(vaultA), maxAmount, expiry);
+
+        vm.prank(STRANGER);
+        vm.expectRevert(AgentVaultDepositor.UnauthorizedCaller.selector);
+        depositor.executeAgentDeposit(agentId1, user, address(vaultA), 50e6);
+    }
+
+    function test_executeWithdraw_reverts_unauthorized_caller() public {
+        vm.startPrank(user);
+        depositor.grantAgentPermission(agentId1, address(vaultA), maxAmount, expiry);
+        depositor.setAgentCapabilities(agentId1, true, false);
+        vm.stopPrank();
+        depositor.executeAgentDeposit(agentId1, user, address(vaultA), 50e6);
+
+        vm.prank(STRANGER);
+        vm.expectRevert(AgentVaultDepositor.UnauthorizedCaller.selector);
+        depositor.executeWithdraw(agentId1, user, address(vaultA), 10e6);
+    }
+
+    function test_executeHarvest_reverts_unauthorized_caller() public {
+        vm.startPrank(user);
+        depositor.grantAgentPermission(agentId1, address(vaultA), maxAmount, expiry);
+        depositor.setAgentCapabilities(agentId1, false, true);
+        vm.stopPrank();
+        depositor.executeAgentDeposit(agentId1, user, address(vaultA), 50e6);
+
+        vm.prank(STRANGER);
+        vm.expectRevert(AgentVaultDepositor.UnauthorizedCaller.selector);
+        depositor.executeHarvest(agentId1, user, address(vaultA), false);
+    }
+
+    function test_executeWithdraw_reverts_when_expired() public {
+        vm.startPrank(user);
+        depositor.grantAgentPermission(agentId1, address(vaultA), maxAmount, expiry);
+        depositor.setAgentCapabilities(agentId1, true, false);
+        vm.stopPrank();
+        depositor.executeAgentDeposit(agentId1, user, address(vaultA), 50e6);
+
+        vm.warp(expiry + 1);
+        vm.expectRevert(AgentVaultDepositor.PermissionExpired.selector);
+        depositor.executeWithdraw(agentId1, user, address(vaultA), 10e6);
+    }
+
+    function test_executeHarvest_reverts_when_expired() public {
+        vm.startPrank(user);
+        depositor.grantAgentPermission(agentId1, address(vaultA), maxAmount, expiry);
+        depositor.setAgentCapabilities(agentId1, false, true);
+        vm.stopPrank();
+        depositor.executeAgentDeposit(agentId1, user, address(vaultA), 50e6);
+
+        vm.warp(expiry + 1);
+        vm.expectRevert(AgentVaultDepositor.PermissionExpired.selector);
+        depositor.executeHarvest(agentId1, user, address(vaultA), false);
     }
 
     // ─── Fuzz Tests ───────────────────────────────────────────────────────────

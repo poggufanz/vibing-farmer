@@ -2,6 +2,18 @@
 
 const STEP_IDS = ['connect', 'generate', 'approve', 'execute', 'done']
 
+// Escape HTML before interpolating ANY untrusted value into innerHTML. Agent
+// labels, memory lessons, log messages, and skill JSON originate from LLM output
+// or user-edited input — unescaped they enable DOM XSS (e.g. <img onerror=...>).
+function esc(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 /**
  * Set step status.
  * @param {string} stepId - one of STEP_IDS
@@ -29,8 +41,8 @@ export function logActivity(message, type = 'info') {
   const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
   row.innerHTML = `
     <span class="act-marker ${MARKER_CLASS[type] || 'info'}">${MARKER[type] || '·'}</span>
-    <span class="act-text">${message}</span>
-    <span class="act-time">${time}</span>
+    <span class="act-text">${esc(message)}</span>
+    <span class="act-time">${esc(time)}</span>
   `
   container.appendChild(row)
   container.scrollTop = container.scrollHeight
@@ -45,21 +57,21 @@ export function showAgentDetail(agent) {
   if (!panel) return
   panel.innerHTML = `
     <div class="detail-header">
-      <span class="detail-label">${agent.label}</span>
-      <span class="detail-status detail-status--${agent.status}">${agent.status}</span>
+      <span class="detail-label">${esc(agent.label)}</span>
+      <span class="detail-status detail-status--${esc(agent.status)}">${esc(agent.status)}</span>
     </div>
     <div class="detail-section">
       <div class="detail-key">Agent ID</div>
-      <div class="detail-val mono">${agent.id.slice(0, 18)}...</div>
+      <div class="detail-val mono">${esc(String(agent.id).slice(0, 18))}...</div>
     </div>
     <div class="detail-section">
       <div class="detail-key">Vault</div>
-      <div class="detail-val mono">${agent.vault || '-'}</div>
+      <div class="detail-val mono">${esc(agent.vault || '-')}</div>
     </div>
     <div class="detail-section">
       <div class="detail-key">Skills</div>
       ${agent.skills
-        ? `<pre class="detail-code">${JSON.stringify(agent.skills, null, 2)}</pre>`
+        ? `<pre class="detail-code">${esc(JSON.stringify(agent.skills, null, 2))}</pre>`
         : `<div class="detail-empty">Generated when agent dispatches</div>`}
     </div>
     <div class="detail-section">
@@ -68,13 +80,13 @@ export function showAgentDetail(agent) {
         ? agent.memory.map(e => {
             const t = new Date(e.timestamp * 1000).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
             return `
-              <div class="memory-entry memory-entry--${e.status}">
+              <div class="memory-entry memory-entry--${esc(e.status)}">
                 <div class="memory-entry-row">
-                  <span class="memory-step">${e.step}</span>
+                  <span class="memory-step">${esc(e.step)}</span>
                   <span class="memory-status">${e.status === 'success' ? '✓' : '✕'}</span>
-                  <span class="memory-time">${t}</span>
+                  <span class="memory-time">${esc(t)}</span>
                 </div>
-                ${e.lesson ? `<div class="memory-lesson">${e.lesson}</div>` : ''}
+                ${e.lesson ? `<div class="memory-lesson">${esc(e.lesson)}</div>` : ''}
               </div>
             `
           }).join('')

@@ -81,9 +81,10 @@ export default async function handler(req, res) {
     res.statusCode = upstream.status
     res.setHeader('Content-Type', 'application/json')
     res.end(text)
-  } catch (err) {
+  } catch {
+    // Generic message — never echo upstream/internal error details to the client.
     res.statusCode = 502
-    res.end(JSON.stringify({ error: `AI proxy failed: ${err.message}` }))
+    res.end(JSON.stringify({ error: 'AI proxy failed' }))
   }
 }
 

@@ -28,6 +28,12 @@ export const SETTINGS_DEFAULTS = {
   language: 'en',
 }
 
+// Secret API keys live in sessionStorage, not localStorage: they clear on tab
+// close and are not shared across tabs, narrowing the exfiltration window if any
+// XSS lands. Non-secret prefs stay in localStorage for persistence.
+const SECRET_KEYS = new Set(['veniceApiKey', 'tavilyApiKey'])
+const storeFor = (key) => (SECRET_KEYS.has(key) ? sessionStorage : localStorage)
+
 const parse = (raw, def) => {
   if (raw == null) return def
   try { return JSON.parse(raw) } catch { return raw } // bare strings stored unquoted
@@ -36,7 +42,7 @@ const parse = (raw, def) => {
 export function loadSettings() {
   const out = { ...SETTINGS_DEFAULTS }
   for (const k in SETTINGS_KEYS) {
-    const raw = localStorage.getItem(SETTINGS_KEYS[k])
+    const raw = storeFor(k).getItem(SETTINGS_KEYS[k])
     if (raw != null) out[k] = parse(raw, SETTINGS_DEFAULTS[k])
   }
   return out
@@ -45,7 +51,7 @@ export function loadSettings() {
 export function saveSetting(key, value) {
   const sk = SETTINGS_KEYS[key]
   if (!sk) return
-  localStorage.setItem(sk, typeof value === 'string' ? value : JSON.stringify(value))
+  storeFor(key).setItem(sk, typeof value === 'string' ? value : JSON.stringify(value))
 }
 
 // Minimal i18n — UI labels only, never AI reasoning output.
