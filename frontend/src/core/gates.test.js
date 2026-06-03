@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentPortfolioAPY, checkTurbulence, checkCooldown, checkGasBudget } from './gates.js'
+import { getCurrentPortfolioAPY, checkTurbulence, checkCooldown, checkGasBudget, checkCandidatesExist } from './gates.js'
 
 describe('getCurrentPortfolioAPY', () => {
   it('returns 0 when there are no positions', () => {
@@ -80,5 +80,55 @@ describe('checkGasBudget', () => {
     const result = checkGasBudget({ gasPrice: 100, ethPriceUSD: 2000 }, thresholds)
     expect(result.pass).toBe(false)
     expect(result.reason).toContain('Gas too expensive')
+  })
+})
+
+describe('checkCandidatesExist', () => {
+  const thresholds = { MIN_APY_DELTA_PERCENT: 2.0, MIN_TVL_USD: 5_000_000 }
+
+  it('passes and returns candidates that beat current APY by the delta', () => {
+    const state = {
+      positions: [],                       // empty -> current APY 0
+      pools: [
+        { id: 'p1', protocol: 'aave-v3', apy: 8, tvlUsd: 100_000_000 },
+        { id: 'p2', protocol: 'morpho-blue', apy: 1, tvlUsd: 100_000_000 }, // below delta
+      ],
+    }
+    const result = checkCandidatesExist(state, thresholds)
+    expect(result.pass).toBe(true)
+    expect(result.candidates).toHaveLength(1)
+    expect(result.candidates[0].id).toBe('p1')
+  })
+
+  it('excludes pools below the minimum TVL', () => {
+    const state = {
+      positions: [],
+      pools: [{ id: 'p1', protocol: 'aave-v3', apy: 8, tvlUsd: 1_000_000 }],
+    }
+    expect(checkCandidatesExist(state, thresholds).pass).toBe(false)
+  })
+
+  it('excludes protocols already held in the portfolio', () => {
+    const state = {
+      positions: [{ protocol: 'aave-v3', amountUSD: 1000, currentAPY: 1 }],
+      pools: [{ id: 'p1', protocol: 'aave-v3', apy: 8, tvlUsd: 100_000_000 }],
+    }
+    // only candidate shares our protocol -> none left
+    expect(checkCandidatesExist(state, thresholds).pass).toBe(false)
+  })
+
+  it('fails with a reason when no pool clears the bar', () => {
+    const state = { positions: [], pools: [] }
+    const result = checkCandidatesExist(state, thresholds)
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('No pools')
+  })
+
+  it('caps candidates at 5', () => {
+    const pools = Array.from({ length: 8 }, (_, i) => ({
+      id: `p${i}`, protocol: `proto-${i}`, apy: 10, tvlUsd: 100_000_000,
+    }))
+    const result = checkCandidatesExist({ positions: [], pools }, thresholds)
+    expect(result.candidates).toHaveLength(5)
   })
 })

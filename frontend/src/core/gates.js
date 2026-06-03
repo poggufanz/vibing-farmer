@@ -63,3 +63,32 @@ export function checkGasBudget(state, thresholds) {
   }
   return { pass: true, name: 'gas', estimatedGasUSD: gasCostUSD }
 }
+
+/**
+ * Find pools worth moving into. A pool qualifies when it is not a protocol we
+ * already hold, beats current portfolio APY by MIN_APY_DELTA_PERCENT, and meets
+ * MIN_TVL_USD. Positions are keyed by vault address and pools by DeFiLlama id,
+ * so "already held" is matched on protocol, the only reliable join.
+ */
+export function checkCandidatesExist(state, thresholds) {
+  const currentAPY = getCurrentPortfolioAPY(state)
+  const heldProtocols = new Set((state.positions ?? []).map(p => p.protocol))
+
+  const candidates = (state.pools ?? [])
+    .filter(pool =>
+      !heldProtocols.has(pool.protocol) &&
+      (pool.apy - currentAPY) >= thresholds.MIN_APY_DELTA_PERCENT &&
+      pool.tvlUsd >= thresholds.MIN_TVL_USD
+    )
+    .slice(0, MAX_CANDIDATES)
+
+  if (candidates.length === 0) {
+    return {
+      pass: false,
+      name: 'candidates',
+      reason: `No pools with APY > current (${currentAPY.toFixed(2)}%) + ${thresholds.MIN_APY_DELTA_PERCENT}% delta and TVL >= $${thresholds.MIN_TVL_USD}`,
+    }
+  }
+
+  return { pass: true, name: 'candidates', candidates }
+}
