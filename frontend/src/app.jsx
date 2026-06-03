@@ -38,6 +38,8 @@ import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEv
 import AgentDashboard from './components/AgentDashboard.jsx';
 import HomePage from './components/HomePage.jsx';
 import LandingHero from './components/LandingHero.jsx';
+import ExplorerPage from './components/ExplorerPage.jsx';
+import EcosystemPage from './components/EcosystemPage.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import { WalletPanel, PermissionPanel, ActivityPanel, SkillPanel, PalettePicker, PALETTES } from './components/RightRail.jsx';
 import { loadSettings, saveSetting } from './settingsStore.js';
@@ -1010,6 +1012,15 @@ const App = () => {
   // APY/meta per vault for the agent dashboard (positions events don't carry APY)
   const agentVaultMeta = {};
   (strategy?.agents || []).forEach((a) => { agentVaultMeta[a.vault.addr.toLowerCase()] = { apy: Number(a.vault.apy), protocol: a.vault.protocol }; });
+
+  // Public pages — standalone full-bleed, own NavBar, no wallet required.
+  // Checked before every gate so judges and visitors can browse without connecting.
+  if (location.pathname === '/explorer') {
+    return <ExplorerPage />;
+  }
+  if (location.pathname === '/ecosystem') {
+    return <EcosystemPage />;
+  }
 
   // Landing takeover — first-time, not-yet-connected visitors see the scroll
   // hero before anything else. "Start farming" persists yv_skip_landing and

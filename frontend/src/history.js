@@ -159,6 +159,61 @@ export function clearReasoningLog() {
   localStorage.removeItem(KEYS.reasoning)
 }
 
+// ─── E: Positions derived from transaction history ───────────────────────────
+
+/**
+ * Build a positions map from saved transaction history.
+ * Used as a fast, offline fallback before on-chain reconciliation completes.
+ *
+ * Filters to only transactions targeting current VAULT_CATALOG addresses so
+ * deposits to old/redeployed contracts don't inflate balances.
+ * APY falls back to VAULT_CATALOG when tx.apy is missing or zero.
+ */
+export function positionsFromHistory(VAULT_CATALOG) {
+  const txs = readStore(KEYS.transactions)
+
+  const currentAddresses = (VAULT_CATALOG || [])
+    .map(v => v.address?.toLowerCase())
+    .filter(Boolean)
+
+  const map = {}
+
+  txs
+    .filter(tx => {
+      if (!tx.vaultAddress) return true
+      return currentAddresses.includes(tx.vaultAddress.toLowerCase())
+    })
+    .forEach(tx => {
+      const key = tx.vaultAddress?.toLowerCase() || tx.vaultName
+
+      const catalogEntry = (VAULT_CATALOG || []).find(
+        v =>
+          v.protocol === tx.protocol ||
+          v.address?.toLowerCase() === tx.vaultAddress?.toLowerCase()
+      )
+
+      const apy = parseFloat(tx.apy) || catalogEntry?.apy || 0
+      const amount = parseFloat(tx.amountUsdc) || 0
+
+      if (!map[key]) {
+        map[key] = {
+          vaultName: tx.vaultName || catalogEntry?.name || key,
+          vaultAddress: tx.vaultAddress,
+          protocol: tx.protocol || catalogEntry?.protocol,
+          balance: '0',
+          apy,
+          unclaimedRewards: '0',
+        }
+      }
+
+      const prev = parseFloat(map[key].balance) || 0
+      map[key].balance = String(prev + amount)
+      if (!map[key].apy && apy) map[key].apy = apy
+    })
+
+  return map
+}
+
 // ─── Combined ─────────────────────────────────────────────────────────────────
 
 export function clearAllHistory() {
