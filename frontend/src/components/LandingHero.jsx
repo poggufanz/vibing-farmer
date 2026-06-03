@@ -19,6 +19,7 @@ import {
   useSpring,
   useMotionValueEvent,
 } from 'framer-motion'
+import NavBar from './NavBar.jsx'
 
 /* ----------------------------- content ----------------------------- */
 
@@ -242,10 +243,7 @@ function ScrollHero({ onStart, scrollContainer }) {
     <>
     <section className="vf-stage" ref={ref}>
       <div className="vf-stage__sticky">
-        {/* fixed wordmark, top */}
-        <motion.div className="vf-stage__mark" style={{ opacity: introOpacity }}>
-          <Wordmark />
-        </motion.div>
+        {/* persistent top nav carries the wordmark now (see <NavBar/> at root) */}
 
         {/* scene 2 text — right side, in 0.2–0.6 */}
         <SceneText data={SCENE_2} side="right" active={scene === 2} />
@@ -312,6 +310,7 @@ export default function LandingHero({ onStart }) {
       data-static={useStatic ? 'true' : 'false'}
     >
       <StyleTag />
+      <NavBar />
       {useStatic ? (
         <StaticHero onStart={onStart} />
       ) : (

@@ -38,6 +38,7 @@ import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEv
 import AgentDashboard from './components/AgentDashboard.jsx';
 import HomePage from './components/HomePage.jsx';
 import LandingHero from './components/LandingHero.jsx';
+import ExplorerPage from './components/ExplorerPage.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import { WalletPanel, PermissionPanel, ActivityPanel, SkillPanel, PalettePicker, PALETTES } from './components/RightRail.jsx';
 import { loadSettings, saveSetting } from './settingsStore.js';
@@ -1010,6 +1011,13 @@ const App = () => {
   // APY/meta per vault for the agent dashboard (positions events don't carry APY)
   const agentVaultMeta = {};
   (strategy?.agents || []).forEach((a) => { agentVaultMeta[a.vault.addr.toLowerCase()] = { apy: Number(a.vault.apy), protocol: a.vault.protocol }; });
+
+  // Explorer — public on-chain verification surface. Standalone full-bleed page
+  // (own NavBar, no app shell) reachable without a wallet, so judges and users
+  // can audit contracts/stats before connecting. Checked ahead of every gate.
+  if (location.pathname === '/explorer') {
+    return <ExplorerPage />;
+  }
 
   // Landing takeover — first-time, not-yet-connected visitors see the scroll
   // hero before anything else. "Start farming" persists yv_skip_landing and
