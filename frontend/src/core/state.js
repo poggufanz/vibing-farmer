@@ -112,6 +112,20 @@ function normalizeAudited(p) {
   return false
 }
 
+/**
+ * Reward function — the delayed ground truth the Reflector (Step 11) scores against.
+ * Called AFTER the evaluation window (e.g. 7 days), never inside the decision loop.
+ *
+ * @param {object} [args]
+ * @param {number} [args.actualYieldUSD] realized yield over the window
+ * @param {number} [args.gasCostUSD]     gas spent entering the position
+ * @param {number} [args.ilLossUSD]      realized impermanent loss
+ * @returns {number} net USD reward (may be negative)
+ */
+export function calculateReward({ actualYieldUSD = 0, gasCostUSD = 0, ilLossUSD = 0 } = {}) {
+  return actualYieldUSD - gasCostUSD - ilLossUSD
+}
+
 // Action space — the agent may ONLY ever produce one of these two shapes.
 // Keyed by vault address because positions are keyed by vault address (not pool id).
 export const ACTIONS = {

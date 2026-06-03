@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { usdcWeiToUsd, USDC_DECIMALS, createState, ACTIONS } from './state.js'
+import { usdcWeiToUsd, USDC_DECIMALS, createState, ACTIONS, calculateReward } from './state.js'
 
 describe('usdcWeiToUsd', () => {
   it('scales 6-decimal USDC wei to a USD number', () => {
@@ -123,5 +123,24 @@ describe('ACTIONS', () => {
       toVault: '0xCCC',
       amountUSD: 500,
     })
+  })
+})
+
+describe('calculateReward', () => {
+  it('reward = actual yield minus gas minus IL loss', () => {
+    expect(calculateReward({ actualYieldUSD: 50, gasCostUSD: 8, ilLossUSD: 2 })).toBe(40)
+  })
+
+  it('defaults ilLossUSD to 0 when omitted', () => {
+    expect(calculateReward({ actualYieldUSD: 30, gasCostUSD: 5 })).toBe(25)
+  })
+
+  it('can go negative (a losing rebalance)', () => {
+    expect(calculateReward({ actualYieldUSD: 3, gasCostUSD: 10, ilLossUSD: 1 })).toBe(-8)
+  })
+
+  it('returns 0 for an empty argument instead of NaN', () => {
+    expect(calculateReward()).toBe(0)
+    expect(calculateReward({})).toBe(0)
   })
 })
