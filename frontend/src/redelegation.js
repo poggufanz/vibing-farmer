@@ -1,5 +1,5 @@
 // A2A coordination via ERC-7710 redelegation (orchestrator → workers).
-// Targets the "Best A2A Coordination" track. Ethereum Sepolia only.
+// Targets the "Best A2A Coordination" track. Base Sepolia (84532).
 import {
   createDelegation,
   CaveatType,
@@ -11,7 +11,7 @@ import {
 // NOT the main entry — importing them from the main entry crashes at module load.
 import { createCaveatBuilder, hashDelegation } from '@metamask/smart-accounts-kit/utils'
 import { parseUnits, createPublicClient, http } from 'viem'
-import { sepolia as chain } from 'viem/chains'
+import { baseSepolia as chain } from 'viem/chains'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { USDC_SEPOLIA } from './config.js'
 
@@ -38,7 +38,7 @@ export async function createOrchestratorAccount() {
 
   const publicClient = createPublicClient({
     chain,
-    transport: http(import.meta.env.VITE_RPC_URL || 'https://rpc.sepolia.org'),
+    transport: http(import.meta.env.VITE_RPC_URL || 'https://sepolia.base.org'),
   })
 
   return toMetaMaskSmartAccount({

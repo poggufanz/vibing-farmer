@@ -43,19 +43,24 @@ export async function encodeGrantAgentPermission(agentId, vault, maxAmount, expi
  * @param {string} params.account - user EOA address
  * @returns {Promise<{txHash: string, status: string}>}
  */
-// Chains natively supported by 1Shot Permissionless Relayer.
-// Mainnet migration: deploy to one of these chains and remove simulation branch.
-const ONESHOT_SUPPORTED_CHAINS = new Set(['1', '8453', '84532', '42161', '10'])
+// Chains supported by the 1Shot KEYLESS Permissionless Relayer (relayer.1shotapi.com).
+// Verified live 2026-06-03 via relayer_getCapabilities: MAINNETS ONLY — no testnet.
+//   eth(1) base(8453) arbitrum(42161) optimism(10) polygon(137) bsc(56) linea(59144) ...
+// Base Sepolia (84532) is NOT here → keyless relay is impossible on our testnet.
+// Real 1Shot on Base Sepolia goes through the MANAGED API (api/relay.js proxy, key+secret +
+// funded server wallet). Until that proxy + creds are wired, 84532 falls back to on-chain
+// user-signed tx (see relayGrantPermission / relayDeposit) — real txs, just not gas-abstracted.
+const ONESHOT_SUPPORTED_CHAINS = new Set(['1', '8453', '42161', '10', '137', '56', '59144'])
 
 /**
- * Submit via 1Shot EIP-7710 relayer. Simulates on unsupported chains (e.g. Sepolia demo).
- * Mainnet: deploy to Base (8453) or Ethereum (1) — remove the simulation branch below.
+ * Submit via the 1Shot KEYLESS EIP-7710 relayer. Mainnet-only.
+ * On unsupported chains (incl. Base Sepolia) callers use the on-chain fallback instead,
+ * so this simulation branch should not be reached in normal flow.
  */
 export async function submitRelay({ to, calldata, permissionContext }) {
   const chainStr = String(SEPOLIA_CHAIN_ID)
 
-  // Sepolia not supported by 1Shot → simulate relay for demo
-  // MAINNET TODO: remove this block once deployed to a supported chain
+  // Defensive: keyless relayer can't serve this chain → simulate rather than hard-fail.
   if (!ONESHOT_SUPPORTED_CHAINS.has(chainStr)) {
     await new Promise(r => setTimeout(r, 700))
     return { txHash: '0xsim_' + Date.now().toString(16), status: 'simulated' }
