@@ -1,17 +1,9 @@
 // Server-side AI proxy. Keeps DEEPSEEK_API_KEY off the client bundle.
 // Used by both the Vite dev/preview middleware and serverless deploys
 // (Vercel-style default export: handler(req, res)).
-const DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions'
+import { applyCors, rateLimit } from './_guard.js'
 
-const ALLOWED_ORIGINS = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175',
-  'http://localhost:4173',
-  // Add your Vercel domain after deploy:
-  // 'https://yield-vibing.vercel.app',
-  ...(process.env.ALLOWED_ORIGIN ? process.env.ALLOWED_ORIGIN.split(',').map(o => o.trim()) : []),
-].filter(Boolean)
+const DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions'
 
 const ALLOWED_MODELS = [
   'deepseek-v4-pro',
@@ -32,18 +24,9 @@ export default async function handler(req, res) {
     return res.end(JSON.stringify({ error: 'Method not allowed' }))
   }
 
-  // 1. CORS origin allowlist check
-  const origin = req.headers.origin || ''
-  if (!ALLOWED_ORIGINS.includes(origin)) {
-    res.statusCode = 403
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ error: 'Forbidden' }))
-  }
-
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'POST')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  // 1. Origin allowlist + per-IP rate limit (Origin alone is forgeable → not auth)
+  if (!applyCors(req, res)) return
+  if (!rateLimit(req, res, { max: 30, windowMs: 60_000, bucket: 'ai' })) return
 
   const key = process.env.DEEPSEEK_API_KEY
   if (!key) {

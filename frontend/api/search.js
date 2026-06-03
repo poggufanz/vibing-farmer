@@ -1,15 +1,9 @@
 // Server-side Tavily proxy. Keeps TAVILY_API_KEY off the client bundle.
 // Mirrors api/ai.js: POST-only, origin allowlist, key server-side, input caps.
 // Used by both the Vite dev/preview middleware and serverless deploys.
-const TAVILY_URL = 'https://api.tavily.com/search'
+import { applyCors, rateLimit } from './_guard.js'
 
-const ALLOWED_ORIGINS = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175',
-  'http://localhost:4173',
-  ...(process.env.ALLOWED_ORIGIN ? process.env.ALLOWED_ORIGIN.split(',').map(o => o.trim()) : []),
-].filter(Boolean)
+const TAVILY_URL = 'https://api.tavily.com/search'
 
 async function readBody(req) {
   if (req.body && typeof req.body === 'object') return req.body // pre-parsed (serverless)
@@ -25,16 +19,9 @@ export default async function handler(req, res) {
     return res.end(JSON.stringify({ error: 'Method not allowed' }))
   }
 
-  // CORS origin allowlist
-  const origin = req.headers.origin || ''
-  if (!ALLOWED_ORIGINS.includes(origin)) {
-    res.statusCode = 403
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ error: 'Forbidden' }))
-  }
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'POST')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  // Origin allowlist + per-IP rate limit (Origin alone is forgeable → not auth)
+  if (!applyCors(req, res)) return
+  if (!rateLimit(req, res, { max: 30, windowMs: 60_000, bucket: 'search' })) return
 
   const key = process.env.TAVILY_API_KEY
   if (!key) {

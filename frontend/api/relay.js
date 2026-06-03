@@ -21,17 +21,9 @@
 //   { action: 'deposit', to, agentId, user, vault, amount }
 //       → { txHash, status }              (executes + polls to a real hash)
 
-const CHAIN_ID = 84532 // Base Sepolia
+import { applyCors, rateLimit } from './_guard.js'
 
-const ALLOWED_ORIGINS = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175',
-  'http://localhost:4173',
-  // Add your Vercel domain after deploy:
-  // 'https://yield-vibing.vercel.app',
-  ...(process.env.ALLOWED_ORIGIN ? process.env.ALLOWED_ORIGIN.split(',').map(o => o.trim()) : []),
-].filter(Boolean)
+const CHAIN_ID = 84532 // Base Sepolia
 
 // executeAgentDeposit signature — must match AgentVaultDepositor.sol exactly.
 // 1Shot NewSolidityStructParam shape: `type` is the BASE enum
@@ -153,16 +145,10 @@ export default async function handler(req, res) {
     return res.end(JSON.stringify({ error: 'Method not allowed' }))
   }
 
-  // CORS origin allowlist
-  const origin = req.headers.origin || ''
-  if (!ALLOWED_ORIGINS.includes(origin)) {
-    res.statusCode = 403
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ error: 'Forbidden' }))
-  }
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'POST')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  // Origin allowlist + per-IP rate limit. Origin is forgeable (curl) → not auth;
+  // the cap blunts gas-drain DoS that would spam the funded 1Shot relayer wallet.
+  if (!applyCors(req, res)) return
+  if (!rateLimit(req, res, { max: 15, windowMs: 60_000, bucket: 'relay' })) return
   res.setHeader('Content-Type', 'application/json')
 
   const bizId = process.env.ONESHOT_BIZ_ID
