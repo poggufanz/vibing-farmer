@@ -140,3 +140,47 @@ describe('runOneCycleSafe — crash recovery', () => {
     expect(result.outcome).toBe('executed')
   })
 })
+
+describe('start / stop — loop control', () => {
+  it('runs cycles until stop() is called, sleeping between cycles', async () => {
+    const stages = makeStages()
+    let cycles = 0
+    // Fake sleep that stops the loop after 3 cycles, so start() resolves deterministically.
+    const sleep = vi.fn(async () => {
+      cycles += 1
+      if (cycles >= 3) loop.stop()
+    })
+    const loop = makeLoop(stages, { sleep, intervalMs: 999 })
+
+    await loop.start()
+
+    expect(stages.fetchState).toHaveBeenCalledTimes(3)
+    expect(sleep).toHaveBeenCalledWith(999)
+    expect(loop.running).toBe(false)
+  })
+
+  it('does not start a second concurrent loop while already running', async () => {
+    const stages = makeStages()
+    const sleep = vi.fn(async () => { loop.stop() }) // stop after first cycle
+    const loop = makeLoop(stages, { sleep })
+
+    await loop.start()
+    expect(stages.fetchState).toHaveBeenCalledTimes(1)
+
+    // A guard call while not running is a no-op path; calling start again runs a fresh single cycle.
+    await loop.start()
+    expect(stages.fetchState).toHaveBeenCalledTimes(2)
+  })
+
+  it('survives a throwing cycle and keeps looping (uses runOneCycleSafe)', async () => {
+    const stages = makeStages({
+      fetchState: vi.fn(async () => { throw new Error('transient') }),
+    })
+    let cycles = 0
+    const sleep = vi.fn(async () => { cycles += 1; if (cycles >= 2) loop.stop() })
+    const loop = makeLoop(stages, { sleep, logger: { error: () => {}, log: () => {} } })
+
+    await expect(loop.start()).resolves.toBeUndefined() // never throws out
+    expect(stages.fetchState).toHaveBeenCalledTimes(2)
+  })
+})

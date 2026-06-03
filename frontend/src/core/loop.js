@@ -24,6 +24,8 @@ export function createAutonomousLoop(deps) {
     logger = console,
   } = deps
 
+  let running = false
+
   async function runOneCycle() {
     const cycleId = `cycle-${now()}`
 
@@ -64,5 +66,25 @@ export function createAutonomousLoop(deps) {
     }
   }
 
-  return { runOneCycle, runOneCycleSafe }
+  async function start() {
+    if (running) return // already looping — never run two concurrently
+    running = true
+    while (running) {
+      await runOneCycleSafe()
+      if (!running) break // stop() called inside the cycle
+      await sleep(intervalMs)
+    }
+  }
+
+  function stop() {
+    running = false
+  }
+
+  return {
+    start,
+    stop,
+    runOneCycle,
+    runOneCycleSafe,
+    get running() { return running },
+  }
 }
