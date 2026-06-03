@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentPortfolioAPY, checkTurbulence, checkCooldown, checkGasBudget, checkCandidatesExist } from './gates.js'
+import { getCurrentPortfolioAPY, checkTurbulence, checkCooldown, checkGasBudget, checkCandidatesExist, runFastFailGates } from './gates.js'
 
 describe('getCurrentPortfolioAPY', () => {
   it('returns 0 when there are no positions', () => {
@@ -130,5 +130,63 @@ describe('checkCandidatesExist', () => {
     }))
     const result = checkCandidatesExist({ positions: [], pools }, thresholds)
     expect(result.candidates).toHaveLength(5)
+  })
+})
+
+describe('runFastFailGates', () => {
+  // A baseline state that passes every gate.
+  const okState = () => ({
+    turbulenceIndex: 0.1,
+    timeSinceLastRebalance: 48,
+    gasPrice: 10,
+    ethPriceUSD: 2000,
+    positions: [],
+    pools: [{ id: 'p1', protocol: 'aave-v3', apy: 8, tvlUsd: 100_000_000 }],
+  })
+
+  it('passes and returns candidates when every gate is satisfied', () => {
+    const result = runFastFailGates(okState(), {})
+    expect(result.pass).toBe(true)
+    expect(result.candidates).toHaveLength(1)
+  })
+
+  it('short-circuits on turbulence and names the failing gate', () => {
+    const result = runFastFailGates({ ...okState(), turbulenceIndex: 0.9 }, {})
+    expect(result.pass).toBe(false)
+    expect(result.gate).toBe('turbulence')
+  })
+
+  it('short-circuits on cooldown before evaluating candidates', () => {
+    const result = runFastFailGates({ ...okState(), timeSinceLastRebalance: 1 }, {})
+    expect(result.pass).toBe(false)
+    expect(result.gate).toBe('cooldown')
+  })
+
+  it('short-circuits on gas budget', () => {
+    const result = runFastFailGates({ ...okState(), gasPrice: 500 }, {})
+    expect(result.pass).toBe(false)
+    expect(result.gate).toBe('gas')
+  })
+
+  it('fails on candidates when no pool clears the bar', () => {
+    const result = runFastFailGates({ ...okState(), pools: [] }, {})
+    expect(result.pass).toBe(false)
+    expect(result.gate).toBe('candidates')
+  })
+
+  it('honors config.thresholds overrides', () => {
+    // Tighten turbulence ceiling so the baseline 0.1 still passes but 0.2 fails.
+    const result = runFastFailGates(
+      { ...okState(), turbulenceIndex: 0.2 },
+      { thresholds: { TURBULENCE_CRITICAL: 0.15 } },
+    )
+    expect(result.pass).toBe(false)
+    expect(result.gate).toBe('turbulence')
+  })
+
+  it('returns a defined reason string on failure', () => {
+    const result = runFastFailGates({ ...okState(), pools: [] }, {})
+    expect(typeof result.reason).toBe('string')
+    expect(result.reason.length).toBeGreaterThan(0)
   })
 })

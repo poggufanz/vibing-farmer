@@ -92,3 +92,33 @@ export function checkCandidatesExist(state, thresholds) {
 
   return { pass: true, name: 'candidates', candidates }
 }
+
+/**
+ * Run all fast-fail gates in order. Returns on the FIRST failure so the loop
+ * sleeps immediately without spending AI credit. On full pass, returns the
+ * rebalance candidates collected by checkCandidatesExist.
+ *
+ * Shape matches the loop's `stages.runGates(state, config)` contract:
+ *   { pass: true, candidates: [...] }  | { pass: false, reason, gate }
+ *
+ * @param {object} state   canonical State from createState()
+ * @param {object} config  strategy config; config.thresholds overrides DEFAULTS
+ */
+export function runFastFailGates(state, config = {}) {
+  const thresholds = { ...DEFAULTS, ...(config.thresholds ?? {}) }
+
+  const gates = [
+    checkTurbulence(state, thresholds),
+    checkCooldown(state, thresholds),
+    checkGasBudget(state, thresholds),
+    checkCandidatesExist(state, thresholds),
+  ]
+
+  const failed = gates.find(g => !g.pass)
+  if (failed) {
+    return { pass: false, reason: failed.reason, gate: failed.name }
+  }
+
+  const candidates = gates.find(g => g.candidates)?.candidates ?? []
+  return { pass: true, candidates }
+}
