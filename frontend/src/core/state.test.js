@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { usdcWeiToUsd, USDC_DECIMALS, createState } from './state.js'
+import { usdcWeiToUsd, USDC_DECIMALS, createState, ACTIONS } from './state.js'
 
 describe('usdcWeiToUsd', () => {
   it('scales 6-decimal USDC wei to a USD number', () => {
@@ -108,5 +108,20 @@ describe('createState — scalars + timestamp', () => {
 
   it('defaults timeSinceLastRebalance to Infinity when never rebalanced', () => {
     expect(createState({ now: FIXED_NOW }).timeSinceLastRebalance).toBe(Infinity)
+  })
+})
+
+describe('ACTIONS', () => {
+  it('HOLD carries a reason', () => {
+    expect(ACTIONS.HOLD('cooldown active')).toEqual({ type: 'HOLD', reason: 'cooldown active' })
+  })
+
+  it('REBALANCE carries from/to vault addresses and a USD amount', () => {
+    expect(ACTIONS.REBALANCE('0xAAA', '0xCCC', 500)).toEqual({
+      type: 'REBALANCE',
+      fromVault: '0xAAA',
+      toVault: '0xCCC',
+      amountUSD: 500,
+    })
   })
 })

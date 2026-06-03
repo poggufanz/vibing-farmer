@@ -111,3 +111,15 @@ function normalizeAudited(p) {
   if (p.audits != null) return p.audits !== '0'
   return false
 }
+
+// Action space — the agent may ONLY ever produce one of these two shapes.
+// Keyed by vault address because positions are keyed by vault address (not pool id).
+export const ACTIONS = {
+  HOLD: (reason) => ({ type: 'HOLD', reason }),
+  REBALANCE: (fromVault, toVault, amountUSD) => ({
+    type: 'REBALANCE',
+    fromVault,
+    toVault,
+    amountUSD,
+  }),
+}
