@@ -31,7 +31,8 @@ export default function NavBar() {
     navigate('/strategy')
   }
 
-  const isExplorer = pathname === '/explorer'
+  const isEcosystem = pathname === '/ecosystem'
+  const isExplorer  = pathname === '/explorer'
 
   return (
     <nav className="nv-bar" aria-label="Main navigation">
@@ -42,7 +43,13 @@ export default function NavBar() {
 
       <div className="nv-links">
         <button className="nv-link" onClick={launchApp}>Products</button>
-        <button className="nv-link" onClick={() => navigate('/ecosystem')}>Ecosystem</button>
+        <button
+          className={`nv-link${isEcosystem ? ' is-active' : ''}`}
+          onClick={() => navigate('/ecosystem')}
+          aria-current={isEcosystem ? 'page' : undefined}
+        >
+          Ecosystem
+        </button>
         <button
           className={`nv-link${isExplorer ? ' is-active' : ''}`}
           onClick={() => navigate('/explorer')}

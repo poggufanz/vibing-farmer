@@ -39,6 +39,7 @@ import AgentDashboard from './components/AgentDashboard.jsx';
 import HomePage from './components/HomePage.jsx';
 import LandingHero from './components/LandingHero.jsx';
 import ExplorerPage from './components/ExplorerPage.jsx';
+import EcosystemPage from './components/EcosystemPage.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import { WalletPanel, PermissionPanel, ActivityPanel, SkillPanel, PalettePicker, PALETTES } from './components/RightRail.jsx';
 import { loadSettings, saveSetting } from './settingsStore.js';
@@ -1012,11 +1013,13 @@ const App = () => {
   const agentVaultMeta = {};
   (strategy?.agents || []).forEach((a) => { agentVaultMeta[a.vault.addr.toLowerCase()] = { apy: Number(a.vault.apy), protocol: a.vault.protocol }; });
 
-  // Explorer — public on-chain verification surface. Standalone full-bleed page
-  // (own NavBar, no app shell) reachable without a wallet, so judges and users
-  // can audit contracts/stats before connecting. Checked ahead of every gate.
+  // Public pages — standalone full-bleed, own NavBar, no wallet required.
+  // Checked before every gate so judges and visitors can browse without connecting.
   if (location.pathname === '/explorer') {
     return <ExplorerPage />;
+  }
+  if (location.pathname === '/ecosystem') {
+    return <EcosystemPage />;
   }
 
   // Landing takeover — first-time, not-yet-connected visitors see the scroll
