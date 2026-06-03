@@ -48,3 +48,18 @@ export function checkCooldown(state, thresholds) {
   }
   return { pass: true, name: 'cooldown' }
 }
+
+/** Estimate the USD cost of a rebalance tx and reject if it blows the budget. */
+export function checkGasBudget(state, thresholds) {
+  const gasCostETH = (state.gasPrice * GAS_UNITS_PER_REBALANCE) / 1e9
+  const gasCostUSD = gasCostETH * state.ethPriceUSD
+
+  if (gasCostUSD > thresholds.MAX_GAS_USD) {
+    return {
+      pass: false,
+      name: 'gas',
+      reason: `Gas too expensive: $${gasCostUSD.toFixed(2)} (max: $${thresholds.MAX_GAS_USD})`,
+    }
+  }
+  return { pass: true, name: 'gas', estimatedGasUSD: gasCostUSD }
+}

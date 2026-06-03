@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentPortfolioAPY, checkTurbulence, checkCooldown } from './gates.js'
+import { getCurrentPortfolioAPY, checkTurbulence, checkCooldown, checkGasBudget } from './gates.js'
 
 describe('getCurrentPortfolioAPY', () => {
   it('returns 0 when there are no positions', () => {
@@ -61,5 +61,24 @@ describe('checkCooldown', () => {
     const result = checkCooldown({ timeSinceLastRebalance: 6 }, thresholds)
     expect(result.pass).toBe(false)
     expect(result.reason).toContain('Cooldown')
+  })
+})
+
+describe('checkGasBudget', () => {
+  const thresholds = { MAX_GAS_USD: 25 }
+
+  it('passes and reports estimatedGasUSD when gas is affordable', () => {
+    // 10 gwei * 300000 / 1e9 = 0.003 ETH * $2000 = $6.00
+    const result = checkGasBudget({ gasPrice: 10, ethPriceUSD: 2000 }, thresholds)
+    expect(result.pass).toBe(true)
+    expect(result.name).toBe('gas')
+    expect(result.estimatedGasUSD).toBeCloseTo(6, 5)
+  })
+
+  it('fails when gas cost exceeds the budget', () => {
+    // 100 gwei * 300000 / 1e9 = 0.03 ETH * $2000 = $60.00 > $25
+    const result = checkGasBudget({ gasPrice: 100, ethPriceUSD: 2000 }, thresholds)
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('Gas too expensive')
   })
 })
