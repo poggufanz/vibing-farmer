@@ -31,7 +31,13 @@ export function createAutonomousLoop(deps) {
     const playbook = await stages.loadPlaybook()
     const state = await stages.fetchState(config)
 
-    const sim = await stages.runSimulation(/* candidates */ undefined, state)
+    const gate = stages.runGates(state, config)
+    if (!gate.pass) {
+      logger.log?.(`[${cycleId}] gate blocked: ${gate.reason}`)
+      return { cycleId, outcome: 'gate_blocked', reason: gate.reason }
+    }
+
+    const sim = await stages.runSimulation(gate.candidates, state)
     const verdicts = await stages.runCouncil(sim, state, config, playbook)
     const consensus = stages.evaluateConsensus(verdicts)
     await stages.executeRebalance(consensus, sim, state, config)

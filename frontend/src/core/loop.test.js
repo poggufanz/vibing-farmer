@@ -59,3 +59,31 @@ describe('runOneCycle — happy path', () => {
     expect(stages.executeRebalance).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('runOneCycle — gate short-circuit', () => {
+  it('stops at a blocked gate and skips simulation, council, execution', async () => {
+    const stages = makeStages({
+      runGates: vi.fn(() => ({ pass: false, reason: 'cooldown active' })),
+    })
+    const loop = makeLoop(stages)
+
+    const result = await loop.runOneCycle()
+
+    expect(result.outcome).toBe('gate_blocked')
+    expect(result.reason).toBe('cooldown active')
+    expect(stages.runSimulation).not.toHaveBeenCalled()
+    expect(stages.runCouncil).not.toHaveBeenCalled()
+    expect(stages.executeRebalance).not.toHaveBeenCalled()
+  })
+
+  it('forwards gate candidates into the simulation on pass', async () => {
+    const stages = makeStages({
+      runGates: vi.fn(() => ({ pass: true, candidates: [{ id: 'pool-7' }] })),
+    })
+    const loop = makeLoop(stages)
+
+    await loop.runOneCycle()
+
+    expect(stages.runSimulation).toHaveBeenCalledWith([{ id: 'pool-7' }], expect.anything())
+  })
+})
