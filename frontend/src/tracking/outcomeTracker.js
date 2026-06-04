@@ -1,4 +1,6 @@
 import { calculateReward } from '../core/state.js'
+import { fetchApyHistory as defaultFetchApyHistory } from '../apyHistory.js'
+import { VAULT_CATALOG } from '../config.js'
 
 // outcomeTracker.js — Step 10: delayed (7-day) outcome evaluator.
 // Runs OUTSIDE the decision loop (async / scheduled). Reads pending_evaluation entries
@@ -151,6 +153,66 @@ export async function runOutcomeEvaluator(deps) {
 
   logger.log?.(`[outcome] evaluated=${evaluated} skipped=${skipped} failed=${failed}`)
   return { evaluated, skipped, failed }
+}
+
+// ─── Factory (binds real deps once) ──────────────────────────────────────────────
+
+/**
+ * Build a lowercased { vaultAddress: apy } lookup from a vault catalog.
+ * @param {Array<{address?:string, apy?:number}>} [catalog]
+ * @returns {Object<string,number>}
+ */
+export function buildCatalogApyMap(catalog = []) {
+  const map = {}
+  for (const v of catalog) {
+    if (v?.address != null) map[String(v.address).toLowerCase()] = v.apy
+  }
+  return map
+}
+
+/**
+ * Bind the real APY fetcher + catalog fallback once and return an object whose `run()`
+ * evaluates all aged pending decisions. Step 14 (main wiring) calls this with the real
+ * createDecisionLog() and, once Step 11 lands, the real reflector.
+ *
+ * @param {object} deps
+ * @param {{getPending:Function, update:Function}} deps.decisionLog  required
+ * @param {(poolId:string)=>Promise<Array|null>} [deps.fetchApyHistory]  default: apyHistory.js
+ * @param {Array} [deps.catalog]                                         default: VAULT_CATALOG
+ * @param {Function} [deps.reflector]
+ * @param {number} [deps.delayDays]
+ * @param {number} [deps.capDays]
+ * @param {()=>number} [deps.now]
+ * @param {object} [deps.logger]
+ * @returns {{run:()=>Promise<{evaluated:number,skipped:number,failed:number}>}}
+ */
+export function createOutcomeEvaluator(deps) {
+  const {
+    decisionLog,
+    fetchApyHistory = defaultFetchApyHistory,
+    catalog = VAULT_CATALOG,
+    reflector,
+    delayDays,
+    capDays,
+    now,
+    logger,
+  } = deps
+
+  const catalogApyByVault = buildCatalogApyMap(catalog)
+
+  return {
+    run: () =>
+      runOutcomeEvaluator({
+        decisionLog,
+        fetchApyHistory,
+        catalogApyByVault,
+        reflector,
+        delayDays,
+        capDays,
+        now,
+        logger,
+      }),
+  }
 }
 
 async function evaluateOne(decision, ctx) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { averageApy, evalPeriodDays, computeGrossYieldUSD, computePredictionAccuracyPct, buildEvaluationPatch, runOutcomeEvaluator } from './outcomeTracker.js'
+import { averageApy, evalPeriodDays, computeGrossYieldUSD, computePredictionAccuracyPct, buildEvaluationPatch, runOutcomeEvaluator, createOutcomeEvaluator, buildCatalogApyMap } from './outcomeTracker.js'
 
 const DAY = 86_400_000
 
@@ -245,5 +245,42 @@ describe('runOutcomeEvaluator', () => {
       now: () => now,
     })
     expect(result).toEqual({ evaluated: 1, skipped: 0, failed: 0 })
+  })
+})
+
+describe('buildCatalogApyMap', () => {
+  it('maps lowercased vault address → apy from a catalog', () => {
+    const map = buildCatalogApyMap([
+      { address: '0xAbC', apy: 4.8 },
+      { address: '0xDeF', apy: 6.1 },
+    ])
+    expect(map).toEqual({ '0xabc': 4.8, '0xdef': 6.1 })
+  })
+
+  it('skips catalog entries without an address', () => {
+    expect(buildCatalogApyMap([{ apy: 5 }])).toEqual({})
+  })
+})
+
+describe('createOutcomeEvaluator', () => {
+  it('returns a run() that evaluates via the bound deps', async () => {
+    const updates = []
+    const decisionLog = {
+      getPending: () => [{
+        id: 'dec-x', type: 'rebalance', timestamp: 0,
+        toVault: '0xAbC', amountUSD: 1000, gasCostUSD: 1,
+        simResult: { expectedValue: 5 }, status: 'pending_evaluation',
+      }],
+      update: (id, patch) => updates.push({ id, patch }),
+    }
+    const evaluator = createOutcomeEvaluator({
+      decisionLog,
+      fetchApyHistory: async () => null,            // force catalog fallback
+      catalog: [{ address: '0xAbC', apy: 9.125 }],
+      now: () => 8 * 86_400_000,
+    })
+    const result = await evaluator.run()
+    expect(result.evaluated).toBe(1)
+    expect(updates[0].patch.yieldSource).toBe('catalog')
   })
 })
