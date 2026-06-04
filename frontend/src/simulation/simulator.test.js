@@ -49,3 +49,26 @@ describe('assignScenarioProbabilities', () => {
     expect(w.bull).toBeGreaterThan(w.bear)
   })
 })
+
+import { computeExpectedValue } from './simulator.js'
+
+describe('computeExpectedValue', () => {
+  const weights = { bull: 0.3, base: 0.4, bear: 0.3 }
+
+  it('weights each scenario yield by its probability', () => {
+    const ev = computeExpectedValue(
+      { projectedNetYieldUSD: 100 },
+      { projectedNetYieldUSD: 50 },
+      { projectedNetYieldUSD: -20 },
+      weights,
+    )
+    // 100*0.3 + 50*0.4 + (-20)*0.3 = 30 + 20 - 6 = 44
+    expect(ev).toBeCloseTo(44, 10)
+  })
+
+  it('treats a missing projectedNetYieldUSD as 0', () => {
+    const ev = computeExpectedValue({}, { projectedNetYieldUSD: 50 }, {}, weights)
+    // 0*0.3 + 50*0.4 + 0*0.3 = 20
+    expect(ev).toBeCloseTo(20, 10)
+  })
+})

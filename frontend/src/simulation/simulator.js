@@ -35,3 +35,12 @@ export function assignScenarioProbabilities(context) {
   const total = bull + base + bear
   return { bull: bull / total, base: base / total, bear: bear / total }
 }
+
+/** Probability-weighted expected net yield across the three scenarios. */
+export function computeExpectedValue(bull, base, bear, weights) {
+  return (
+    (bull.projectedNetYieldUSD ?? 0) * weights.bull +
+    (base.projectedNetYieldUSD ?? 0) * weights.base +
+    (bear.projectedNetYieldUSD ?? 0) * weights.bear
+  )
+}
