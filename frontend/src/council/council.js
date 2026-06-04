@@ -1,3 +1,7 @@
+import { getCurrentPortfolioAPY } from '../core/gates.js'
+
+const GAS_UNITS_PER_REBALANCE = 300_000 // typical DeFi swap+approve+deposit (matches gates/sim)
+
 // council.js — Step 6: AI Council (TradingAgents-style specialist debate).
 // Three specialists (Risk Auditor, Gas Checker, Strategy Guard) each see a
 // different slice of the playbook and the SAME decision context, then emit a
@@ -37,5 +41,49 @@ export function filterPlaybookByRole(playbook) {
     riskAuditor:   rules.filter(r => r.category === 'risk'),
     gasChecker:    rules.filter(r => r.category === 'gas'),
     strategyGuard: rules.filter(r => r.category === 'strategy'),
+  }
+}
+
+/**
+ * Assemble the single decision context every specialist shares. Pure: all numbers
+ * are derived from already-fetched state + the simulation result. The proposed
+ * pool is matched on PROTOCOL because sim.recommendedPool is a protocol name, not
+ * a DeFiLlama pool id (same join gates.js uses).
+ *
+ * @param {object} sim     runSimulation() result { base, bull, bear, weights, expectedValue }
+ * @param {object} state   canonical State from createState()
+ * @param {object} config  strategy config
+ * @returns {object} shared council context
+ */
+export function buildCouncilContext(sim, state, config) {
+  const proposedPool = sim.base?.recommendedPool ?? null
+  const poolDetails = (state.pools ?? []).find(p => p.protocol === proposedPool) ?? {}
+
+  const estimatedGasCostUSD =
+    (state.gasPrice * GAS_UNITS_PER_REBALANCE * state.ethPriceUSD) / 1e9
+
+  const dailyYieldDelta = (sim.base?.projectedNetYieldUSD ?? 0) / 7
+  const breakevenDays = dailyYieldDelta > 0 ? estimatedGasCostUSD / dailyYieldDelta : 999
+
+  return {
+    proposedPool,
+    proposedPoolAPY: poolDetails.apy ?? 0,
+    currentAPY: getCurrentPortfolioAPY(state),
+    portfolioValueUSD: (state.positions ?? []).reduce((s, p) => s + (p.amountUSD ?? 0), 0),
+    estimatedGasCostUSD,
+    breakevenDays,
+    expectedValue7d: sim.expectedValue,
+    simulationScenarios: {
+      bull: { yield: sim.bull?.projectedNetYieldUSD, probability: sim.weights?.bull },
+      base: { yield: sim.base?.projectedNetYieldUSD, probability: sim.weights?.base },
+      bear: { yield: sim.bear?.projectedNetYieldUSD, probability: sim.weights?.bear },
+    },
+    poolDetails,
+    strategyConfig: {
+      riskTolerance: config.riskTolerance,
+      whitelist: config.whitelist,
+      maxGasUSD: config.thresholds?.MAX_GAS_USD ?? 25,
+    },
+    turbulenceIndex: state.turbulenceIndex,
   }
 }
