@@ -72,3 +72,42 @@ describe('computeExpectedValue', () => {
     expect(ev).toBeCloseTo(20, 10)
   })
 })
+
+import { buildSimulationContext } from './simulator.js'
+
+describe('buildSimulationContext', () => {
+  const candidates = [
+    { id: 'p1', protocol: 'aave-v3', apy: 8, tvlUsd: 100_000_000, tvlDelta24h: 0.02, ilRisk: 'low', audited: true },
+  ]
+  const state = {
+    positions: [{ amountUSD: 1000 }, { amountUSD: 500 }],
+    gasPrice: 12,
+    ethPriceUSD: 2000,
+    turbulenceIndex: 0.2,
+    marketVolatility: 0.3,
+    pools: [{ tvlDelta24h: 0.05 }],
+  }
+
+  it('sums portfolio value from positions', async () => {
+    const ctx = await buildSimulationContext(candidates, state, async () => 'neutral')
+    expect(ctx.portfolioValueUSD).toBe(1500)
+  })
+
+  it('maps candidate tvlUsd (not tvl) and a 3-day trend estimate', async () => {
+    const ctx = await buildSimulationContext(candidates, state, async () => 'neutral')
+    expect(ctx.candidates[0].tvlUsd).toBe(100_000_000)
+    expect(ctx.candidates[0].tvlTrend3d).toBeCloseTo(0.06, 10)
+  })
+
+  it('pulls sentiment from the injected getSentiment and derives market trend', async () => {
+    const ctx = await buildSimulationContext(candidates, state, async () => 'positive')
+    expect(ctx.newsSentiment).toBe('positive')
+    expect(ctx.marketTrend).toBe('uptrend') // pools avg delta 0.05 > 0.03
+  })
+
+  it('caps candidates at 5', async () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({ id: `p${i}`, protocol: `x${i}`, apy: 5, tvlUsd: 1e7 }))
+    const ctx = await buildSimulationContext(many, state, async () => 'neutral')
+    expect(ctx.candidates).toHaveLength(5)
+  })
+})

@@ -36,6 +36,39 @@ export function assignScenarioProbabilities(context) {
   return { bull: bull / total, base: base / total, bear: bear / total }
 }
 
+/**
+ * Assemble the single context object every scenario shares. Enriched with REAL
+ * numbers (portfolio value, gas, turbulence, sentiment, trend) so the AI reasons
+ * about facts rather than hallucinating them.
+ *
+ * @param {Array}  candidates   rebalance candidates from gates (normalized pool shape)
+ * @param {object} state        canonical State from createState()
+ * @param {() => Promise<'positive'|'neutral'|'negative'>} getSentiment  injected
+ */
+export async function buildSimulationContext(candidates, state, getSentiment) {
+  const newsSentiment = await getSentiment()
+  const portfolioValueUSD = (state.positions ?? []).reduce((s, p) => s + (p.amountUSD ?? 0), 0)
+
+  return {
+    candidates: (candidates ?? []).slice(0, 5).map((p) => ({
+      id: p.id,
+      protocol: p.protocol,
+      apy: p.apy ?? 0,
+      tvlUsd: p.tvlUsd ?? 0,
+      tvlTrend3d: (p.tvlDelta24h ?? 0) * 3, // rough 3-day estimate from 24h delta
+      ilRisk: p.ilRisk ?? 'low',
+      audited: p.audited ?? false,
+    })),
+    portfolioValueUSD,
+    gasPrice: state.gasPrice ?? 0,
+    ethPrice: state.ethPriceUSD ?? 0,
+    turbulenceIndex: state.turbulenceIndex ?? 0,
+    marketVolatility: state.marketVolatility ?? 0,
+    newsSentiment,
+    marketTrend: calculateMarketTrend(state.pools),
+  }
+}
+
 /** Probability-weighted expected net yield across the three scenarios. */
 export function computeExpectedValue(bull, base, bear, weights) {
   return (
