@@ -56,3 +56,32 @@ export function sumCounters(cluster) {
     { helpful: 0, harmful: 0 },
   )
 }
+
+/**
+ * Build the { systemPrompt, userPrompt } pair asking the model to merge a cluster of
+ * similar rules into one. Pure: no AI call here (mirrors reflector.buildFailureInsightPrompt).
+ * @param {Array<{id:string, helpful?:number, harmful?:number, text:string}>} cluster
+ * @returns {{systemPrompt:string, userPrompt:string}}
+ */
+export function buildMergePrompt(cluster) {
+  const systemPrompt =
+    'You are a DeFi rule consolidator. Merge similar rules into one. Output ONLY valid JSON. No explanation.'
+
+  const lines = cluster
+    .map(r => `[${r.id}] helpful=${r.helpful ?? 0} harmful=${r.harmful ?? 0} :: ${r.text}`)
+    .join('\n')
+
+  const userPrompt = `These DeFi strategy rules cover similar ground and should be merged into one comprehensive rule:
+
+${lines}
+
+Merge them into a single, precise, actionable rule that captures all key insights.
+Keep it under 30 words. Be specific.
+
+Respond ONLY in valid JSON:
+{
+  "mergedRule": "the merged rule text"
+}`
+
+  return { systemPrompt, userPrompt }
+}

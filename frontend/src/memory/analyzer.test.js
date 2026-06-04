@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupByCategory, findSimilarClusters, sumCounters } from './analyzer.js'
+import { groupByCategory, findSimilarClusters, sumCounters, buildMergePrompt } from './analyzer.js'
 
 describe('groupByCategory', () => {
   it('buckets rules by their category field', () => {
@@ -62,5 +62,28 @@ describe('sumCounters', () => {
   it('treats missing counters as zero', () => {
     const cluster = [{ id: 'a' }, { id: 'b', helpful: 4 }]
     expect(sumCounters(cluster)).toEqual({ helpful: 4, harmful: 0 })
+  })
+})
+
+describe('buildMergePrompt', () => {
+  const cluster = [
+    { id: 'defi-001', helpful: 3, harmful: 1, text: 'Avoid pools with TVL dropping fast' },
+    { id: 'defi-007', helpful: 2, harmful: 0, text: 'Skip pools when TVL is collapsing quickly' },
+  ]
+
+  it('returns a systemPrompt + userPrompt pair', () => {
+    const { systemPrompt, userPrompt } = buildMergePrompt(cluster)
+    expect(typeof systemPrompt).toBe('string')
+    expect(typeof userPrompt).toBe('string')
+  })
+
+  it('demands JSON-only output and includes every rule text + id', () => {
+    const { systemPrompt, userPrompt } = buildMergePrompt(cluster)
+    expect(systemPrompt).toMatch(/ONLY valid JSON/i)
+    expect(userPrompt).toContain('defi-001')
+    expect(userPrompt).toContain('defi-007')
+    expect(userPrompt).toContain('Avoid pools with TVL dropping fast')
+    expect(userPrompt).toContain('Skip pools when TVL is collapsing quickly')
+    expect(userPrompt).toContain('mergedRule') // shows the expected JSON shape
   })
 })
