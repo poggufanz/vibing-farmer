@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { groupByCategory, findSimilarClusters, sumCounters, buildMergePrompt, mergeRuleCluster, runBulletpointAnalyzer } from './analyzer.js'
+import { groupByCategory, findSimilarClusters, sumCounters, buildMergePrompt, mergeRuleCluster, runBulletpointAnalyzer, createAnalyzer } from './analyzer.js'
+import { runCurator } from './curator.js'
 
 describe('groupByCategory', () => {
   it('buckets rules by their category field', () => {
@@ -168,5 +169,50 @@ describe('runBulletpointAnalyzer', () => {
   it('tolerates an empty playbook', async () => {
     const result = await runBulletpointAnalyzer([], { aiComplete: async () => '{}', now: () => 0, logger: SILENT })
     expect(result).toEqual([])
+  })
+})
+
+describe('createAnalyzer', () => {
+  it('returns a 1-arg analyzer(playbook) matching the curator contract', () => {
+    const analyze = createAnalyzer({ aiComplete: async () => '{}', now: () => 0, logger: { log() {}, error() {} } })
+    expect(typeof analyze).toBe('function')
+    expect(analyze.length).toBe(1) // (playbook) — matches curator.js `await analyzer(next)`
+  })
+
+  it('consolidates a playbook through the bound deps', async () => {
+    const analyze = createAnalyzer({
+      aiComplete: async () => JSON.stringify({ mergedRule: 'one merged gas rule' }),
+      now: () => 7,
+      logger: { log() {}, error() {} },
+    })
+    const next = await analyze([
+      { id: 'defi-001', category: 'gas', helpful: 1, harmful: 0, text: 'Skip rebalance when breakeven beyond thirty days', createdAt: 1 },
+      { id: 'defi-002', category: 'gas', helpful: 1, harmful: 0, text: 'Skip rebalance when breakeven beyond thirty days', createdAt: 2 },
+    ])
+    expect(next).toHaveLength(1)
+    expect(next[0].helpful).toBe(2)
+    expect(next[0].mergedAt).toBe(7)
+  })
+
+  it('plugs into runCurator as the injected analyzer when oversized', async () => {
+    // maxSize 1 forces the analyzer to fire after the ADD; the two identical gas rules collapse.
+    const analyze = createAnalyzer({
+      aiComplete: async () => JSON.stringify({ mergedRule: 'merged' }),
+      now: () => 0,
+      logger: { log() {}, error() {} },
+    })
+    const seed = [
+      { id: 'defi-001', category: 'gas', helpful: 0, harmful: 0, text: 'Identical breakeven rule text used twice here', createdAt: 1 },
+    ]
+    const next = await runCurator(
+      { ruleText: 'Identical breakeven rule text used twice here', category: 'gas' },
+      { id: 'dec-1' },
+      seed,
+      { now: () => 0, logger: { log() {}, error() {} }, analyzer: analyze, maxSize: 1 },
+    )
+    // ADD makes 2 (similar enough to reinforce? text identical → curator REINFORCES instead).
+    // Reinforcement does not grow size, so analyzer never fires; expect the reinforced single rule.
+    expect(next).toHaveLength(1)
+    expect(next[0].helpful).toBe(1)
   })
 })

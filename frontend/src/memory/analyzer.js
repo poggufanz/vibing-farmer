@@ -165,3 +165,24 @@ export async function runBulletpointAnalyzer(playbook, deps) {
   logger.log?.(`[analyzer] ${pb.length} → ${result.length} rules`)
   return result
 }
+
+// Lazy-import venice so pure-function tests never load its module graph (reflector.js pattern).
+const defaultAiComplete = async (p) => {
+  const { completeJSON } = await import('../venice.js')
+  return completeJSON(p)
+}
+
+/**
+ * Bind analyzer deps once and return the single-arg `analyzer(playbook) => Promise<Array>`
+ * that createCurator threads in as `deps.analyzer` (curator.js:124 `await analyzer(next)`).
+ * @param {object} [deps]
+ * @param {Function} [deps.aiComplete]  default: venice completeJSON (lazy)
+ * @param {() => number} [deps.now]
+ * @param {number} [deps.threshold]
+ * @param {object} [deps.logger]
+ * @returns {(playbook:Array)=>Promise<Array>}
+ */
+export function createAnalyzer(deps = {}) {
+  const { aiComplete = defaultAiComplete, now, threshold, logger } = deps
+  return (playbook) => runBulletpointAnalyzer(playbook, { aiComplete, now, threshold, logger })
+}
