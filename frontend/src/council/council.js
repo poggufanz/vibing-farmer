@@ -87,3 +87,61 @@ export function buildCouncilContext(sim, state, config) {
     turbulenceIndex: state.turbulenceIndex,
   }
 }
+
+// Each specialist gets a genuinely different mandate — this is what makes the
+// council more than "ask the same question three times" (TradingAgents pattern).
+export const SPECIALIST_PROMPTS = {
+  riskAuditor: `You are a DeFi Risk Auditor. Your SOLE job: assess protocol safety and IL risk.
+Evaluate: smart contract audit recency, TVL stability (3-day trend), impermanent loss exposure, protocol track record.
+Be conservative. When in doubt, vote HOLD. Protect the portfolio from rug pulls and IL traps.
+Output ONLY valid JSON. Never explain outside the JSON.`,
+
+  gasChecker: `You are a DeFi Gas Efficiency Analyst. Your SOLE job: determine if gas cost is economically justified.
+Calculate: gas cost in USD, APY delta, daily yield improvement, breakeven period (gas_cost / daily_yield_delta).
+Rule: if breakeven > 30 days, vote HOLD regardless of other factors.
+Output ONLY valid JSON. Never explain outside the JSON.`,
+
+  strategyGuard: `You are a DeFi Strategy Compliance Officer. Your SOLE job: enforce the user's declared strategy parameters.
+Check: is the proposed action within risk tolerance? Does the target protocol appear on the whitelist? Is diversification maintained?
+No exceptions. If it violates the user's strategy, vote HOLD.
+Output ONLY valid JSON. Never explain outside the JSON.`,
+}
+
+/**
+ * Consult one specialist. Returns `{ role, ...verdict }`. On any failure (network
+ * or bad JSON) returns a protective HOLD so a broken specialist never votes EXECUTE.
+ *
+ * @param {'riskAuditor'|'gasChecker'|'strategyGuard'} role
+ * @param {object} context           shared council context from buildCouncilContext()
+ * @param {Array}  playbookForRole    this role's playbook slice
+ * @param {(p:{systemPrompt:string,userPrompt:string}) => Promise<string>} aiComplete
+ * @returns {Promise<object>} verdict
+ */
+export async function consultSpecialist(role, context, playbookForRole, aiComplete) {
+  const playbookText = formatPlaybookForCouncil(playbookForRole)
+
+  const userPrompt = `Relevant rules from your playbook:
+${playbookText}
+
+Decision context:
+${JSON.stringify(context, null, 2)}
+
+Provide your specialist verdict.
+
+Respond ONLY in valid JSON:
+{
+  "decision": "EXECUTE" or "HOLD",
+  "confidence": 0.00,
+  "keyReason": "max 15 words",
+  "citedRules": ["defi-001", "defi-003"],
+  "newInsight": "a new rule worth adding, or null"
+}`
+
+  try {
+    const raw = await aiComplete({ systemPrompt: SPECIALIST_PROMPTS[role], userPrompt })
+    return { role, ...JSON.parse(raw) }
+  } catch (err) {
+    // Protective default — a specialist that can't speak does not get to approve a trade.
+    return { role, decision: 'HOLD', confidence: 0, keyReason: `specialist unavailable: ${err.message}`, citedRules: [], newInsight: null }
+  }
+}
