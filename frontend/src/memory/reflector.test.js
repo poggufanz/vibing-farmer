@@ -279,3 +279,45 @@ describe('createReflector', () => {
     expect(curatorHit).toBe(true)
   })
 })
+
+import { createOutcomeEvaluator } from '../tracking/outcomeTracker.js'
+
+describe('reflector ↔ outcome evaluator integration', () => {
+  it('evaluates an aged rebalance and lets the reflector tag its cited rules', async () => {
+    const EIGHT_DAYS_AGO = Date.now() - 8 * 86_400_000
+
+    let stored = [{
+      id: 'dec-int-1', type: 'rebalance', status: 'pending_evaluation',
+      timestamp: EIGHT_DAYS_AGO, toVault: '0xVaultB', amountUSD: 1000, gasCostUSD: 2,
+      citedRules: ['defi-001'], councilInsights: [], councilVerdicts: [],
+      simResult: { expectedValue: 5 },
+    }]
+    const decisionLog = {
+      getPending: () => stored.filter(d => d.status === 'pending_evaluation'),
+      update: (id, patch) => { stored = stored.map(d => d.id === id ? { ...d, ...patch } : d) },
+    }
+
+    const store = fakeStore([{ id: 'defi-001', category: 'risk', helpful: 0, harmful: 0, text: 'a' }])
+    const reflector = createReflector({
+      playbookStore: store,
+      aiComplete: async () => '{"shouldAddRule":false}',
+      logger: { log() {}, error() {} },
+    })
+
+    const evaluator = createOutcomeEvaluator({
+      decisionLog,
+      fetchApyHistory: async () => [{ apy: 6 }, { apy: 6 }],
+      catalog: [],
+      reflector,
+      now: () => Date.now(),
+      logger: { log() {}, error() {} },
+    })
+
+    const result = await evaluator.run()
+
+    expect(result.evaluated).toBe(1)
+    expect(stored[0].status).toBe('evaluated')
+    const rule = store.snapshot().find(r => r.id === 'defi-001')
+    expect(rule.helpful + rule.harmful).toBe(1)
+  })
+})
