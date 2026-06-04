@@ -1,3 +1,5 @@
+import { calculateReward } from '../core/state.js'
+
 // outcomeTracker.js — Step 10: delayed (7-day) outcome evaluator.
 // Runs OUTSIDE the decision loop (async / scheduled). Reads pending_evaluation entries
 // from the injected decision log (logger.js), computes realized yield, patches the log
@@ -66,4 +68,38 @@ export function computePredictionAccuracyPct(predicted, actual) {
   if (!predicted) return 0
   const errorPct = (Math.abs(predicted - actual) / Math.abs(predicted)) * 100
   return Math.max(0, 100 - errorPct)
+}
+
+/**
+ * Assemble the decision-log patch and the reflector outcome from a realized yield.
+ * Net result reuses calculateReward (state.js) — IL is 0 until a price oracle lands.
+ *
+ * @param {object} args
+ * @param {number} args.actualYieldUSD
+ * @param {number} args.gasCostUSD
+ * @param {number} args.predictedUSD   sim expectedValue
+ * @param {number} args.days           eval window (already capped)
+ * @param {'defillama'|'catalog'|'unavailable'} args.yieldSource
+ * @param {number} args.now            injected clock (ms)
+ * @returns {{patch:object, outcome:object}}
+ */
+export function buildEvaluationPatch({ actualYieldUSD, gasCostUSD, predictedUSD, days, yieldSource, now }) {
+  const netResultUSD = calculateReward({ actualYieldUSD, gasCostUSD })
+  const wasProfit = netResultUSD > 0
+  const predictionAccuracyPct = computePredictionAccuracyPct(predictedUSD, netResultUSD)
+
+  const patch = {
+    actualYield7dUSD: actualYieldUSD,
+    netResultUSD,
+    wasProfit,
+    predictionAccuracyPct,
+    evalPeriodDays: days,
+    yieldSource,
+    status: 'evaluated',
+    evaluatedAt: now,
+  }
+
+  const outcome = { actualYieldUSD, netResultUSD, wasProfit, predictionAccuracyPct }
+
+  return { patch, outcome }
 }

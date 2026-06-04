@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { averageApy, evalPeriodDays, computeGrossYieldUSD, computePredictionAccuracyPct } from './outcomeTracker.js'
+import { averageApy, evalPeriodDays, computeGrossYieldUSD, computePredictionAccuracyPct, buildEvaluationPatch } from './outcomeTracker.js'
 
 const DAY = 86_400_000
 
@@ -73,5 +73,47 @@ describe('computePredictionAccuracyPct', () => {
 
   it('returns 0 when the prediction is 0 (no baseline to score against)', () => {
     expect(computePredictionAccuracyPct(0, 5)).toBe(0)
+  })
+})
+
+describe('buildEvaluationPatch', () => {
+  const base = {
+    actualYieldUSD: 25,
+    gasCostUSD: 5,
+    predictedUSD: 20,
+    days: 7,
+    yieldSource: 'catalog',
+    now: 1748387200000,
+  }
+
+  it('computes net = yield - gas and flags profit', () => {
+    const { patch, outcome } = buildEvaluationPatch(base)
+    expect(patch.netResultUSD).toBe(20)        // 25 - 5
+    expect(patch.wasProfit).toBe(true)
+    expect(outcome.netResultUSD).toBe(20)
+    expect(outcome.wasProfit).toBe(true)
+  })
+
+  it('flags a loss when gas exceeds yield', () => {
+    const { patch } = buildEvaluationPatch({ ...base, actualYieldUSD: 3, gasCostUSD: 5 })
+    expect(patch.netResultUSD).toBe(-2)
+    expect(patch.wasProfit).toBe(false)
+  })
+
+  it('stamps status, evaluatedAt, evalPeriodDays, and yieldSource on the patch', () => {
+    const { patch } = buildEvaluationPatch(base)
+    expect(patch.status).toBe('evaluated')
+    expect(patch.evaluatedAt).toBe(1748387200000)
+    expect(patch.evalPeriodDays).toBe(7)
+    expect(patch.yieldSource).toBe('catalog')
+    expect(patch.actualYield7dUSD).toBe(25)
+  })
+
+  it('carries the same actualYieldUSD + accuracy into the reflector outcome', () => {
+    const { patch, outcome } = buildEvaluationPatch(base)
+    // predicted 20 vs net 20 → 100% accurate
+    expect(patch.predictionAccuracyPct).toBe(100)
+    expect(outcome.predictionAccuracyPct).toBe(100)
+    expect(outcome.actualYieldUSD).toBe(25)
   })
 })
