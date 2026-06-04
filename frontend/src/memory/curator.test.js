@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tokenize, jaccardSimilarity, findSimilarRule } from './curator.js'
+import { tokenize, jaccardSimilarity, findSimilarRule, isValidInsight } from './curator.js'
 
 describe('tokenize', () => {
   it('lowercases, strips punctuation, drops words of length <= 3', () => {
@@ -63,5 +63,22 @@ describe('findSimilarRule', () => {
 
   it('returns null for an empty playbook', () => {
     expect(findSimilarRule('anything here', [])).toBeNull()
+  })
+})
+
+describe('isValidInsight', () => {
+  it('accepts an insight with a non-trivial ruleText', () => {
+    expect(isValidInsight({ ruleText: 'Avoid low-TVL pools under volatility' })).toBe(true)
+  })
+
+  it('rejects missing / empty / too-short ruleText', () => {
+    expect(isValidInsight(null)).toBe(false)
+    expect(isValidInsight({})).toBe(false)
+    expect(isValidInsight({ ruleText: '   ' })).toBe(false)
+    expect(isValidInsight({ ruleText: 'too short' })).toBe(false) // < 10 chars after trim
+  })
+
+  it('rejects a non-string ruleText', () => {
+    expect(isValidInsight({ ruleText: 42 })).toBe(false)
   })
 })
