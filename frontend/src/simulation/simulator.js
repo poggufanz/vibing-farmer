@@ -185,3 +185,15 @@ export async function runSimulation(candidates, state, deps = {}) {
 
   return { bull, base, bear, weights, expectedValue, context }
 }
+
+/**
+ * Bind real deps once and return the `stages.runSimulation(candidates, state)`
+ * function the loop expects (loop.js:42). Step 14 (main.js) calls this with the
+ * real venice completion + sentiment source.
+ *
+ * @param {object} deps  { aiComplete, getSentiment, logger }
+ * @returns {(candidates:Array, state:object) => Promise<object>}
+ */
+export function createSimulationStage(deps = {}) {
+  return (candidates, state) => runSimulation(candidates, state, deps)
+}

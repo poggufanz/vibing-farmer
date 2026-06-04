@@ -203,3 +203,20 @@ describe('runSimulation', () => {
     expect(sim.base.recommendedPool).toBe('aave-v3')
   })
 })
+
+import { createSimulationStage } from './simulator.js'
+
+describe('createSimulationStage', () => {
+  const candidates = [{ id: 'p1', protocol: 'aave-v3', apy: 8, tvlUsd: 1e8 }]
+  const state = { positions: [{ amountUSD: 1000 }], gasPrice: 12, ethPriceUSD: 2000, turbulenceIndex: 0.1, pools: [] }
+
+  it('returns a 2-arg fn matching the loop stages.runSimulation contract', async () => {
+    const aiComplete = async () => JSON.stringify({ recommendedPool: 'aave-v3', projectedNetYieldUSD: 25 })
+    const stage = createSimulationStage({ aiComplete, getSentiment: async () => 'neutral', logger: { log() {} } })
+
+    expect(stage).toHaveLength(2) // (candidates, state)
+    const sim = await stage(candidates, state)
+    expect(typeof sim.expectedValue).toBe('number')
+    expect(sim.base.recommendedPool).toBe('aave-v3')
+  })
+})
