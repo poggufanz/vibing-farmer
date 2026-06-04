@@ -29,8 +29,17 @@ export default async function handler(req, res) {
     return res.end(JSON.stringify({ error: 'Search proxy not configured' }))
   }
 
+  let body
   try {
-    const { query, search_depth, max_results, include_answer } = await readBody(req)
+    body = await readBody(req)
+  } catch {
+    res.statusCode = 400
+    res.setHeader('Content-Type', 'application/json')
+    return res.end(JSON.stringify({ error: 'Invalid JSON' }))
+  }
+
+  try {
+    const { query, search_depth, max_results, include_answer } = body
 
     // Input validation — reject oversized/malformed queries
     if (typeof query !== 'string' || query.length === 0 || query.length > 500) {
@@ -50,8 +59,14 @@ export default async function handler(req, res) {
         include_raw_content: false,
       }),
     })
+    // Don't forward raw upstream error body — can leak quota/account details.
+    if (!upstream.ok) {
+      res.statusCode = upstream.status >= 500 ? 502 : upstream.status
+      res.setHeader('Content-Type', 'application/json')
+      return res.end(JSON.stringify({ error: 'Search request failed' }))
+    }
     const text = await upstream.text()
-    res.statusCode = upstream.status
+    res.statusCode = 200
     res.setHeader('Content-Type', 'application/json')
     res.end(text)
   } catch {
