@@ -68,6 +68,21 @@ export function generateDecisionId(now = Date.now(), rand = Math.random) {
   return `dec-${now}-${rand().toString(36).slice(2, 7)}`
 }
 
+/**
+ * Hours since the most recent executed rebalance. Infinity when none exist.
+ * Feeds the cooldown gate — replaces fetcher.js's Infinity stub.
+ * @param {Array} decisions  decisionLog.all()
+ * @param {number} now
+ * @returns {number}
+ */
+export function hoursSinceLastRebalance(decisions, now) {
+  const last = (decisions ?? [])
+    .filter((d) => d.type === 'rebalance' && typeof d.timestamp === 'number')
+    .reduce((max, d) => (d.timestamp > max ? d.timestamp : max), -Infinity)
+  if (last === -Infinity) return Infinity
+  return (now - last) / 3_600_000
+}
+
 // ─── Log factory (binds storage + clock once) ───────────────────────────────────
 
 /**
@@ -100,6 +115,11 @@ export function createDecisionLog(deps = {}) {
     /** Read every entry in append order (newest last). */
     all() {
       return storage.read()
+    },
+
+    /** Hours since the last executed rebalance (Infinity if none). */
+    hoursSinceLastRebalance() {
+      return hoursSinceLastRebalance(storage.read(), now())
     },
   }
 }

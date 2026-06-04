@@ -4,6 +4,7 @@ import {
   applyDecisionUpdate,
   generateDecisionId,
   createDecisionLog,
+  hoursSinceLastRebalance,
 } from './logger.js'
 
 const DAY = 86_400_000
@@ -129,5 +130,32 @@ describe('createDecisionLog', () => {
     const storage = memoryStorage([{ id: 'a' }, { id: 'b' }])
     const log = createDecisionLog({ storage, now: () => 1 })
     expect(log.all().map(d => d.id)).toEqual(['a', 'b'])
+  })
+})
+
+describe('hoursSinceLastRebalance', () => {
+  const HOUR = 3_600_000
+
+  it('returns Infinity when there are no rebalance decisions', () => {
+    expect(hoursSinceLastRebalance([], 1_000_000)).toBe(Infinity)
+    expect(hoursSinceLastRebalance([{ type: 'hold', timestamp: 5 }], 1_000_000)).toBe(Infinity)
+  })
+
+  it('returns hours since the most recent rebalance entry', () => {
+    const now = 100 * HOUR
+    const decisions = [
+      { type: 'rebalance', timestamp: 90 * HOUR },
+      { type: 'rebalance', timestamp: 97 * HOUR },
+      { type: 'hold', timestamp: 99 * HOUR },
+    ]
+    expect(hoursSinceLastRebalance(decisions, now)).toBe(3)
+  })
+
+  it('is exposed as a decisionLog method backed by storage', () => {
+    let rows = []
+    const storage = { read: () => rows, write: (r) => { rows = r } }
+    const log = createDecisionLog({ storage, now: () => 10 * HOUR })
+    log.append({ type: 'rebalance', timestamp: 4 * HOUR })
+    expect(log.hoursSinceLastRebalance()).toBe(6)
   })
 })
