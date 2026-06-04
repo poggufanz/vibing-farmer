@@ -39,3 +39,31 @@ export function evalPeriodDays(timestamp, now, capDays) {
   const elapsed = (now - timestamp) / DAY_MS
   return Math.min(Math.max(elapsed, 0), capDays)
 }
+
+/**
+ * Simple (non-compounding) realized gross yield over a day window.
+ *   yield = amountUSD * (apyPercent / 100) * (days / 365)
+ * Returns 0 when apy is unknown or amount is non-positive.
+ *
+ * @param {{amountUSD?:number, apyPercent?:number|null, days?:number}} args
+ * @returns {number}
+ */
+export function computeGrossYieldUSD({ amountUSD = 0, apyPercent = null, days = 0 } = {}) {
+  const apy = Number(apyPercent)
+  if (!Number.isFinite(apy) || amountUSD <= 0) return 0
+  return amountUSD * (apy / 100) * (days / 365)
+}
+
+/**
+ * How close the simulation's expected value was to the realized net result, as a
+ * percentage in [0, 100]. 0 when there is no non-zero prediction to score against.
+ *
+ * @param {number} predicted  sim expectedValue
+ * @param {number} actual     realized netResult
+ * @returns {number}
+ */
+export function computePredictionAccuracyPct(predicted, actual) {
+  if (!predicted) return 0
+  const errorPct = (Math.abs(predicted - actual) / Math.abs(predicted)) * 100
+  return Math.max(0, 100 - errorPct)
+}
