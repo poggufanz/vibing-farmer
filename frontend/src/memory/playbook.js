@@ -52,3 +52,63 @@ export function generateRuleId(existingRules) {
   const maxNum = nums.length > 0 ? Math.max(...nums) : 0
   return `defi-${String(maxNum + 1).padStart(3, '0')}`
 }
+
+// ─── localStorage-backed default adapter ───────────────────────────────────────
+const localStorageAdapter = {
+  read() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      return raw == null ? null : (JSON.parse(raw) || null)
+    } catch {
+      return null
+    }
+  },
+  write(rules) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(rules))
+    } catch {
+      // localStorage unavailable/full — non-fatal.
+    }
+  },
+}
+
+// ─── Store factory (binds storage + clock once) ─────────────────────────────────
+export function createPlaybookStore(deps = {}) {
+  const { storage = localStorageAdapter, now = () => Date.now() } = deps
+
+  const seed = () => {
+    const seeded = DEFAULT_PLAYBOOK.map(rule => ({ ...rule, createdAt: now() }))
+    storage.write(seeded)
+    return seeded
+  }
+
+  const store = {
+    load() {
+      const stored = storage.read()
+      if (!stored || stored.length === 0) return seed()
+      return stored
+    },
+
+    save(rules) {
+      storage.write(rules)
+    },
+
+    increment(ruleId, type) {
+      const next = incrementCounter(store.load(), ruleId, type)
+      storage.write(next)
+      return next
+    },
+
+    prune(minEvals) {
+      const next = pruneHarmfulRules(store.load(), minEvals)
+      storage.write(next)
+      return next
+    },
+
+    all() {
+      return store.load()
+    },
+  }
+
+  return store
+}

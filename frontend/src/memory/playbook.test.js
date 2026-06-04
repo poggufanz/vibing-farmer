@@ -110,3 +110,69 @@ describe('generateRuleId', () => {
     expect(generateRuleId([{ id: 'defi-003' }, { id: 'merged-x' }])).toBe('defi-004')
   })
 })
+
+import { createPlaybookStore } from './playbook.js'
+
+const memoryStorage = (seed = null) => {
+  let data = seed
+  return {
+    read: () => data,
+    write: (rules) => { data = rules },
+    snapshot: () => data,
+  }
+}
+
+describe('createPlaybookStore', () => {
+  it('load() seeds DEFAULT_PLAYBOOK on first read and stamps createdAt with the clock', () => {
+    const storage = memoryStorage(null)
+    const store = createPlaybookStore({ storage, now: () => 1748387200000 })
+
+    const loaded = store.load()
+
+    expect(loaded).toHaveLength(5)
+    expect(loaded.every(r => r.createdAt === 1748387200000)).toBe(true)
+    expect(storage.snapshot()).toHaveLength(5)
+  })
+
+  it('load() returns the stored playbook without reseeding when one exists', () => {
+    const stored = [{ id: 'defi-007', category: 'risk', helpful: 2, harmful: 0, text: 'x', createdAt: 1 }]
+    const storage = memoryStorage(stored)
+    const store = createPlaybookStore({ storage, now: () => 999 })
+    expect(store.load()).toEqual(stored)
+    expect(storage.snapshot()).toEqual(stored)
+  })
+
+  it('save() persists the given rules', () => {
+    const storage = memoryStorage([])
+    const store = createPlaybookStore({ storage, now: () => 1 })
+    const rules = [{ id: 'defi-001', category: 'gas', helpful: 0, harmful: 0, text: 'r', createdAt: 1 }]
+    store.save(rules)
+    expect(storage.snapshot()).toEqual(rules)
+  })
+
+  it('increment() bumps a counter and writes the result back', () => {
+    const storage = memoryStorage([
+      { id: 'defi-001', category: 'risk', helpful: 0, harmful: 0, text: 'r', createdAt: 1 },
+    ])
+    const store = createPlaybookStore({ storage, now: () => 1 })
+    store.increment('defi-001', 'helpful')
+    expect(storage.snapshot()[0].helpful).toBe(1)
+  })
+
+  it('prune() removes net-harmful rules and writes the result back', () => {
+    const storage = memoryStorage([
+      { id: 'defi-001', helpful: 1, harmful: 5, text: 'bad', createdAt: 1 },
+      { id: 'defi-002', helpful: 4, harmful: 0, text: 'good', createdAt: 1 },
+    ])
+    const store = createPlaybookStore({ storage, now: () => 1 })
+    const remaining = store.prune(5)
+    expect(remaining.map(r => r.id)).toEqual(['defi-002'])
+    expect(storage.snapshot().map(r => r.id)).toEqual(['defi-002'])
+  })
+
+  it('all() returns the current stored rules (seeding if empty)', () => {
+    const storage = memoryStorage(null)
+    const store = createPlaybookStore({ storage, now: () => 5 })
+    expect(store.all()).toHaveLength(5)
+  })
+})
