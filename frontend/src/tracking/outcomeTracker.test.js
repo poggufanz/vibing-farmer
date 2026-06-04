@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { averageApy, evalPeriodDays, computeGrossYieldUSD, computePredictionAccuracyPct, buildEvaluationPatch } from './outcomeTracker.js'
+import { averageApy, evalPeriodDays, computeGrossYieldUSD, computePredictionAccuracyPct, buildEvaluationPatch, runOutcomeEvaluator } from './outcomeTracker.js'
 
 const DAY = 86_400_000
 
@@ -115,5 +115,135 @@ describe('buildEvaluationPatch', () => {
     expect(patch.predictionAccuracyPct).toBe(100)
     expect(outcome.predictionAccuracyPct).toBe(100)
     expect(outcome.actualYieldUSD).toBe(25)
+  })
+})
+
+const DAY2 = 86_400_000
+
+// Decision-log fake exposing exactly what the orchestrator uses.
+const fakeLog = (pending) => {
+  const updates = []
+  return {
+    getPending: () => pending,
+    update: (id, patch) => updates.push({ id, patch }),
+    _updates: updates,
+  }
+}
+
+const rebalanceDecision = (over = {}) => ({
+  id: 'dec-1',
+  type: 'rebalance',
+  timestamp: 0,
+  toVault: '0xVAULT',
+  amountUSD: 1000,
+  gasCostUSD: 5,
+  simResult: { expectedValue: 20 },
+  status: 'pending_evaluation',
+  ...over,
+})
+
+describe('runOutcomeEvaluator', () => {
+  const now = 8 * DAY2
+
+  it('evaluates a rebalance using DeFiLlama history and patches the log', async () => {
+    const log = fakeLog([rebalanceDecision()])
+    await runOutcomeEvaluator({
+      decisionLog: log,
+      fetchApyHistory: async () => [{ apy: 36.5 }], // 36.5% for 8 days on $1000 ≈ $8
+      catalogApyByVault: {},
+      now: () => now,
+    })
+    expect(log._updates).toHaveLength(1)
+    const { id, patch } = log._updates[0]
+    expect(id).toBe('dec-1')
+    expect(patch.status).toBe('evaluated')
+    expect(patch.yieldSource).toBe('defillama')
+    expect(patch.actualYield7dUSD).toBeCloseTo(8, 1)
+  })
+
+  it('falls back to catalog apy when history is null (MockVault not on DeFiLlama)', async () => {
+    const log = fakeLog([rebalanceDecision()])
+    await runOutcomeEvaluator({
+      decisionLog: log,
+      fetchApyHistory: async () => null,
+      catalogApyByVault: { '0xvault': 9.125 }, // lookup is case-insensitive
+      now: () => now,
+    })
+    expect(log._updates[0].patch.yieldSource).toBe('catalog')
+    expect(log._updates[0].patch.actualYield7dUSD).toBeCloseTo(2, 1) // 9.125% * 8/365 * 1000
+  })
+
+  it('marks unavailable and skips reflector when no apy can be resolved', async () => {
+    const log = fakeLog([rebalanceDecision()])
+    const reflectorCalls = []
+    await runOutcomeEvaluator({
+      decisionLog: log,
+      fetchApyHistory: async () => null,
+      catalogApyByVault: {},
+      reflector: async (d, o) => reflectorCalls.push([d, o]),
+      now: () => now,
+    })
+    expect(log._updates[0].patch.yieldSource).toBe('unavailable')
+    expect(reflectorCalls).toHaveLength(0)
+  })
+
+  it('calls the optional reflector with the decision and outcome on success', async () => {
+    const log = fakeLog([rebalanceDecision()])
+    const reflectorCalls = []
+    await runOutcomeEvaluator({
+      decisionLog: log,
+      fetchApyHistory: async () => [{ apy: 36.5 }],
+      catalogApyByVault: {},
+      reflector: async (d, o) => reflectorCalls.push([d, o]),
+      now: () => now,
+    })
+    expect(reflectorCalls).toHaveLength(1)
+    expect(reflectorCalls[0][0].id).toBe('dec-1')
+    expect(reflectorCalls[0][1]).toHaveProperty('wasProfit')
+  })
+
+  it('skips non-rebalance entries (hold/failed) entirely', async () => {
+    const log = fakeLog([
+      { id: 'h1', type: 'hold', status: 'pending_evaluation' },
+      { id: 'f1', type: 'failed', status: 'pending_evaluation' },
+    ])
+    await runOutcomeEvaluator({
+      decisionLog: log,
+      fetchApyHistory: async () => [{ apy: 5 }],
+      catalogApyByVault: {},
+      now: () => now,
+    })
+    expect(log._updates).toHaveLength(0)
+  })
+
+  it('does not let one failing evaluation abort the rest', async () => {
+    const log = fakeLog([
+      rebalanceDecision({ id: 'bad' }),
+      rebalanceDecision({ id: 'good' }),
+    ])
+    let call = 0
+    await runOutcomeEvaluator({
+      decisionLog: log,
+      fetchApyHistory: async () => {
+        call += 1
+        if (call === 1) throw new Error('network down')
+        return [{ apy: 10 }]
+      },
+      catalogApyByVault: {},
+      now: () => now,
+    })
+    // 'bad' threw during fetch; 'good' still evaluated.
+    expect(log._updates.map(u => u.id)).toEqual(['good'])
+  })
+
+  it('returns a summary count of evaluated decisions', async () => {
+    const log = fakeLog([rebalanceDecision()])
+    const result = await runOutcomeEvaluator({
+      decisionLog: log,
+      fetchApyHistory: async () => [{ apy: 5 }],
+      catalogApyByVault: {},
+      now: () => now,
+    })
+    expect(result).toEqual({ evaluated: 1, skipped: 0, failed: 0 })
   })
 })

@@ -103,3 +103,83 @@ export function buildEvaluationPatch({ actualYieldUSD, gasCostUSD, predictedUSD,
 
   return { patch, outcome }
 }
+
+// ─── Orchestrator (injected I/O — runs outside the decision loop) ────────────────
+
+/**
+ * Evaluate every aged pending_evaluation rebalance: compute realized yield, patch the
+ * decision log, and (when there is real ground truth) feed the Reflector. Never throws —
+ * a single decision's failure is logged and the rest continue.
+ *
+ * @param {object} deps
+ * @param {{getPending:Function, update:Function}} deps.decisionLog  from createDecisionLog()
+ * @param {(poolId:string)=>Promise<Array|null>} deps.fetchApyHistory  apyHistory.js
+ * @param {Object<string,number>} [deps.catalogApyByVault]  lowercased vault addr → apy fallback
+ * @param {(decision:object, outcome:object)=>Promise<void>} [deps.reflector]  Step 11 (optional)
+ * @param {number} [deps.delayDays]   default EVALUATION_DELAY_DAYS
+ * @param {number} [deps.capDays]     default MAX_EVAL_PERIOD_DAYS
+ * @param {()=>number} [deps.now]
+ * @param {{log?:Function,error?:Function}} [deps.logger]
+ * @returns {Promise<{evaluated:number, skipped:number, failed:number}>}
+ */
+export async function runOutcomeEvaluator(deps) {
+  const {
+    decisionLog,
+    fetchApyHistory,
+    catalogApyByVault = {},
+    reflector,
+    delayDays = EVALUATION_DELAY_DAYS,
+    capDays = MAX_EVAL_PERIOD_DAYS,
+    now = () => Date.now(),
+    logger = console,
+  } = deps
+
+  const pending = decisionLog.getPending(delayDays)
+  let evaluated = 0, skipped = 0, failed = 0
+
+  for (const decision of pending) {
+    if (decision.type !== 'rebalance') { skipped += 1; continue }
+
+    try {
+      await evaluateOne(decision, { fetchApyHistory, catalogApyByVault, reflector, capDays, now, decisionLog, logger })
+      evaluated += 1
+    } catch (err) {
+      failed += 1
+      logger.error?.(`[outcome] failed to evaluate ${decision.id}: ${err.message}`)
+    }
+  }
+
+  logger.log?.(`[outcome] evaluated=${evaluated} skipped=${skipped} failed=${failed}`)
+  return { evaluated, skipped, failed }
+}
+
+async function evaluateOne(decision, ctx) {
+  const { fetchApyHistory, catalogApyByVault, reflector, capDays, now, decisionLog } = ctx
+  const nowMs = now()
+
+  const history = await fetchApyHistory(decision.toVault)
+  const fromHistory = averageApy(history)
+  const fromCatalog = catalogApyByVault[String(decision.toVault).toLowerCase()] ?? null
+
+  let apyPercent, yieldSource
+  if (fromHistory != null) { apyPercent = fromHistory; yieldSource = 'defillama' }
+  else if (fromCatalog != null) { apyPercent = fromCatalog; yieldSource = 'catalog' }
+  else { apyPercent = null; yieldSource = 'unavailable' }
+
+  const days = evalPeriodDays(decision.timestamp, nowMs, capDays)
+  const actualYieldUSD = computeGrossYieldUSD({ amountUSD: decision.amountUSD, apyPercent, days })
+
+  const { patch, outcome } = buildEvaluationPatch({
+    actualYieldUSD,
+    gasCostUSD: decision.gasCostUSD ?? 0,
+    predictedUSD: decision.simResult?.expectedValue ?? 0,
+    days,
+    yieldSource,
+    now: nowMs,
+  })
+  decisionLog.update(decision.id, patch)
+
+  if (reflector && yieldSource !== 'unavailable') {
+    await reflector(decision, outcome)
+  }
+}
