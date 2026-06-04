@@ -188,3 +188,15 @@ export async function runCouncil(sim, state, config, playbook, deps = {}) {
 
   return [riskVerdict, gasVerdict, strategyVerdict]
 }
+
+/**
+ * Bind real deps once and return the `stages.runCouncil(sim, state, config, playbook)`
+ * function the loop expects (loop.js:48). Step 14 (main.js) calls this with the
+ * real venice completion.
+ *
+ * @param {object} deps  { aiComplete, logger }
+ * @returns {(sim:object, state:object, config:object, playbook:Array) => Promise<Array>}
+ */
+export function createCouncilStage(deps = {}) {
+  return (sim, state, config, playbook) => runCouncil(sim, state, config, playbook, deps)
+}

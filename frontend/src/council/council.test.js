@@ -242,3 +242,29 @@ describe('runCouncil', () => {
     expect(verdicts).toHaveLength(3)
   })
 })
+
+import { createCouncilStage } from './council.js'
+
+describe('createCouncilStage', () => {
+  const sim = {
+    base: { recommendedPool: 'aave-v3', projectedNetYieldUSD: 70 },
+    bull: { projectedNetYieldUSD: 120 }, bear: { projectedNetYieldUSD: -20 },
+    weights: { bull: 0.3, base: 0.4, bear: 0.3 }, expectedValue: 44,
+  }
+  const state = {
+    positions: [{ protocol: 'compound-v3', amountUSD: 1000, currentAPY: 5 }],
+    pools: [{ id: 'pool-x', protocol: 'aave-v3', apy: 9, tvlUsd: 2e8 }],
+    gasPrice: 12, ethPriceUSD: 2000, turbulenceIndex: 0.2,
+  }
+  const config = { riskTolerance: 'moderate', whitelist: ['aave-v3'], thresholds: { MAX_GAS_USD: 25 } }
+
+  it('returns a 4-arg fn matching the loop stages.runCouncil contract', async () => {
+    const aiComplete = async () => '{"decision":"EXECUTE","confidence":0.7,"citedRules":[]}'
+    const stage = createCouncilStage({ aiComplete, logger: { log() {} } })
+
+    expect(stage).toHaveLength(4) // (sim, state, config, playbook)
+    const verdicts = await stage(sim, state, config, [])
+    expect(verdicts).toHaveLength(3)
+    expect(verdicts.every(v => ['EXECUTE', 'HOLD'].includes(v.decision))).toBe(true)
+  })
+})
