@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { tokenize, jaccardSimilarity, findSimilarRule, isValidInsight, buildRuleFromInsight, runCurator, createCurator } from './curator.js'
+import { createReflector } from './reflector.js'
 
 describe('tokenize', () => {
   it('lowercases, strips punctuation, drops words of length <= 3', () => {
@@ -222,5 +223,69 @@ describe('createCurator', () => {
     const curate = createCurator({ now: () => 0, maxSize: 0, analyzer, logger: { log() {}, error() {} } })
     await curate({ ruleText: 'Any unique rule that triggers the size cap' }, { id: 'd' }, [])
     expect(hit).toBe(true)
+  })
+})
+
+// In-memory playbook store matching createPlaybookStore's load()/save() surface.
+const fakeStore = (seed) => {
+  let rules = seed
+  return { load: () => rules, save: (r) => { rules = r }, snapshot: () => rules }
+}
+
+describe('curator ↔ reflector integration', () => {
+  it('a loss-extracted insight flows through the real curator into the saved playbook', async () => {
+    const store = fakeStore([
+      { id: 'defi-001', category: 'risk', helpful: 0, harmful: 0, text: 'seed rule about exit risk on sharp drops' },
+    ])
+    const curator = createCurator({ now: () => 123, logger: { log() {}, error() {} } })
+    const reflect = createReflector({
+      playbookStore: store,
+      aiComplete: async () => JSON.stringify({
+        shouldAddRule: true,
+        ruleText: 'Never chase APY above forty percent without checking reward token liquidity',
+        category: 'strategy',
+        reason: 'lost money on illiquid reward token',
+      }),
+      curator,
+      logger: { log() {}, error() {} },
+    })
+
+    const pb = await reflect(
+      { id: 'dec-loss-1', toVault: '0xV', citedRules: ['defi-001'], councilInsights: [], simResult: { expectedValue: 30 } },
+      { wasProfit: false, netResultUSD: -12, predictionAccuracyPct: 0 },
+    )
+
+    // Cited rule tagged harmful by the reflector...
+    expect(pb.find(r => r.id === 'defi-001').harmful).toBe(1)
+    // ...and the curator ADDed the new rule, persisted by the reflector's single save.
+    const added = store.snapshot().find(r => r.text.includes('Never chase APY'))
+    expect(added).toBeDefined()
+    expect(added.id).toBe('defi-002')
+    expect(added.sourceDecision).toBe('dec-loss-1')
+  })
+
+  it('a council-flagged insight is reinforced (not duplicated) when it matches an existing rule', async () => {
+    const store = fakeStore([
+      { id: 'defi-001', category: 'strategy', helpful: 0, harmful: 0, text: 'Maintain diversification across at least three protocols always' },
+    ])
+    const curator = createCurator({ now: () => 1, logger: { log() {}, error() {} } })
+    const reflect = createReflector({
+      playbookStore: store,
+      aiComplete: async () => '{}',
+      curator,
+      logger: { log() {}, error() {} },
+    })
+
+    await reflect(
+      {
+        id: 'dec-2', toVault: '0xV', citedRules: [],
+        councilInsights: ['Maintain diversification across at least three protocols always'],
+        simResult: { expectedValue: 10 },
+      },
+      { wasProfit: true, netResultUSD: 5, predictionAccuracyPct: 95 },
+    )
+
+    expect(store.snapshot()).toHaveLength(1) // reinforced, not duplicated
+    expect(store.snapshot()[0].helpful).toBe(1)
   })
 })
