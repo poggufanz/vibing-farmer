@@ -111,3 +111,50 @@ describe('buildSimulationContext', () => {
     expect(ctx.candidates).toHaveLength(5)
   })
 })
+
+import { simulateScenario } from './simulator.js'
+
+describe('simulateScenario', () => {
+  const ctx = {
+    portfolioValueUSD: 1500,
+    gasPrice: 12,
+    ethPrice: 2000,
+    turbulenceIndex: 0.2,
+    newsSentiment: 'neutral',
+    marketTrend: 'sideways',
+    candidates: [{ protocol: 'aave-v3', apy: 8, tvlUsd: 1e8, ilRisk: 'low', audited: true }],
+  }
+
+  it('parses the AI JSON and tags the scenario name', async () => {
+    const aiComplete = async () => JSON.stringify({
+      recommendedPool: 'aave-v3', projectedNetYieldUSD: 42.5, confidence: 0.7, keyRisk: 'none',
+    })
+    const result = await simulateScenario('bull', ctx, aiComplete)
+    expect(result.scenario).toBe('bull')
+    expect(result.recommendedPool).toBe('aave-v3')
+    expect(result.projectedNetYieldUSD).toBe(42.5)
+  })
+
+  it('passes systemPrompt + userPrompt to aiComplete with scenario + candidates', async () => {
+    let seen
+    const aiComplete = async (p) => { seen = p; return '{"projectedNetYieldUSD":0}' }
+    await simulateScenario('bear', ctx, aiComplete)
+    expect(seen.systemPrompt).toContain('JSON')
+    expect(seen.userPrompt).toContain('BEAR')
+    expect(seen.userPrompt).toContain('aave-v3')
+  })
+
+  it('falls back to a zero-yield verdict when the AI call throws', async () => {
+    const aiComplete = async () => { throw new Error('network down') }
+    const result = await simulateScenario('base', ctx, aiComplete)
+    expect(result.projectedNetYieldUSD).toBe(0)
+    expect(result.confidence).toBe(0)
+    expect(result.keyRisk).toContain('network down')
+  })
+
+  it('falls back when the AI returns invalid JSON', async () => {
+    const aiComplete = async () => 'not json at all'
+    const result = await simulateScenario('base', ctx, aiComplete)
+    expect(result.projectedNetYieldUSD).toBe(0)
+  })
+})

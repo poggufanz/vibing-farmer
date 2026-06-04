@@ -69,6 +69,64 @@ export async function buildSimulationContext(candidates, state, getSentiment) {
   }
 }
 
+const SCENARIO_ASSUMPTIONS = {
+  bull: 'DeFi market rallying. TVL growing. APYs stable. Gas affordable. Low IL risk.',
+  base: 'DeFi market flat. TVL stable. APYs as reported. Gas normal. Moderate IL risk.',
+  bear: 'DeFi market declining. TVL shrinking 10-20%. APYs may compress. Gas elevated. High IL risk.',
+}
+
+const SCENARIO_SYSTEM_PROMPT =
+  'You are a DeFi simulation engine. Output ONLY valid JSON. No explanation.'
+
+/**
+ * Run a single market scenario through the injected AI completion fn.
+ * Returns `{ scenario, ...parsedVerdict }`. On any failure (network or bad JSON)
+ * returns a protective zero-yield verdict so one scenario never poisons the loop.
+ *
+ * @param {'bull'|'base'|'bear'} scenario
+ * @param {object} context  from buildSimulationContext()
+ * @param {(p:{systemPrompt:string,userPrompt:string}) => Promise<string>} aiComplete
+ */
+export async function simulateScenario(scenario, context, aiComplete) {
+  const gasUsdPerTx = (context.gasPrice * GAS_UNITS_PER_REBALANCE * context.ethPrice) / 1e9
+
+  const userPrompt = `You are a DeFi yield simulation engine.
+
+Market scenario: ${scenario.toUpperCase()}
+Assumptions: ${SCENARIO_ASSUMPTIONS[scenario]}
+
+Portfolio: $${context.portfolioValueUSD.toFixed(0)} USD
+Current gas: ${context.gasPrice} gwei (~$${gasUsdPerTx.toFixed(2)} per tx)
+News sentiment: ${context.newsSentiment}
+Market trend: ${context.marketTrend}
+Turbulence: ${(context.turbulenceIndex * 100).toFixed(0)}%
+
+Top candidates:
+${context.candidates.map((p) =>
+  `- ${p.protocol}: APY ${p.apy.toFixed(2)}%, TVL $${(p.tvlUsd / 1e6).toFixed(1)}M, IL risk: ${p.ilRisk}, audited: ${p.audited}`
+).join('\n')}
+
+Given this ${scenario} scenario, what is the realistic outcome if we rebalance to the best candidate?
+Estimate projected net yield (after gas and IL) over 7 days.
+
+Respond ONLY in valid JSON:
+{
+  "recommendedPool": "protocol-name",
+  "projectedNetYieldUSD": 0.00,
+  "projectedILPercent": 0.00,
+  "estimatedGasCostUSD": 0.00,
+  "confidence": 0.00,
+  "keyRisk": "one sentence max"
+}`
+
+  try {
+    const raw = await aiComplete({ systemPrompt: SCENARIO_SYSTEM_PROMPT, userPrompt })
+    return { scenario, ...JSON.parse(raw) }
+  } catch (err) {
+    return { scenario, projectedNetYieldUSD: 0, confidence: 0, keyRisk: `simulation failed: ${err.message}` }
+  }
+}
+
 /** Probability-weighted expected net yield across the three scenarios. */
 export function computeExpectedValue(bull, base, bear, weights) {
   return (
