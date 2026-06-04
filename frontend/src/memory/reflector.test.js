@@ -41,3 +41,55 @@ describe('tagRulesByOutcome', () => {
     expect(next).toEqual(playbook)
   })
 })
+
+import { shouldLearnFromOutcome, buildFailureInsightPrompt } from './reflector.js'
+
+describe('shouldLearnFromOutcome', () => {
+  it('learns when the decision was a loss, regardless of accuracy', () => {
+    expect(shouldLearnFromOutcome({ wasProfit: false, predictionAccuracyPct: 95 })).toBe(true)
+  })
+
+  it('learns when the prediction was badly off even on a profit', () => {
+    expect(shouldLearnFromOutcome({ wasProfit: true, predictionAccuracyPct: 20 })).toBe(true)
+  })
+
+  it('does not learn from a profitable, well-predicted decision', () => {
+    expect(shouldLearnFromOutcome({ wasProfit: true, predictionAccuracyPct: 80 })).toBe(false)
+  })
+
+  it('respects a custom minAccuracyPct threshold', () => {
+    expect(shouldLearnFromOutcome({ wasProfit: true, predictionAccuracyPct: 50 }, 60)).toBe(true)
+    expect(shouldLearnFromOutcome({ wasProfit: true, predictionAccuracyPct: 50 }, 40)).toBe(false)
+  })
+})
+
+describe('buildFailureInsightPrompt', () => {
+  const decision = {
+    toVault: '0xVaultB',
+    citedRules: ['defi-001', 'defi-003'],
+    councilVerdicts: [{ role: 'riskAuditor', decision: 'EXECUTE', keyReason: 'looked safe' }],
+    simResult: { expectedValue: 42 },
+  }
+  const outcome = { netResultUSD: -8.5, wasProfit: false, predictionAccuracyPct: 0 }
+
+  it('produces a systemPrompt and userPrompt', () => {
+    const { systemPrompt, userPrompt } = buildFailureInsightPrompt(decision, outcome)
+    expect(typeof systemPrompt).toBe('string')
+    expect(systemPrompt).toMatch(/JSON/)
+    expect(typeof userPrompt).toBe('string')
+  })
+
+  it('embeds the decision + outcome facts the model needs', () => {
+    const { userPrompt } = buildFailureInsightPrompt(decision, outcome)
+    expect(userPrompt).toContain('0xVaultB')
+    expect(userPrompt).toContain('defi-001')
+    expect(userPrompt).toContain('42')      // expected value
+    expect(userPrompt).toContain('-8.5')    // actual net
+    expect(userPrompt).toMatch(/LOSS/)
+  })
+
+  it('labels a profitable-but-mispredicted decision as a success to repeat', () => {
+    const { userPrompt } = buildFailureInsightPrompt(decision, { ...outcome, wasProfit: true })
+    expect(userPrompt).toMatch(/PROFITABLE/)
+  })
+})
