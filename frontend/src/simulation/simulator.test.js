@@ -158,3 +158,48 @@ describe('simulateScenario', () => {
     expect(result.projectedNetYieldUSD).toBe(0)
   })
 })
+
+import { runSimulation } from './simulator.js'
+
+describe('runSimulation', () => {
+  const candidates = [
+    { id: 'p1', protocol: 'aave-v3', apy: 8, tvlUsd: 1e8, tvlDelta24h: 0.01, ilRisk: 'low', audited: true },
+  ]
+  const state = {
+    positions: [{ amountUSD: 1000 }],
+    gasPrice: 12,
+    ethPriceUSD: 2000,
+    turbulenceIndex: 0.1,
+    marketVolatility: 0.2,
+    pools: [{ tvlDelta24h: 0.0 }],
+  }
+
+  // Fake AI: yields keyed by scenario so we can assert the weighting math.
+  const yields = { bull: 90, base: 30, bear: -30 }
+  const aiComplete = async ({ userPrompt }) => {
+    const scenario = userPrompt.includes('BULL') ? 'bull' : userPrompt.includes('BEAR') ? 'bear' : 'base'
+    return JSON.stringify({ recommendedPool: 'aave-v3', projectedNetYieldUSD: yields[scenario], confidence: 0.6 })
+  }
+  const deps = { aiComplete, getSentiment: async () => 'neutral', logger: { log() {} } }
+
+  it('returns bull/base/bear verdicts, weights, context, and expectedValue', async () => {
+    const sim = await runSimulation(candidates, state, deps)
+    expect(sim.bull.projectedNetYieldUSD).toBe(90)
+    expect(sim.base.projectedNetYieldUSD).toBe(30)
+    expect(sim.bear.projectedNetYieldUSD).toBe(-30)
+    expect(sim.weights.bull + sim.weights.base + sim.weights.bear).toBeCloseTo(1, 10)
+    expect(sim.context).toBeDefined()
+  })
+
+  it('expectedValue equals the probability-weighted scenario yields', async () => {
+    const sim = await runSimulation(candidates, state, deps)
+    const expected =
+      90 * sim.weights.bull + 30 * sim.weights.base + -30 * sim.weights.bear
+    expect(sim.expectedValue).toBeCloseTo(expected, 10)
+  })
+
+  it('exposes base.recommendedPool for the downstream council/executor', async () => {
+    const sim = await runSimulation(candidates, state, deps)
+    expect(sim.base.recommendedPool).toBe('aave-v3')
+  })
+})

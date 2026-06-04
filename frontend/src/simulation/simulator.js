@@ -135,3 +135,53 @@ export function computeExpectedValue(bull, base, bear, weights) {
     (bear.projectedNetYieldUSD ?? 0) * weights.bear
   )
 }
+
+// Default AI path: lazy-import venice so pure-function tests never load its module graph.
+const defaultAiComplete = async (p) => {
+  const { completeJSON } = await import('../venice.js')
+  return completeJSON(p)
+}
+
+/**
+ * Run the full simulation: build one shared context, then fan out 3 scenarios in
+ * parallel (the ZX "alternate timeline" spirit) and collapse them into an expected
+ * value. Returns the shape the loop (loop.js:42) and council (Step 6) consume.
+ *
+ * Loop calls this with 2 args; deps are bound at wiring time via createSimulationStage.
+ *
+ * @param {Array}  candidates
+ * @param {object} state
+ * @param {object} [deps]
+ * @param {Function} [deps.aiComplete]    ({systemPrompt,userPrompt}) => Promise<string>
+ * @param {Function} [deps.getSentiment]  () => Promise<'positive'|'neutral'|'negative'>
+ * @param {{log?:Function}} [deps.logger]
+ * @returns {Promise<{bull,base,bear,weights,expectedValue,context}>}
+ */
+export async function runSimulation(candidates, state, deps = {}) {
+  const {
+    aiComplete = defaultAiComplete,
+    getSentiment = async () => 'neutral',
+    logger = console,
+  } = deps
+
+  const context = await buildSimulationContext(candidates, state, getSentiment)
+  const weights = assignScenarioProbabilities(context)
+
+  // 3 parallel AI calls — concurrent, not sequential, so the whole sim is ~1x latency.
+  const [bull, base, bear] = await Promise.all([
+    simulateScenario('bull', context, aiComplete),
+    simulateScenario('base', context, aiComplete),
+    simulateScenario('bear', context, aiComplete),
+  ])
+
+  const expectedValue = computeExpectedValue(bull, base, bear, weights)
+
+  logger.log?.(
+    `[sim] E[value]=$${expectedValue.toFixed(2)} ` +
+    `bull=$${(bull.projectedNetYieldUSD ?? 0).toFixed(2)} ` +
+    `base=$${(base.projectedNetYieldUSD ?? 0).toFixed(2)} ` +
+    `bear=$${(bear.projectedNetYieldUSD ?? 0).toFixed(2)}`,
+  )
+
+  return { bull, base, bear, weights, expectedValue, context }
+}
