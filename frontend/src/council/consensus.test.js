@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { evaluateConsensus, CONSENSUS_THRESHOLDS } from './consensus.js'
+import { createAutonomousLoop } from '../core/loop.js'
 
 // Helper: build a verdict quickly.
 const v = (decision, confidence, keyReason = '') => ({ decision, confidence, keyReason })
@@ -88,5 +89,48 @@ describe('evaluateConsensus', () => {
   it('exposes default thresholds (2/3 majority, 0.60 confidence)', () => {
     expect(CONSENSUS_THRESHOLDS.REQUIRED_MAJORITY).toBe(2)
     expect(CONSENSUS_THRESHOLDS.MIN_CONFIDENCE).toBe(0.6)
+  })
+})
+
+describe('evaluateConsensus wired into the autonomous loop', () => {
+  // Minimal fake stages: gates pass, sim clears the EV floor, council returns the
+  // verdicts we control. evaluateConsensus is the REAL implementation under test.
+  const baseStages = (verdicts) => ({
+    loadConfig: async () => ({ minExpectedValueUSD: 10 }),
+    loadPlaybook: async () => [],
+    fetchState: async () => ({}),
+    runGates: () => ({ pass: true, candidates: [{ id: 'p1' }] }),
+    runSimulation: async () => ({ expectedValue: 50, base: { recommendedPool: 'aave-v3' } }),
+    runCouncil: async () => verdicts,
+    evaluateConsensus, // real
+    executeRebalance: async () => {},
+  })
+
+  it('reports "executed" when the council reaches consensus', async () => {
+    const loop = createAutonomousLoop({
+      stages: baseStages([
+        { decision: 'EXECUTE', confidence: 0.8 },
+        { decision: 'EXECUTE', confidence: 0.7 },
+        { decision: 'HOLD', confidence: 0.6 },
+      ]),
+      logger: { log: () => {}, error: () => {} },
+    })
+    const result = await loop.runOneCycle()
+    expect(result.outcome).toBe('executed')
+    expect(result.consensus.finalDecision).toBe('EXECUTE')
+  })
+
+  it('reports "held" when the council does not reach consensus', async () => {
+    const loop = createAutonomousLoop({
+      stages: baseStages([
+        { decision: 'EXECUTE', confidence: 0.9 },
+        { decision: 'HOLD', confidence: 0.9, keyReason: 'IL risk' },
+        { decision: 'HOLD', confidence: 0.9, keyReason: 'off whitelist' },
+      ]),
+      logger: { log: () => {}, error: () => {} },
+    })
+    const result = await loop.runOneCycle()
+    expect(result.outcome).toBe('held')
+    expect(result.consensus.finalDecision).toBe('HOLD')
   })
 })
