@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tokenize, jaccardSimilarity, findSimilarRule, isValidInsight, buildRuleFromInsight } from './curator.js'
+import { tokenize, jaccardSimilarity, findSimilarRule, isValidInsight, buildRuleFromInsight, runCurator } from './curator.js'
 
 describe('tokenize', () => {
   it('lowercases, strips punctuation, drops words of length <= 3', () => {
@@ -108,5 +108,91 @@ describe('buildRuleFromInsight', () => {
     expect(rule.id).toBe('defi-001')
     expect(rule.sourceDecision).toBeNull()
     expect(rule.addedReason).toBeNull()
+  })
+})
+
+const NOW = () => 1000
+const SILENT = { log() {}, error() {} }
+
+describe('runCurator', () => {
+  const seed = () => ([
+    { id: 'defi-001', category: 'risk', helpful: 0, harmful: 0, text: 'Avoid entering pools when total value locked drops sharply within three days' },
+    { id: 'defi-002', category: 'gas', helpful: 1, harmful: 0, text: 'Keep breakeven period under thirty days otherwise skip' },
+  ])
+  const decision = { id: 'dec-1' }
+
+  it('returns the playbook unchanged for an invalid insight', async () => {
+    const pb = seed()
+    const next = await runCurator({ ruleText: 'no' }, decision, pb, { now: NOW, logger: SILENT })
+    expect(next).toEqual(pb)
+  })
+
+  it('ADDs a new rule when nothing similar exists', async () => {
+    const next = await runCurator(
+      { ruleText: 'Stake governance tokens before the weekly snapshot to capture rewards', category: 'strategy', reason: 'missed rewards' },
+      decision, seed(), { now: NOW, logger: SILENT },
+    )
+    expect(next).toHaveLength(3)
+    const added = next.find(r => r.id === 'defi-003')
+    expect(added.text).toContain('Stake governance tokens')
+    expect(added.sourceDecision).toBe('dec-1')
+  })
+
+  it('reinforces an existing similar rule (helpful++) instead of adding a duplicate', async () => {
+    const next = await runCurator(
+      { ruleText: 'Keep breakeven period under thirty days otherwise skip', category: 'gas' },
+      decision, seed(), { now: NOW, logger: SILENT },
+    )
+    expect(next).toHaveLength(2) // no new rule
+    expect(next.find(r => r.id === 'defi-002').helpful).toBe(2) // 1 → 2
+  })
+
+  it('does not mutate the input playbook', async () => {
+    const pb = seed()
+    await runCurator(
+      { ruleText: 'A brand new actionable strategy rule about diversification', category: 'strategy' },
+      decision, pb, { now: NOW, logger: SILENT },
+    )
+    expect(pb).toHaveLength(2)
+  })
+
+  it('never saves — persistence is the Reflector\'s job (no store in deps)', async () => {
+    // Smoke: runCurator takes no store and returns an array; the absence of a save dep is the contract.
+    const next = await runCurator(
+      { ruleText: 'Another fresh unique rule worth keeping around' },
+      decision, seed(), { now: NOW, logger: SILENT },
+    )
+    expect(Array.isArray(next)).toBe(true)
+  })
+
+  it('runs the analyzer only when playbook exceeds maxSize after the ADD', async () => {
+    let analyzerCalls = 0
+    const analyzer = async (pb) => { analyzerCalls++; return pb.slice(0, 1) }
+
+    // maxSize 2: seed has 2, ADD makes 3 > 2 → analyzer fires.
+    const next = await runCurator(
+      { ruleText: 'Yet another unique rule that should push us over the size cap', category: 'risk' },
+      decision, seed(), { now: NOW, logger: SILENT, analyzer, maxSize: 2 },
+    )
+    expect(analyzerCalls).toBe(1)
+    expect(next).toHaveLength(1) // analyzer collapsed it
+  })
+
+  it('skips the analyzer when none is injected even if oversized', async () => {
+    const next = await runCurator(
+      { ruleText: 'A unique rule with no analyzer available to dedup it', category: 'risk' },
+      decision, seed(), { now: NOW, logger: SILENT, maxSize: 2 },
+    )
+    expect(next).toHaveLength(3) // grew, no merge — Step 12 ships without Step 13
+  })
+
+  it('does NOT run the analyzer on a reinforcement (size did not grow)', async () => {
+    let analyzerCalls = 0
+    const analyzer = async (pb) => { analyzerCalls++; return pb }
+    await runCurator(
+      { ruleText: 'Keep breakeven period under thirty days otherwise skip', category: 'gas' },
+      decision, seed(), { now: NOW, logger: SILENT, analyzer, maxSize: 1 },
+    )
+    expect(analyzerCalls).toBe(0)
   })
 })
