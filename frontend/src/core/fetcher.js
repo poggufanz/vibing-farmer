@@ -1,5 +1,6 @@
 // fetcher.js — Step 3: Parallel Data Fetch (EvoAgentX DAG pattern)
 // fetchCurrentState orchestrates all inputs via Promise.all.
+// Step 14: injectable deps + createFetchStage factory replace Infinity/stub defaults.
 
 import { createState } from './state.js'
 import { fetchDeFiLlamaVaults } from '../defiLlama.js'
@@ -58,18 +59,31 @@ async function fetchOnChainSignals(_watchedPools) {
 
 // ─── Main orchestrator ────────────────────────────────────────────────────────
 
-export async function fetchCurrentState(config) {
+/**
+ * @param {object} config  { walletAddress, watchedPools, ... }
+ * @param {object} [overrides]  injectable primitives for testing/composition
+ * @returns {Promise<object>} State
+ */
+export async function fetchCurrentState(config, overrides = {}) {
+  const {
+    fetchVaults = fetchDeFiLlamaVaults,
+    fetchGasPrice: getGas = fetchGasPrice,
+    fetchEthPrice: getEth = fetchEthPrice,
+    fetchSignals = fetchOnChainSignals,
+    loadPositionsMap = fetchPositionsStub,
+    getHoursSinceLastRebalance = () => Infinity,
+    now = () => Date.now(),
+  } = overrides
+
   console.log('[fetcher] Fetching state (parallel)...')
   const start = Date.now()
 
-  // All independent inputs run concurrently — EvoAgentX DAG pattern.
-  // fetchDeFiLlamaVaults already handles its own filtering + fallback.
   const [vaults, gasPrice, ethPriceUSD, positionsMap, signals] = await Promise.all([
-    fetchDeFiLlamaVaults(),
-    fetchGasPrice(),
-    fetchEthPrice(),
-    fetchPositionsStub(config.walletAddress),
-    fetchOnChainSignals(config.watchedPools),
+    fetchVaults(),
+    getGas(),
+    getEth(),
+    loadPositionsMap(config.walletAddress),
+    fetchSignals(config.watchedPools),
   ])
 
   const marketVolatility = _calculateVolatility(vaults)
@@ -81,11 +95,25 @@ export async function fetchCurrentState(config) {
     positionsMap,
     catalog: VAULT_CATALOG,
     pools: vaults,
-    walletBalanceUSD: 0,            // stub — replaced in Step 9
+    walletBalanceUSD: 0,
     gasPrice,
     ethPriceUSD,
     marketVolatility,
     turbulenceIndex,
-    hoursSinceLastRebalance: Infinity, // stub — replaced in Step 7 (logger)
+    hoursSinceLastRebalance: getHoursSinceLastRebalance(),
+    now: now(),
   })
+}
+
+/**
+ * Bind real position/cooldown sources once → the stages.fetchState(config) the loop calls.
+ * @param {object} [deps]
+ * @param {(addr:string)=>Promise<object>} [deps.loadPositionsMap]
+ * @param {()=>number} [deps.getHoursSinceLastRebalance]
+ * @param {object} [deps.deps]  network-primitive overrides (testing)
+ * @returns {(config:object)=>Promise<object>}
+ */
+export function createFetchStage({ loadPositionsMap, getHoursSinceLastRebalance, deps = {} } = {}) {
+  return (config) =>
+    fetchCurrentState(config, { ...deps, loadPositionsMap, getHoursSinceLastRebalance })
 }

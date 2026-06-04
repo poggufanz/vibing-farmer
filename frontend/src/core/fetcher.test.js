@@ -133,7 +133,27 @@ vi.mock('../defiLlama.js', () => ({
   ]),
 }))
 
-import { fetchCurrentState } from './fetcher.js'
+import { fetchCurrentState, createFetchStage } from './fetcher.js'
+
+describe('createFetchStage (Step 14 wiring)', () => {
+  it('injects positions + cooldown into the built state', async () => {
+    const fakePositionsMap = { '0xaaa': { vaultName: 'A', balance: '2000000', unclaimedRewards: '0' } }
+    const stage = createFetchStage({
+      loadPositionsMap: async () => fakePositionsMap,
+      getHoursSinceLastRebalance: () => 5,
+      deps: {
+        fetchVaults: async () => [{ protocol: 'aave-v3', apy: 4.8 }],
+        fetchGasPrice: async () => 12,
+        fetchEthPrice: async () => 3000,
+        fetchSignals: async () => ({ protocolAlerts: [] }),
+      },
+    })
+
+    const state = await stage({ walletAddress: '0xUser', watchedPools: [] })
+    expect(state.timeSinceLastRebalance).toBe(5)
+    expect(state.positions.length).toBe(1)
+  })
+})
 
 describe('fetchCurrentState', () => {
   const config = {
