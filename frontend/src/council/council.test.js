@@ -181,3 +181,64 @@ describe('consultSpecialist', () => {
     expect(v.decision).toBe('HOLD')
   })
 })
+
+import { runCouncil } from './council.js'
+
+describe('runCouncil', () => {
+  const sim = {
+    base: { recommendedPool: 'aave-v3', projectedNetYieldUSD: 70 },
+    bull: { projectedNetYieldUSD: 120 },
+    bear: { projectedNetYieldUSD: -20 },
+    weights: { bull: 0.3, base: 0.4, bear: 0.3 },
+    expectedValue: 44,
+  }
+  const state = {
+    positions: [{ protocol: 'compound-v3', amountUSD: 1000, currentAPY: 5 }],
+    pools: [{ id: 'pool-x', protocol: 'aave-v3', apy: 9, tvlUsd: 2e8, ilRisk: 'low', audited: true }],
+    gasPrice: 12, ethPriceUSD: 2000, turbulenceIndex: 0.2,
+  }
+  const config = { riskTolerance: 'moderate', whitelist: ['aave-v3'], thresholds: { MAX_GAS_USD: 25 } }
+  const playbook = [
+    { id: 'defi-001', category: 'risk', helpful: 2, harmful: 0, text: 'risk rule' },
+    { id: 'defi-002', category: 'gas',  helpful: 3, harmful: 0, text: 'gas rule' },
+  ]
+  const deps = { aiComplete: async () => '{"decision":"EXECUTE","confidence":0.7,"citedRules":[]}', logger: { log() {} } }
+
+  it('returns exactly three verdicts, one per specialist role', async () => {
+    const verdicts = await runCouncil(sim, state, config, playbook, deps)
+    expect(verdicts).toHaveLength(3)
+    expect(verdicts.map(v => v.role).sort()).toEqual(['gasChecker', 'riskAuditor', 'strategyGuard'])
+  })
+
+  it('routes each role its own playbook slice', async () => {
+    const seenByRole = {}
+    const aiComplete = async (p) => {
+      const role = p.systemPrompt.includes('Risk Auditor') ? 'riskAuditor'
+        : p.systemPrompt.includes('Gas') ? 'gasChecker' : 'strategyGuard'
+      seenByRole[role] = p.userPrompt
+      return '{"decision":"HOLD","confidence":0.5,"citedRules":[]}'
+    }
+    await runCouncil(sim, state, config, playbook, { aiComplete, logger: { log() {} } })
+    expect(seenByRole.riskAuditor).toContain('defi-001')   // risk rule only
+    expect(seenByRole.riskAuditor).not.toContain('defi-002')
+    expect(seenByRole.gasChecker).toContain('defi-002')    // gas rule only
+  })
+
+  it('survives one specialist failing — that role degrades to HOLD, others unaffected', async () => {
+    const aiComplete = async (p) => {
+      if (p.systemPrompt.includes('Gas')) throw new Error('boom')
+      return '{"decision":"EXECUTE","confidence":0.7,"citedRules":[]}'
+    }
+    const verdicts = await runCouncil(sim, state, config, playbook, { aiComplete, logger: { log() {} } })
+    const gas = verdicts.find(v => v.role === 'gasChecker')
+    const risk = verdicts.find(v => v.role === 'riskAuditor')
+    expect(gas.decision).toBe('HOLD')
+    expect(gas.confidence).toBe(0)
+    expect(risk.decision).toBe('EXECUTE')
+  })
+
+  it('works with an empty playbook (Step 8 not built yet)', async () => {
+    const verdicts = await runCouncil(sim, state, config, [], deps)
+    expect(verdicts).toHaveLength(3)
+  })
+})

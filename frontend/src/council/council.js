@@ -145,3 +145,46 @@ Respond ONLY in valid JSON:
     return { role, decision: 'HOLD', confidence: 0, keyReason: `specialist unavailable: ${err.message}`, citedRules: [], newInsight: null }
   }
 }
+
+// Default AI path: lazy-import venice so pure-function tests never load its module graph.
+const defaultAiComplete = async (p) => {
+  const { completeJSON } = await import('../venice.js')
+  return completeJSON(p)
+}
+
+/**
+ * Convene the council: one shared context, playbook sliced per role, three
+ * specialists consulted in parallel (TradingAgents debate). Returns the verdicts
+ * array the consensus gate (Step 7) consumes. Never throws — each specialist has
+ * its own protective HOLD fallback.
+ *
+ * Loop calls this with 4 args (loop.js:48); deps are bound at wiring via createCouncilStage.
+ *
+ * @param {object} sim       runSimulation() result
+ * @param {object} state     canonical State
+ * @param {object} config    strategy config
+ * @param {Array}  playbook  evolving playbook rules (Step 8); [] is valid
+ * @param {object} [deps]    { aiComplete, logger }
+ * @returns {Promise<Array>} three verdicts
+ */
+export async function runCouncil(sim, state, config, playbook, deps = {}) {
+  const { aiComplete = defaultAiComplete, logger = console } = deps
+
+  const context = buildCouncilContext(sim, state, config)
+  const byRole = filterPlaybookByRole(playbook)
+
+  // 3 parallel specialist calls — concurrent, not sequential.
+  const [riskVerdict, gasVerdict, strategyVerdict] = await Promise.all([
+    consultSpecialist('riskAuditor',   context, byRole.riskAuditor,   aiComplete),
+    consultSpecialist('gasChecker',    context, byRole.gasChecker,    aiComplete),
+    consultSpecialist('strategyGuard', context, byRole.strategyGuard, aiComplete),
+  ])
+
+  logger.log?.(
+    `[council] risk=${riskVerdict.decision}(${(riskVerdict.confidence ?? 0).toFixed(2)}) ` +
+    `gas=${gasVerdict.decision}(${(gasVerdict.confidence ?? 0).toFixed(2)}) ` +
+    `strategy=${strategyVerdict.decision}(${(strategyVerdict.confidence ?? 0).toFixed(2)})`,
+  )
+
+  return [riskVerdict, gasVerdict, strategyVerdict]
+}
