@@ -93,3 +93,38 @@ describe('buildFailureInsightPrompt', () => {
     expect(userPrompt).toMatch(/PROFITABLE/)
   })
 })
+
+import { extractInsightFromFailure } from './reflector.js'
+
+describe('extractInsightFromFailure', () => {
+  const decision = { toVault: '0xV', citedRules: ['defi-001'], councilVerdicts: [], simResult: { expectedValue: 10 } }
+  const outcome = { netResultUSD: -5, wasProfit: false, predictionAccuracyPct: 0 }
+
+  it('parses the AI JSON into an insight object', async () => {
+    const aiComplete = async () => JSON.stringify({
+      shouldAddRule: true, ruleText: 'Avoid vault X under high gas', category: 'gas', reason: 'lost money',
+    })
+    const insight = await extractInsightFromFailure(decision, outcome, aiComplete)
+    expect(insight.shouldAddRule).toBe(true)
+    expect(insight.ruleText).toContain('Avoid vault X')
+    expect(insight.category).toBe('gas')
+  })
+
+  it('passes the built prompt through to aiComplete', async () => {
+    let received = null
+    const aiComplete = async (p) => { received = p; return '{"shouldAddRule":false}' }
+    await extractInsightFromFailure(decision, outcome, aiComplete)
+    expect(received.systemPrompt).toMatch(/JSON/)
+    expect(received.userPrompt).toContain('0xV')
+  })
+
+  it('returns null when the AI call throws', async () => {
+    const aiComplete = async () => { throw new Error('network down') }
+    expect(await extractInsightFromFailure(decision, outcome, aiComplete)).toBeNull()
+  })
+
+  it('returns null when the AI returns invalid JSON', async () => {
+    const aiComplete = async () => 'not json'
+    expect(await extractInsightFromFailure(decision, outcome, aiComplete)).toBeNull()
+  })
+})

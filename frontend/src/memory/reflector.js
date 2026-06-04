@@ -82,3 +82,22 @@ Respond ONLY in valid JSON:
 
   return { systemPrompt, userPrompt }
 }
+
+/**
+ * Ask the model for a new rule given a decision's outcome. Returns the parsed insight
+ * `{ shouldAddRule, ruleText, category, reason }`, or null on any failure (network or bad
+ * JSON) so the Reflector degrades gracefully.
+ * @param {object} decision
+ * @param {object} outcome
+ * @param {(p:{systemPrompt:string,userPrompt:string})=>Promise<string>} aiComplete
+ * @returns {Promise<object|null>}
+ */
+export async function extractInsightFromFailure(decision, outcome, aiComplete) {
+  const prompt = buildFailureInsightPrompt(decision, outcome)
+  try {
+    const raw = await aiComplete(prompt)
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
