@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tokenize, jaccardSimilarity } from './curator.js'
+import { tokenize, jaccardSimilarity, findSimilarRule } from './curator.js'
 
 describe('tokenize', () => {
   it('lowercases, strips punctuation, drops words of length <= 3', () => {
@@ -34,5 +34,34 @@ describe('jaccardSimilarity', () => {
 
   it('returns 0 when both sets are empty (no divide-by-zero)', () => {
     expect(jaccardSimilarity(new Set(), new Set())).toBe(0)
+  })
+})
+
+describe('findSimilarRule', () => {
+  const playbook = [
+    { id: 'defi-001', text: 'Avoid entering pools when total value locked drops sharply within three days' },
+    { id: 'defi-002', text: 'Breakeven period under thirty days otherwise skip rebalance' },
+  ]
+
+  it('returns the matching rule when similarity >= threshold', () => {
+    const hit = findSimilarRule(
+      'Avoid entering pools when total value locked drops sharply within three days',
+      playbook,
+    )
+    expect(hit?.id).toBe('defi-001')
+  })
+
+  it('returns null when nothing is similar enough', () => {
+    expect(findSimilarRule('Stake governance tokens before snapshot', playbook)).toBeNull()
+  })
+
+  it('respects a custom threshold', () => {
+    // Loose threshold catches a partial overlap that the default 0.65 would miss.
+    const hit = findSimilarRule('Avoid entering pools when locked value drops', playbook, 0.3)
+    expect(hit?.id).toBe('defi-001')
+  })
+
+  it('returns null for an empty playbook', () => {
+    expect(findSimilarRule('anything here', [])).toBeNull()
   })
 })
