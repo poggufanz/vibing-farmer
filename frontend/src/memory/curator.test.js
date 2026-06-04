@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tokenize, jaccardSimilarity, findSimilarRule, isValidInsight } from './curator.js'
+import { tokenize, jaccardSimilarity, findSimilarRule, isValidInsight, buildRuleFromInsight } from './curator.js'
 
 describe('tokenize', () => {
   it('lowercases, strips punctuation, drops words of length <= 3', () => {
@@ -80,5 +80,33 @@ describe('isValidInsight', () => {
 
   it('rejects a non-string ruleText', () => {
     expect(isValidInsight({ ruleText: 42 })).toBe(false)
+  })
+})
+
+describe('buildRuleFromInsight', () => {
+  const playbook = [{ id: 'defi-001', text: 'a' }, { id: 'defi-004', text: 'b' }]
+  const decision = { id: 'dec-42' }
+
+  it('builds a zeroed rule with the next generated id and trimmed text', () => {
+    const rule = buildRuleFromInsight(
+      { ruleText: '  Cap exposure to one protocol at 60%  ', category: 'strategy', reason: 'over-concentrated' },
+      playbook, decision, () => 1748387200000,
+    )
+    expect(rule.id).toBe('defi-005')          // max(1,4) + 1
+    expect(rule.text).toBe('Cap exposure to one protocol at 60%') // trimmed
+    expect(rule.category).toBe('strategy')
+    expect(rule.helpful).toBe(0)
+    expect(rule.harmful).toBe(0)
+    expect(rule.createdAt).toBe(1748387200000)
+    expect(rule.sourceDecision).toBe('dec-42')
+    expect(rule.addedReason).toBe('over-concentrated')
+  })
+
+  it('defaults category to strategy and tolerates a missing decision/reason', () => {
+    const rule = buildRuleFromInsight({ ruleText: 'Some actionable rule text' }, [], null, () => 0)
+    expect(rule.category).toBe('strategy')
+    expect(rule.id).toBe('defi-001')
+    expect(rule.sourceDecision).toBeNull()
+    expect(rule.addedReason).toBeNull()
   })
 })
