@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupByCategory, findSimilarClusters, sumCounters, buildMergePrompt } from './analyzer.js'
+import { groupByCategory, findSimilarClusters, sumCounters, buildMergePrompt, mergeRuleCluster } from './analyzer.js'
 
 describe('groupByCategory', () => {
   it('buckets rules by their category field', () => {
@@ -85,5 +85,39 @@ describe('buildMergePrompt', () => {
     expect(userPrompt).toContain('Avoid pools with TVL dropping fast')
     expect(userPrompt).toContain('Skip pools when TVL is collapsing quickly')
     expect(userPrompt).toContain('mergedRule') // shows the expected JSON shape
+  })
+})
+
+describe('mergeRuleCluster', () => {
+  const cluster = [
+    { id: 'defi-001', category: 'risk', helpful: 3, harmful: 1, text: 'old text A', createdAt: 100 },
+    { id: 'defi-007', category: 'risk', helpful: 2, harmful: 0, text: 'old text B', createdAt: 200 },
+  ]
+
+  it('merges via aiComplete, keeping oldest id+createdAt and summing counters', async () => {
+    const aiComplete = async () => JSON.stringify({ mergedRule: 'One consolidated risk rule' })
+    const merged = await mergeRuleCluster(cluster, { aiComplete, now: () => 999 })
+    expect(merged.id).toBe('defi-001')         // oldest id retained
+    expect(merged.createdAt).toBe(100)         // oldest createdAt retained
+    expect(merged.category).toBe('risk')
+    expect(merged.text).toBe('One consolidated risk rule')
+    expect(merged.helpful).toBe(5)             // 3 + 2
+    expect(merged.harmful).toBe(1)             // 1 + 0
+    expect(merged.mergedFrom).toEqual(['defi-001', 'defi-007'])
+    expect(merged.mergedAt).toBe(999)
+  })
+
+  it('falls back to the highest net-helpfulness rule when the AI call throws', async () => {
+    const aiComplete = async () => { throw new Error('network down') }
+    const merged = await mergeRuleCluster(cluster, { aiComplete, now: () => 999, logger: { error() {} } })
+    // net helpfulness: 001 = 3-1 = 2, 007 = 2-0 = 2 → tie → first wins (001).
+    expect(merged.id).toBe('defi-001')
+    expect(merged.mergedFrom).toBeUndefined() // fallback returns an untouched original rule
+  })
+
+  it('falls back when the AI returns unparseable JSON', async () => {
+    const aiComplete = async () => 'not json at all'
+    const merged = await mergeRuleCluster(cluster, { aiComplete, now: () => 1, logger: { error() {} } })
+    expect(merged.id).toBe('defi-001')
   })
 })

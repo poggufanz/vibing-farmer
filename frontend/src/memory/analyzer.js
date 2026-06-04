@@ -85,3 +85,42 @@ Respond ONLY in valid JSON:
 
   return { systemPrompt, userPrompt }
 }
+
+/**
+ * Merge a multi-rule cluster into one rule. Keeps the oldest id + createdAt, sums counters,
+ * records provenance (mergedFrom/mergedAt). On any AI or parse failure, returns the cluster's
+ * highest net-helpfulness rule unchanged (graceful degradation — never throws).
+ * @param {Array} cluster  length >= 2
+ * @param {object} deps
+ * @param {(p:{systemPrompt:string,userPrompt:string})=>Promise<string>} deps.aiComplete
+ * @param {() => number} deps.now
+ * @param {{error?:Function}} [deps.logger]
+ * @returns {Promise<object>} the merged (or best-fallback) rule
+ */
+export async function mergeRuleCluster(cluster, deps) {
+  const { aiComplete, now, logger = console } = deps
+  const oldest = cluster[0]
+  const { helpful, harmful } = sumCounters(cluster)
+
+  try {
+    const raw = await aiComplete(buildMergePrompt(cluster))
+    const { mergedRule } = JSON.parse(raw)
+    if (!mergedRule || typeof mergedRule !== 'string') throw new Error('no mergedRule')
+
+    return {
+      id: oldest.id,
+      category: oldest.category,
+      helpful,
+      harmful,
+      text: mergedRule.trim(),
+      createdAt: oldest.createdAt,
+      mergedFrom: cluster.map(r => r.id),
+      mergedAt: now(),
+    }
+  } catch (err) {
+    logger.error?.(`[analyzer] merge failed (${err.message}) — keeping best rule`)
+    return [...cluster].sort(
+      (a, b) => ((b.helpful ?? 0) - (b.harmful ?? 0)) - ((a.helpful ?? 0) - (a.harmful ?? 0)),
+    )[0]
+  }
+}
