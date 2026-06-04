@@ -97,6 +97,8 @@ Respond ONLY in valid JSON:
  * @param {{error?:Function}} [deps.logger]
  * @returns {Promise<object>} the merged (or best-fallback) rule
  */
+const DEFAULT_THRESHOLD = 0.6
+
 export async function mergeRuleCluster(cluster, deps) {
   const { aiComplete, now, logger = console } = deps
   const oldest = cluster[0]
@@ -123,4 +125,43 @@ export async function mergeRuleCluster(cluster, deps) {
       (a, b) => ((b.helpful ?? 0) - (b.harmful ?? 0)) - ((a.helpful ?? 0) - (a.harmful ?? 0)),
     )[0]
   }
+}
+
+/**
+ * BulletpointAnalyzer (ACE Step 13). Group by category → cluster near-duplicates by Jaccard
+ * → merge each multi-rule cluster via the model (counters summed). Singletons pass through
+ * untouched. Pure w.r.t. persistence: returns the next playbook, never saves.
+ * @param {Array} playbook
+ * @param {object} deps
+ * @param {(p:{systemPrompt:string,userPrompt:string})=>Promise<string>} deps.aiComplete
+ * @param {() => number} [deps.now]
+ * @param {number} [deps.threshold]
+ * @param {{log?:Function,error?:Function}} [deps.logger]
+ * @returns {Promise<Array>} the consolidated playbook
+ */
+export async function runBulletpointAnalyzer(playbook, deps) {
+  const { aiComplete, now = () => Date.now(), threshold = DEFAULT_THRESHOLD, logger = console } = deps
+  const pb = playbook ?? []
+  logger.log?.(`[analyzer] running on ${pb.length} rules (threshold ${threshold})`)
+
+  const byCategory = groupByCategory(pb)
+  const result = []
+
+  for (const [category, rules] of Object.entries(byCategory)) {
+    const clusters = findSimilarClusters(rules, threshold)
+    logger.log?.(`[analyzer] ${category}: ${rules.length} rules → ${clusters.length} clusters`)
+
+    for (const cluster of clusters) {
+      if (cluster.length === 1) {
+        result.push(cluster[0])
+        continue
+      }
+      const merged = await mergeRuleCluster(cluster, { aiComplete, now, logger })
+      result.push(merged)
+      logger.log?.(`[analyzer] merged [${cluster.map(r => r.id).join(', ')}] → [${merged.id}]`)
+    }
+  }
+
+  logger.log?.(`[analyzer] ${pb.length} → ${result.length} rules`)
+  return result
 }

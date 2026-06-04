@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupByCategory, findSimilarClusters, sumCounters, buildMergePrompt, mergeRuleCluster } from './analyzer.js'
+import { groupByCategory, findSimilarClusters, sumCounters, buildMergePrompt, mergeRuleCluster, runBulletpointAnalyzer } from './analyzer.js'
 
 describe('groupByCategory', () => {
   it('buckets rules by their category field', () => {
@@ -119,5 +119,54 @@ describe('mergeRuleCluster', () => {
     const aiComplete = async () => 'not json at all'
     const merged = await mergeRuleCluster(cluster, { aiComplete, now: () => 1, logger: { error() {} } })
     expect(merged.id).toBe('defi-001')
+  })
+})
+
+const SILENT = { log() {}, error() {} }
+
+describe('runBulletpointAnalyzer', () => {
+  it('merges duplicate rules within a category and leaves singletons untouched', async () => {
+    const playbook = [
+      { id: 'defi-001', category: 'risk', helpful: 1, harmful: 0, text: 'Avoid pools when total value locked drops sharply over three days', createdAt: 1 },
+      { id: 'defi-002', category: 'risk', helpful: 2, harmful: 0, text: 'Avoid pools when total value locked drops sharply over three days', createdAt: 2 },
+      { id: 'defi-003', category: 'gas', helpful: 0, harmful: 0, text: 'Skip rebalance when breakeven exceeds thirty days of yield', createdAt: 3 },
+    ]
+    const aiComplete = async () => JSON.stringify({ mergedRule: 'Merged risk rule about sharp TVL drops' })
+    const result = await runBulletpointAnalyzer(playbook, { aiComplete, now: () => 50, logger: SILENT })
+
+    expect(result).toHaveLength(2) // two risk dupes → one; gas singleton stays
+    const risk = result.find(r => r.category === 'risk')
+    expect(risk.helpful).toBe(3)             // 1 + 2 summed
+    expect(risk.mergedFrom).toEqual(['defi-001', 'defi-002'])
+    const gas = result.find(r => r.category === 'gas')
+    expect(gas.id).toBe('defi-003')          // untouched singleton
+    expect(gas.mergedFrom).toBeUndefined()
+  })
+
+  it('returns the playbook effectively unchanged when nothing is similar', async () => {
+    const playbook = [
+      { id: 'defi-001', category: 'risk', helpful: 0, harmful: 0, text: 'Cap exposure to one protocol at sixty percent', createdAt: 1 },
+      { id: 'defi-002', category: 'gas', helpful: 0, harmful: 0, text: 'Prefer audited vaults for large dollar positions', createdAt: 2 },
+    ]
+    let aiCalls = 0
+    const aiComplete = async () => { aiCalls++; return '{}' }
+    const result = await runBulletpointAnalyzer(playbook, { aiComplete, now: () => 0, logger: SILENT })
+    expect(result).toHaveLength(2)
+    expect(aiCalls).toBe(0) // no multi-rule cluster → no AI call
+  })
+
+  it('does not mutate the input playbook', async () => {
+    const playbook = [
+      { id: 'defi-001', category: 'risk', helpful: 0, harmful: 0, text: 'same exact text here for both rules ok', createdAt: 1 },
+      { id: 'defi-002', category: 'risk', helpful: 0, harmful: 0, text: 'same exact text here for both rules ok', createdAt: 2 },
+    ]
+    const aiComplete = async () => JSON.stringify({ mergedRule: 'merged' })
+    await runBulletpointAnalyzer(playbook, { aiComplete, now: () => 0, logger: SILENT })
+    expect(playbook).toHaveLength(2) // original intact
+  })
+
+  it('tolerates an empty playbook', async () => {
+    const result = await runBulletpointAnalyzer([], { aiComplete: async () => '{}', now: () => 0, logger: SILENT })
+    expect(result).toEqual([])
   })
 })
