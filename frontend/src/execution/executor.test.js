@@ -8,6 +8,7 @@ import {
   buildExecuteEntry,
   buildHoldEntry,
   buildFailedEntry,
+  executeRebalance,
 } from './executor.js'
 
 describe('usdToUsdcWei', () => {
@@ -172,5 +173,150 @@ describe('buildFailedEntry', () => {
     expect(entry.timestamp).toBe(7)
     expect(entry.error).toBe('1Shot relay failed: 500')
     expect(entry.councilVerdicts).toHaveLength(1)
+  })
+})
+
+// ─── Orchestrator tests ──────────────────────────────────────────────────────────
+
+// In-memory decision-log fake matching the createDecisionLog() surface the executor uses:
+// append(entry) assigns an id and stores; all() returns entries. (Mirrors logger.test.js.)
+const fakeLog = () => {
+  const entries = []
+  let seq = 0
+  return {
+    append(entry) {
+      const stored = { id: `dec-${++seq}`, ...entry }
+      entries.push(stored)
+      return stored
+    },
+    all: () => entries,
+  }
+}
+
+const baseState = {
+  positions: [{ vault: '0xAAA', amountUSD: 1000 }],
+  pools: [
+    { id: '0xAAA', protocol: 'aave-v3' },
+    { id: '0xBBB', protocol: 'morpho-blue' },
+  ],
+  gasPrice: 20,
+  ethPriceUSD: 2500,
+}
+
+const baseSim = {
+  expectedValue: 42,
+  weights: { bull: 0.3, base: 0.4, bear: 0.3 },
+  bull: { projectedNetYieldUSD: 80 },
+  base: { projectedNetYieldUSD: 40, recommendedPool: 'morpho-blue' },
+  bear: { projectedNetYieldUSD: 5 },
+}
+
+const executeConsensus = {
+  finalDecision: 'EXECUTE',
+  executeVotes: 2,
+  holdVotes: 1,
+  avgConfidence: 0.7,
+  rejectionReason: null,
+  verdicts: [
+    { role: 'riskAuditor', decision: 'EXECUTE', citedRules: ['defi-001'], newInsight: null },
+    { role: 'gasChecker', decision: 'EXECUTE', citedRules: ['defi-002'], newInsight: null },
+    { role: 'strategyGuard', decision: 'HOLD', citedRules: [], newInsight: null },
+  ],
+}
+
+const config = { walletAddress: '0xUSER', permissionContext: '0xctx' }
+
+describe('executeRebalance', () => {
+  it('EXECUTE: submits a deposit and appends a pending_evaluation entry', async () => {
+    const log = fakeLog()
+    const calls = []
+    const submitDeposit = async (args) => { calls.push(args); return { txHash: '0xfeed', status: 'relayed' } }
+
+    const result = await executeRebalance(executeConsensus, baseSim, baseState, config, {
+      submitDeposit, decisionLog: log, now: () => 1000,
+    })
+
+    // transport got the resolved vault, the user, USDC wei, and the agent seed
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toEqual({
+      user: '0xUSER',
+      vault: '0xBBB',
+      amountWei: 1_000_000_000n, // $1000 → 1000 * 1e6
+      agentSeed: 'yv-auto-0xbbb',
+      permissionContext: '0xctx',
+    })
+
+    expect(result).toEqual({ executed: true, txHash: '0xfeed', decisionId: 'dec-1' })
+
+    const entry = log.all()[0]
+    expect(entry.status).toBe('pending_evaluation')
+    expect(entry.fromVault).toBe('0xAAA')
+    expect(entry.toVault).toBe('0xBBB')
+    expect(entry.txHash).toBe('0xfeed')
+    expect(entry.citedRules.sort()).toEqual(['defi-001', 'defi-002'])
+  })
+
+  it('HOLD: logs a completed hold entry and never calls the transport', async () => {
+    const log = fakeLog()
+    let called = false
+    const submitDeposit = async () => { called = true; return { txHash: 'x' } }
+
+    const holdConsensus = {
+      finalDecision: 'HOLD', executeVotes: 1, holdVotes: 2, avgConfidence: 0.4,
+      rejectionReason: 'Majority voted HOLD (2/3): gas too high', verdicts: [],
+    }
+
+    const result = await executeRebalance(holdConsensus, baseSim, baseState, config, {
+      submitDeposit, decisionLog: log, now: () => 2000,
+    })
+
+    expect(called).toBe(false)
+    expect(result).toEqual({ executed: false, reason: 'Majority voted HOLD (2/3): gas too high' })
+    expect(log.all()[0]).toMatchObject({ type: 'hold', status: 'completed', reason: 'Majority voted HOLD (2/3): gas too high' })
+  })
+
+  it('skips (no transport) when the recommended protocol cannot be resolved to a vault', async () => {
+    const log = fakeLog()
+    let called = false
+    const submitDeposit = async () => { called = true; return { txHash: 'x' } }
+
+    const sim = { ...baseSim, base: { ...baseSim.base, recommendedPool: 'unknown-proto' } }
+
+    const result = await executeRebalance(executeConsensus, sim, baseState, config, {
+      submitDeposit, decisionLog: log, now: () => 3000,
+    })
+
+    expect(called).toBe(false)
+    expect(result.executed).toBe(false)
+    expect(result.reason).toMatch(/resolve/i)
+    expect(log.all()[0]).toMatchObject({ type: 'hold', status: 'completed' })
+  })
+
+  it('skips when portfolio value is zero', async () => {
+    const log = fakeLog()
+    let called = false
+    const submitDeposit = async () => { called = true; return { txHash: 'x' } }
+
+    const state = { ...baseState, positions: [{ vault: '0xAAA', amountUSD: 0 }] }
+
+    const result = await executeRebalance(executeConsensus, baseSim, state, config, {
+      submitDeposit, decisionLog: log, now: () => 4000,
+    })
+
+    expect(called).toBe(false)
+    expect(result.executed).toBe(false)
+    expect(log.all()[0]).toMatchObject({ type: 'hold', status: 'completed' })
+  })
+
+  it('records a failed entry and returns the error when the deposit throws', async () => {
+    const log = fakeLog()
+    const submitDeposit = async () => { throw new Error('1Shot relay failed: 500') }
+
+    const result = await executeRebalance(executeConsensus, baseSim, baseState, config, {
+      submitDeposit, decisionLog: log, now: () => 5000,
+    })
+
+    expect(result).toEqual({ executed: false, error: '1Shot relay failed: 500' })
+    expect(log.all()[0]).toMatchObject({ type: 'rebalance', status: 'failed', error: '1Shot relay failed: 500', toVault: '0xBBB' })
   })
 })
