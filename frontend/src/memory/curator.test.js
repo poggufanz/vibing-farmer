@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tokenize, jaccardSimilarity, findSimilarRule, isValidInsight, buildRuleFromInsight, runCurator } from './curator.js'
+import { tokenize, jaccardSimilarity, findSimilarRule, isValidInsight, buildRuleFromInsight, runCurator, createCurator } from './curator.js'
 
 describe('tokenize', () => {
   it('lowercases, strips punctuation, drops words of length <= 3', () => {
@@ -194,5 +194,33 @@ describe('runCurator', () => {
       decision, seed(), { now: NOW, logger: SILENT, analyzer, maxSize: 1 },
     )
     expect(analyzerCalls).toBe(0)
+  })
+})
+
+describe('createCurator', () => {
+  it('returns a 3-arg curator(insight, decision, playbook) matching the Reflector contract', () => {
+    const curate = createCurator({ now: () => 0, logger: { log() {}, error() {} } })
+    expect(typeof curate).toBe('function')
+    expect(curate.length).toBe(3) // (insight, decision, playbook) — matches reflector.js call site
+  })
+
+  it('evolves the playbook through the bound deps', async () => {
+    const curate = createCurator({ now: () => 7, logger: { log() {}, error() {} } })
+    const next = await curate(
+      { ruleText: 'Prefer audited protocols for positions above ten thousand dollars', category: 'risk' },
+      { id: 'dec-9' },
+      [{ id: 'defi-001', category: 'gas', helpful: 0, harmful: 0, text: 'unrelated breakeven note' }],
+    )
+    expect(next).toHaveLength(2)
+    expect(next[1].sourceDecision).toBe('dec-9')
+    expect(next[1].createdAt).toBe(7)
+  })
+
+  it('threads an injected analyzer through to oversized playbooks', async () => {
+    let hit = false
+    const analyzer = async (pb) => { hit = true; return pb }
+    const curate = createCurator({ now: () => 0, maxSize: 0, analyzer, logger: { log() {}, error() {} } })
+    await curate({ ruleText: 'Any unique rule that triggers the size cap' }, { id: 'd' }, [])
+    expect(hit).toBe(true)
   })
 })
