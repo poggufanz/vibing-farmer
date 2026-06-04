@@ -156,3 +156,29 @@ export async function runReflector(decision, outcome, deps) {
 
   return playbook
 }
+
+// ─── Default AI path + factory ───────────────────────────────────────────────────
+
+// Lazy-import venice so pure-function tests never load its module graph (council.js pattern).
+const defaultAiComplete = async (p) => {
+  const { completeJSON } = await import('../venice.js')
+  return completeJSON(p)
+}
+
+/**
+ * Bind real deps once and return the `reflector(decision, outcome)` function that
+ * createOutcomeEvaluator (Step 10) injects and calls (outcomeTracker.js:245).
+ *
+ * @param {object} deps
+ * @param {{load:Function, save:Function}} deps.playbookStore  required — createPlaybookStore()
+ * @param {Function} [deps.aiComplete]   default: venice completeJSON (lazy)
+ * @param {Function} [deps.curator]      Step 12 (optional until wired)
+ * @param {number} [deps.minAccuracyPct]
+ * @param {object} [deps.logger]
+ * @returns {(decision:object, outcome:object)=>Promise<Array>}
+ */
+export function createReflector(deps) {
+  const { playbookStore, aiComplete = defaultAiComplete, curator, minAccuracyPct, logger } = deps
+  return (decision, outcome) =>
+    runReflector(decision, outcome, { playbookStore, aiComplete, curator, minAccuracyPct, logger })
+}

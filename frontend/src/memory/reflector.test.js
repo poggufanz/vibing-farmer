@@ -240,3 +240,42 @@ describe('runReflector', () => {
     expect(pb.map(r => r.id)).toEqual(['defi-002']) // defi-001 had 1 helpful / 6 harmful → pruned
   })
 })
+
+import { createReflector } from './reflector.js'
+
+describe('createReflector', () => {
+  const seed = () => ([{ id: 'defi-001', category: 'risk', helpful: 0, harmful: 0, text: 'a' }])
+
+  it('returns a 2-arg reflector(decision, outcome) that evolves + persists the playbook', async () => {
+    const store = fakeStore(seed())
+    const reflect = createReflector({
+      playbookStore: store,
+      aiComplete: async () => '{"shouldAddRule":false}',
+      logger: { log() {}, error() {} },
+    })
+    expect(typeof reflect).toBe('function')
+    expect(reflect.length).toBe(2) // (decision, outcome) — matches outcomeTracker call site
+
+    await reflect(
+      { id: 'dec-1', toVault: '0xV', citedRules: ['defi-001'], councilInsights: [], simResult: { expectedValue: 10 } },
+      { wasProfit: true, netResultUSD: 5, predictionAccuracyPct: 90 },
+    )
+    expect(store.snapshot().find(r => r.id === 'defi-001').helpful).toBe(1)
+  })
+
+  it('threads an injected curator through to ADD operations', async () => {
+    const store = fakeStore(seed())
+    let curatorHit = false
+    const reflect = createReflector({
+      playbookStore: store,
+      aiComplete: async () => JSON.stringify({ shouldAddRule: true, ruleText: 'r', category: 'risk' }),
+      curator: async (_i, _d, pb) => { curatorHit = true; return pb },
+      logger: { log() {}, error() {} },
+    })
+    await reflect(
+      { id: 'dec-2', toVault: '0xV', citedRules: [], councilInsights: [], simResult: { expectedValue: 10 } },
+      { wasProfit: false, netResultUSD: -5, predictionAccuracyPct: 0 },
+    )
+    expect(curatorHit).toBe(true)
+  })
+})
