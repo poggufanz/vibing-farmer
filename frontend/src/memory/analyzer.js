@@ -44,3 +44,15 @@ export function findSimilarClusters(rules, threshold) {
 
   return clusters
 }
+
+/**
+ * Sum helpful/harmful across a cluster (ACE: merging must preserve empirical evidence).
+ * @param {Array<{helpful?:number, harmful?:number}>} cluster
+ * @returns {{helpful:number, harmful:number}}
+ */
+export function sumCounters(cluster) {
+  return cluster.reduce(
+    (acc, r) => ({ helpful: acc.helpful + (r.helpful ?? 0), harmful: acc.harmful + (r.harmful ?? 0) }),
+    { helpful: 0, harmful: 0 },
+  )
+}

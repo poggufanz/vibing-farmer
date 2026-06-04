@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupByCategory, findSimilarClusters } from './analyzer.js'
+import { groupByCategory, findSimilarClusters, sumCounters } from './analyzer.js'
 
 describe('groupByCategory', () => {
   it('buckets rules by their category field', () => {
@@ -47,5 +47,20 @@ describe('findSimilarClusters', () => {
 
   it('returns an empty array for no rules', () => {
     expect(findSimilarClusters([], 0.6)).toEqual([])
+  })
+})
+
+describe('sumCounters', () => {
+  it('sums helpful and harmful across the cluster', () => {
+    const cluster = [
+      { id: 'a', helpful: 3, harmful: 1 },
+      { id: 'b', helpful: 2, harmful: 0 },
+    ]
+    expect(sumCounters(cluster)).toEqual({ helpful: 5, harmful: 1 })
+  })
+
+  it('treats missing counters as zero', () => {
+    const cluster = [{ id: 'a' }, { id: 'b', helpful: 4 }]
+    expect(sumCounters(cluster)).toEqual({ helpful: 4, harmful: 0 })
   })
 })
