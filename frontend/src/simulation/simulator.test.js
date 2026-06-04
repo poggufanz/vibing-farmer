@@ -22,3 +22,30 @@ describe('calculateMarketTrend', () => {
     expect(calculateMarketTrend(pools)).toBe('sideways')
   })
 })
+
+import { assignScenarioProbabilities } from './simulator.js'
+
+describe('assignScenarioProbabilities', () => {
+  const neutral = { turbulenceIndex: 0.1, newsSentiment: 'neutral', marketTrend: 'sideways' }
+
+  it('returns weights that sum to 1', () => {
+    const w = assignScenarioProbabilities(neutral)
+    expect(w.bull + w.base + w.bear).toBeCloseTo(1, 10)
+  })
+
+  it('is roughly balanced when no signal tilts it', () => {
+    const w = assignScenarioProbabilities(neutral)
+    expect(w.bull).toBeCloseTo(0.33, 2)
+    expect(w.bear).toBeCloseTo(0.33, 2)
+  })
+
+  it('shifts weight toward bear under high turbulence', () => {
+    const w = assignScenarioProbabilities({ ...neutral, turbulenceIndex: 0.8 })
+    expect(w.bear).toBeGreaterThan(w.bull)
+  })
+
+  it('shifts weight toward bull on positive sentiment + uptrend', () => {
+    const w = assignScenarioProbabilities({ turbulenceIndex: 0.1, newsSentiment: 'positive', marketTrend: 'uptrend' })
+    expect(w.bull).toBeGreaterThan(w.bear)
+  })
+})

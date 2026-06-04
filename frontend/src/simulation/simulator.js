@@ -21,3 +21,17 @@ export function calculateMarketTrend(pools) {
   if (avg < -TREND_BAND) return 'downtrend'
   return 'sideways'
 }
+
+/** Tilt the three scenario probabilities by turbulence, sentiment, and trend. Normalized to sum 1. */
+export function assignScenarioProbabilities(context) {
+  let bull = 0.33, base = 0.34, bear = 0.33
+
+  if (context.turbulenceIndex > 0.5) { bear += 0.15; bull -= 0.15 }
+  if (context.newsSentiment === 'positive') { bull += 0.10; bear -= 0.10 }
+  if (context.newsSentiment === 'negative') { bear += 0.10; bull -= 0.10 }
+  if (context.marketTrend === 'uptrend') { bull += 0.07; bear -= 0.07 }
+  if (context.marketTrend === 'downtrend') { bear += 0.07; bull -= 0.07 }
+
+  const total = bull + base + bear
+  return { bull: bull / total, base: base / total, bear: bear / total }
+}
