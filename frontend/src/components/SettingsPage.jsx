@@ -171,8 +171,8 @@ export default function SettingsPage({
     <div className="enter" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 28 }}>
       <div style={{ maxWidth: 820, margin: '0 auto', width: '100%' }}>
 
-        {/* ── SECTION 1: Agent Configuration ── */}
-        <Section title="Agent Configuration">
+        {/* ── SECTION 1: Execution Settings (autonomous flow) ── */}
+        <Section title="Execution Settings">
           <Row label="Autonomous Agent" desc="When enabled, agent monitors positions and alerts you in the background automatically.">
             <Toggle on={agentEnabled} onChange={(v) => setAgentEnabled?.(v)} onLabel="Enable" offLabel="Disable" />
           </Row>
