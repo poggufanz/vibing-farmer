@@ -938,6 +938,29 @@ const App = () => {
       });
     }
     addLog({ event: "OrchestratorPlanned", meta: `multi-agent deployment finalized · ${strategy?.agents?.length} positions opened` });
+
+    try {
+      const meta = sessionMetaRef.current || { sessionId: `session-${Date.now()}`, startedAt: Date.now() };
+      const steps = (strategy?.agents || []).map((a) => {
+        const ex = execMap[a.id] || {};
+        return {
+          agentId: a.id, vaultName: a.vault.name,
+          status: ex.status || 'unknown', gasUsed: 0,
+          shares: (a.allocation * 1e6).toString(),
+        };
+      });
+      saveSessionMemory({
+        sessionId: meta.sessionId, startedAt: meta.startedAt, completedAt: Date.now(),
+        config: { amountUsdc: Number(amount), risk, vaultCount: strategy?.agents?.length || 0 },
+        steps,
+        council: narration?.verdicts || [],
+        timelines: narration?.timelines
+          ? { bull: narration.timelines.bull, base: narration.timelines.base, bear: narration.timelines.bear, expectedValue: narration.timelines.expectedValue }
+          : null,
+        lessons: (strategy?.agents || []).filter((a) => execMap[a.id]?.status === 'confirmed')
+          .map((a) => `${a.vault.name}: deposit confirmed for ${a.allocation} USDC`),
+      });
+    } catch (e) { console.warn('[app] session memory save failed:', e); }
   };
 
   const handleAgain = () => {
@@ -1214,8 +1237,18 @@ const App = () => {
       <aside className="rail">
         <WalletPanel phase={walletPhase} address={realAddress} />
         <PermissionPanel active={permActive} strategy={strategy} onRevoke={handleRevoke} expiresAt={permExpiresAt} />
-        <ActivityPanel logs={logs} />
-        <SkillPanel skillSource={skillSource} marketLive={marketLive} vaultLive={vaultLive} onCustomize={() => setSkillDrawerOpen(true)} />
+        {verifyOpen ? (
+          <VerificationPanel
+            strategy={strategy}
+            busy={permPhase === "prompting"}
+            onConfirm={handleVerifyConfirm}
+            onCancel={handleVerifyCancel}
+          />
+        ) : (stage === "execute" || stage === "done") ? (
+          <AICouncilPanel narration={narration} loading={narrating} />
+        ) : (
+          <SkillPanel skillSource={skillSource} marketLive={marketLive} vaultLive={vaultLive} onCustomize={() => setSkillDrawerOpen(true)} />
+        )}
       </aside>
 
       <SkillDrawer
