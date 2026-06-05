@@ -6,7 +6,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 export const ROUTES = {
   HOME:     '/home',
   STRATEGY: '/strategy',
-  AGENT:    '/agent',
   HISTORY:  '/history',
   SETTINGS: '/settings',
   VAULT:    '/vault/:protocol',
