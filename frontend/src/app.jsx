@@ -41,7 +41,12 @@ import LandingHero from './components/LandingHero.jsx';
 import ExplorerPage from './components/ExplorerPage.jsx';
 import EcosystemPage from './components/EcosystemPage.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
-import { WalletPanel, PermissionPanel, ActivityPanel, SkillPanel, PalettePicker, PALETTES } from './components/RightRail.jsx';
+import { WalletPanel, PermissionPanel, SkillPanel, PalettePicker, PALETTES } from './components/RightRail.jsx';
+import VerificationPanel from './components/VerificationPanel.jsx';
+import AICouncilPanel from './components/AICouncilPanel.jsx';
+import AutonomousLoopPanel from './components/AutonomousLoopPanel.jsx';
+import { runNarration } from './narration/councilNarrator.js';
+import { saveSessionMemory, loadLatestSession } from './memory/sessionMemory.js';
 import { loadSettings, saveSetting } from './settingsStore.js';
 import { clearUserSkill } from './skillLoader.js';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
@@ -180,6 +185,12 @@ const App = () => {
   const [execMap, setExecMap] = useS({});
   const [openAgentId, setOpenAgentId] = useS(null);
 
+  // Unified flow: verification gate + AI-council narration + restored memory
+  const [verifyOpen, setVerifyOpen] = useS(false);   // RightRail shows VerificationPanel
+  const [narration, setNarration] = useS(null);      // AI-council narration result
+  const [narrating, setNarrating] = useS(false);
+  const sessionMetaRef = useR(null);                 // { sessionId, startedAt }
+
   const [logs, setLogs] = useS([]);
   const logIdRef = useR(0);
   const agentMapRef = useR({});
@@ -194,6 +205,15 @@ const App = () => {
 
   // Detect MetaMask flavor/version once on mount — Flask gate for ERC-7715.
   useE(() => { detectMetaMaskVersion().then(setMmVersion); }, []);
+
+  // Restore the most recent session memory on mount so a returning user sees their
+  // last run summarised in the activity log. Non-destructive — read-only.
+  useE(() => {
+    const latest = loadLatestSession();
+    if (latest) {
+      addLog({ event: "OrchestratorPlanned", meta: `restored ${latest.sessionId} from memory` });
+    }
+  }, []);
 
   // Strategy Attestation — NON-BLOCKING, best-effort. Fires once a wallet provider
   // exists (post-connect) and the AI strategy carries a deterministic hash. Any
@@ -247,7 +267,6 @@ const App = () => {
     const titles = {
       '/home':     'vibing / farmer',
       '/strategy': 'New Strategy · vibing / farmer',
-      '/agent':    'Autonomous Agent · vibing / farmer',
       '/history':  'History · vibing / farmer',
       '/settings': 'Settings · vibing / farmer',
     };
