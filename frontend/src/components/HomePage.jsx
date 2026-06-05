@@ -264,7 +264,7 @@ export default function HomePage({
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>🚨 Risk detected · {banner.vaultName}</div>
               <div style={{ ...sub, marginTop: 4 }}>{(banner.searchAnswer || 'Anomaly reported by AI. Consider emergency withdraw.').slice(0, 160)}</div>
-              <button style={{ ...linkBtn, marginTop: 8 }} onClick={onOpenAgent}>View in Agent Dashboard →</button>
+              <button style={{ ...linkBtn, marginTop: 8 }} onClick={onOpenAgent}>View in Strategy →</button>
             </div>
             <button aria-label="dismiss alert" style={{ ...linkBtn, textDecoration: 'none', fontSize: 14 }}
               onClick={() => setDismissed((s) => new Set(s).add(banner.id))}>✕</button>
@@ -303,7 +303,7 @@ export default function HomePage({
                 </div>
                 <span style={{ width: 1, height: 22, background: 'var(--border)' }} />
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{posList.length} vault{posList.length === 1 ? '' : 's'}</span>
-                <button onClick={onOpenAgent} title="Open Agent Dashboard"
+                <button onClick={onOpenAgent} title="Open Strategy"
                   style={{ ...linkBtn, textDecoration: 'none', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
                   <span style={dot(agentActive ? 'var(--ok)' : 'var(--text-faint)')} />
                   {agentActive ? 'monitoring' : 'stopped'} · {mode} →
