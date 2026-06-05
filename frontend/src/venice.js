@@ -175,6 +175,42 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
 }
 
 /**
+ * Generic single-shot JSON completion against the resolved AI provider.
+ * Returns the raw assistant message string (caller JSON.parses). Same provider
+ * priority + timeout as generateStrategy. Backs the autonomous loop's simulation
+ * (Step 5) and council (Step 6) stages.
+ *
+ * @param {object} p
+ * @param {string} p.systemPrompt
+ * @param {string} p.userPrompt
+ * @param {string|null} [p.veniceAuth]  base64 SIWE header; null -> server proxy
+ * @param {string|null} [p.devApiKey]   DeepSeek key for dev mode
+ * @param {AbortSignal} [p.signal]      caller-managed timeout; else internal
+ * @returns {Promise<string>} raw JSON string content
+ */
+export async function completeJSON({ systemPrompt, userPrompt, veniceAuth = null, devApiKey = null, signal }) {
+  const provider = resolveProvider(veniceAuth, devApiKey)
+
+  const controller = signal ? null : new AbortController()
+  const timeout = controller ? setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS) : null
+  const sig = signal || controller.signal
+
+  try {
+    return await callChatCompletions(
+      provider.url, provider.model, provider.headers,
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      provider.isVenice,
+      sig,
+    )
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
+/**
  * Generate skill JSON for a single agent.
  * @param {object} params
  * @param {string} params.agentId
