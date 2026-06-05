@@ -50,7 +50,6 @@ const Sidebar = ({ extended, onToggle }) => {
   const items = [
     { key: "home",     icon: "home",     path: "/home",     label: "Home" },
     { key: "vaults",   icon: "grid",     path: "/strategy", label: "Strategy" },
-    { key: "agent",    icon: "network",  path: "/agent",    label: "Dashboard" },
     { key: "history",  icon: "layers",   path: "/history",  label: "History" },
     { key: "settings", icon: "settings", path: "/settings", label: "Settings" },
   ];
@@ -112,11 +111,11 @@ const TopBar = ({ walletConnected, onReset, railCollapsed, onToggleRail }) => {
 };
 
 /* ---------- Step rail (subtle numeric, no wizard chrome) ---------- */
+// Unified flow rail. connect/skills/permission now happen automatically
+// (skills auto-approved; permission granted at the verification gate).
 const STEPS = [
-  { id: "strategy", label: "AI Strategy" },
-  { id: "connect", label: "Connect & Upgrade" },
-  { id: "skills", label: "Review Skills" },
-  { id: "permission", label: "Grant Permission" },
+  { id: "strategy", label: "Configure" },
+  { id: "permission", label: "Verify & Grant" },
   { id: "execute", label: "Auto-Execute" },
   { id: "done", label: "Complete" },
 ];
