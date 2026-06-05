@@ -518,7 +518,19 @@ const App = () => {
     return () => { cancelled = true; };
   }, [stage, strategyPhase]);
 
-  const handleAcceptStrategy = () => setStage("connect");
+  // Unified flow: accepting the strategy auto-approves skills and opens the
+  // single verification gate in the RightRail. realAddress is guaranteed by
+  // the landing/onboarding gates before /strategy.
+  const handleAcceptStrategy = () => {
+    if (strategy?.agents) {
+      const sk = {};
+      strategy.agents.forEach((a) => { sk[a.id] = { state: "approved", skill: null }; });
+      setSkillStates(sk);
+    }
+    if (!realAddress) { setStage("connect"); return; } // safety fallback
+    setVerifyOpen(true);
+    addLog({ event: "OrchestratorPlanned", meta: "strategy accepted · awaiting verification" });
+  };
 
   const handleRegenerate = () => {
     setStrategy(null);
