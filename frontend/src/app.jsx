@@ -1168,7 +1168,7 @@ const App = () => {
               autoHarvest={agentSettings.autoHarvest}
               onConnect={handleConnect}
               onStartStrategy={handleAgain}
-              onOpenAgent={() => navigate('/agent')}
+              onOpenAgent={() => navigate('/strategy')}
               onViewHistory={() => navigate('/history')}
               onWithdrawSuccess={handleWithdrawSuccess}
             />
@@ -1178,30 +1178,13 @@ const App = () => {
               <StepRail stage={stage} furthest={furthest} onStepClick={goBack} lang={language} />
               <div className="stage" key={`${stage}-${strategyPhase}`}>
                 {renderStage()}
+                {(stage === "execute" || stage === "done") && (
+                  <div style={{ maxWidth: 820, margin: "16px auto 0", width: "100%" }}>
+                    <AutonomousLoopPanel walletAddress={realAddress} permissionContext={permContext} />
+                  </div>
+                )}
               </div>
             </>
-          } />
-          <Route path="/agent" element={
-            <div className="stage">
-              <div style={{ maxWidth: 820, margin: "0 auto", width: "100%" }}>
-                <AgentDashboard
-                  active={agentEnabled && stage === "done"}
-                  positions={agentData.positions}
-                  alerts={agentData.alerts}
-                  vaultMeta={agentVaultMeta}
-                  lastUpdated={agentData.lastUpdated}
-                  userAddress={realAddress}
-                  settings={agentSettings}
-                  withdrawEnabled={stage === "done"}
-                  onHarvest={handleHarvestNow}
-                  onEmergencyWithdraw={handleEmergencyWithdraw}
-                  onReview={handleReviewRebalance}
-                  onDismiss={dismissAlert}
-                  onWithdrawSuccess={handleWithdrawSuccess}
-                  onNewStrategy={handleAgain}
-                />
-              </div>
-            </div>
           } />
           <Route path="/history" element={<HistoryPanel />} />
           <Route path="/settings" element={
