@@ -632,6 +632,49 @@ const App = () => {
 
   const handleSkillsContinue = () => setStage("permission");
 
+  /* ----- VERIFICATION GATE (unified) ----- */
+  const handleVerifyCancel = () => {
+    setVerifyOpen(false);
+    addLog({ event: "PermissionRevoked", meta: "verification cancelled by user" });
+  };
+
+  const handleVerifyConfirm = async () => {
+    setPermError(null);
+    setPermPhase("prompting");
+    try {
+      const permResult = await requestERC7715Permission(86400);
+      setPermContext(permResult.permissionContext);
+      setPermActive(true);
+      setPermExpiresAt(Date.now() + 86400 * 1000);
+      (strategy?.agents || []).forEach((a) => addLog({
+        event: "PermissionGranted", agent: a.id,
+        meta: `vault ${shortAddr(a.vault.addr)} · ${a.allocation} usdc max`,
+      }));
+      setVerifyOpen(false);
+      setPermPhase("idle");
+      setStage("execute");
+      startNarration();
+      startExecution(permResult.permissionContext);
+    } catch (err) {
+      setPermPhase("idle");
+      setPermError(err.message);
+      addLog({ event: "AgentFailed", meta: `permission denied: ${err.message}` });
+    }
+  };
+
+  const startNarration = () => {
+    if (!strategy) return;
+    setNarrating(true);
+    runNarration({
+      strategy: { ...strategy, risk },
+      positionsMap: agentData.positions,
+      strategyHash: rawStrategy?.strategyHash || null,
+      veniceAuth, devApiKey: devApiKey || null,
+    })
+      .then((n) => setNarration(n))
+      .finally(() => setNarrating(false));
+  };
+
   /* ----- PERMISSION (step 04) ----- */
   const handleGrant = () => setPermPhase("prompting");
 
@@ -681,6 +724,7 @@ const App = () => {
     // Pre-compute sessionId and build hex→designId map BEFORE orchestrator starts.
     // Orchestrator uses makeAgentId(index, sessionId) — same function, same sessionId = same hex.
     const sessionId = `session-${Date.now()}`;
+    sessionMetaRef.current = { sessionId, startedAt: Date.now() };
     const agentMap = {};
     strategy.agents.forEach((a, i) => {
       const hexId = makeAgentId(i, sessionId);
