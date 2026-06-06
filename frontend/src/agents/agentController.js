@@ -8,6 +8,8 @@ import { relayHarvest, relayWithdraw } from '../relay.js'
 import { classifyRisk } from '../venice.js'
 import { createVibingFarmerAgent } from '../core/composeAgent.js'
 import { createLoopBus } from '../core/loopBus.js'
+import { resolveAutonomyScope } from '../core/autonomyLevel.js'
+import { needsRatify } from '../core/ratifyGate.js'
 
 let worker = null
 let currentConfig = null
@@ -122,18 +124,46 @@ export function getAutonomousAgent() {
   return _autonomousAgent
 }
 
+// Pending in-app ratify requests: cycleId -> { resolve, timer }. The loop's awaitRatify
+// returns one of these promises; submitRatify (from RatifyPrompt) or the deadline resolves it.
+const _pendingRatify = new Map()
+
+function awaitRatify({ cycleId, deadlineMs = 15_000 }) {
+  return new Promise((resolve) => {
+    const settle = (verdict) => {
+      const entry = _pendingRatify.get(cycleId)
+      if (entry?.timer) clearTimeout(entry.timer)
+      _pendingRatify.delete(cycleId)
+      resolve(verdict)
+    }
+    const timer = setTimeout(() => settle('HOLD'), deadlineMs) // no response = safe HOLD
+    _pendingRatify.set(cycleId, { resolve: settle, timer })
+  })
+}
+
+/** Resolve a pending ratify request from the UI. approve=true => EXECUTE, else HOLD. */
+export function submitRatify(cycleId, approve) {
+  const entry = _pendingRatify.get(cycleId)
+  if (entry) entry.resolve(approve ? 'EXECUTE' : 'HOLD')
+}
+
 /**
  * Start the autonomous rebalance loop. Idempotent. The loop's stage events flow to
- * _loopBus; the goal stops it gracefully when met.
+ * _loopBus; high-value moves pause for in-app ratify based on autonomy level.
  * @param {{ walletAddress:string, permissionContext?:string, intervalMs?:number,
- *           goal?:object, evaluateGoal?:Function }} opts
+ *           goal?:object, evaluateGoal?:Function, autonomyLevel?:string,
+ *           ratifyDeadlineMs?:number }} opts
  * @returns {object} agent handle
  */
-export function startAutonomousAgent({ walletAddress, permissionContext, intervalMs, goal = null, evaluateGoal = null }) {
+export function startAutonomousAgent({ walletAddress, permissionContext, intervalMs, goal = null, evaluateGoal = null, autonomyLevel, ratifyDeadlineMs = 15_000 }) {
   if (_autonomousAgent) return _autonomousAgent
+  const scope = resolveAutonomyScope(autonomyLevel)
   _autonomousAgent = createVibingFarmerAgent({
     walletAddress, permissionContext, intervalMs, goal, evaluateGoal,
     onEvent: (e) => _loopBus.emit(e),
+    shouldRatify: (moveUsd) => needsRatify(scope, moveUsd),
+    awaitRatify,
+    ratifyDeadlineMs,
   })
   _autonomousAgent.start()
   return _autonomousAgent
