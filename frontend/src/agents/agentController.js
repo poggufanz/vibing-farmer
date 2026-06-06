@@ -7,6 +7,7 @@ import { saveTransaction } from '../history.js'
 import { relayHarvest, relayWithdraw } from '../relay.js'
 import { classifyRisk } from '../venice.js'
 import { createVibingFarmerAgent } from '../core/composeAgent.js'
+import { createLoopBus } from '../core/loopBus.js'
 
 let worker = null
 let currentConfig = null
@@ -106,16 +107,34 @@ export async function withdrawFromVault(vaultAddress, amount, userAddress) {
 // ongoing autonomous rebalance loop backed by the full stages pipeline.
 
 let _autonomousAgent = null
+const _loopBus = createLoopBus()
 
 /**
- * Start the autonomous rebalance loop. Idempotent — if already running, returns the
- * existing agent. Callers fire-and-forget; the loop runs until stopAutonomousAgent().
- * @param {{ walletAddress: string, permissionContext?: string }} opts
- * @returns {object} agent handle { loop, outcomeEvaluator, decisionLog, playbookStore }
+ * Subscribe to live autonomous-loop stage events. Returns an unsubscribe fn.
+ * `replay: true` re-delivers the recent ring buffer so a late-mounting dashboard
+ * still renders in-flight activity.
  */
-export function startAutonomousAgent({ walletAddress, permissionContext }) {
+export function subscribeLoop(fn, opts) {
+  return _loopBus.subscribe(fn, opts)
+}
+
+export function getAutonomousAgent() {
+  return _autonomousAgent
+}
+
+/**
+ * Start the autonomous rebalance loop. Idempotent. The loop's stage events flow to
+ * _loopBus; the goal stops it gracefully when met.
+ * @param {{ walletAddress:string, permissionContext?:string, intervalMs?:number,
+ *           goal?:object, evaluateGoal?:Function }} opts
+ * @returns {object} agent handle
+ */
+export function startAutonomousAgent({ walletAddress, permissionContext, intervalMs, goal = null, evaluateGoal = null }) {
   if (_autonomousAgent) return _autonomousAgent
-  _autonomousAgent = createVibingFarmerAgent({ walletAddress, permissionContext })
+  _autonomousAgent = createVibingFarmerAgent({
+    walletAddress, permissionContext, intervalMs, goal, evaluateGoal,
+    onEvent: (e) => _loopBus.emit(e),
+  })
   _autonomousAgent.start()
   return _autonomousAgent
 }
@@ -123,5 +142,6 @@ export function startAutonomousAgent({ walletAddress, permissionContext }) {
 /** Stop the autonomous rebalance loop and clear the outcome evaluator schedule. */
 export function stopAutonomousAgent() {
   _autonomousAgent?.stop()
+  _loopBus.emit({ type: 'stopped', reason: 'manual' })
   _autonomousAgent = null
 }
