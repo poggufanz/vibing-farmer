@@ -49,6 +49,7 @@ import WorkerReview from './components/WorkerReview.jsx';
 import LiveAgentDashboard from './components/LiveAgentDashboard.jsx';
 import CouncilDecisionToast from './components/CouncilDecisionToast.jsx';
 import RatifyPrompt from './components/RatifyPrompt.jsx';
+import StrategyConsole from './components/StrategyConsole.jsx';
 import { loadGoal, saveGoal } from './goal/goalConfig.js';
 import { evaluateGoal } from './goal/goalTracker.js';
 import { getCurrentPortfolioAPY } from './core/gates.js';
@@ -195,6 +196,7 @@ const App = () => {
   // Unified flow: verification gate + AI-council narration + restored memory
   const [verifyOpen, setVerifyOpen] = useS(false);   // RightRail shows VerificationPanel
   const [goal, setGoal] = useS(() => loadGoal());
+  const [autonomyLevel, setAutonomyLevel] = useS("balanced");
   const [councilToast, setCouncilToast] = useS(null); // { decision, reason, seq }
   const [goalReached, setGoalReached] = useS(false);  // loop graceful-stopped on goal_met
   const [narration, setNarration] = useS(null);      // AI-council narration result
@@ -710,6 +712,7 @@ const App = () => {
       permissionContext: ctx ?? permContext ?? null,
       goal,
       evaluateGoal: buildEvaluateGoal(),
+      autonomyLevel,
     });
     addLog({ event: "OrchestratorPlanned", meta: "autonomous loop started · running until goal" });
   };
@@ -1121,14 +1124,18 @@ const App = () => {
     switch (stage) {
       case "strategy":
         if (strategyPhase === "input")
-          return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} onSubmit={handleSubmitPreference} />;
+          return <StrategyConsole
+            amount={amount} setAmount={setAmount}
+            risk={risk} setRisk={setRisk}
+            goal={goal} setGoal={setGoal}
+            autonomyLevel={autonomyLevel} setAutonomyLevel={setAutonomyLevel}
+            valid={Boolean(amount) && Number(amount) > 0}
+            onSubmit={handleSubmitPreference}
+          />;
         if (strategyPhase === "thinking")
           return <ThinkingCard phase={thinkingPhase} times={thinkTimes} />;
         return (
-          <>
-            <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} strategyHash={rawStrategy?.strategyHash} attestation={strategyAttestation} attesting={attesting} />
-            <GoalDefinition goal={goal} onChange={setGoal} />
-          </>
+          <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} strategyHash={rawStrategy?.strategyHash} attestation={strategyAttestation} attesting={attesting} />
         );
       case "review":
         return (
