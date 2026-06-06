@@ -14,6 +14,9 @@ export function createAutonomousLoop(deps) {
     logger = console,
     onEvent = () => {},
     evaluateGoal = null, // (state, cyclesDone) => { met, progressPct, axes } | null
+    shouldRatify = () => false,            // (moveUsd) => boolean
+    awaitRatify = null,                    // (payload) => Promise<'EXECUTE'|'HOLD'>
+    ratifyDeadlineMs = 15_000,
   } = deps
 
   let running = false
@@ -49,9 +52,22 @@ export function createAutonomousLoop(deps) {
     const verdicts = await stages.runCouncil(sim, state, config, playbook)
     const consensus = stages.evaluateConsensus(verdicts)
     emit({ type: 'council', cycleId,
-      verdicts: (verdicts ?? []).map((v) => ({ role: v.role, decision: v.decision, confidence: v.confidence, keyReason: v.keyReason })),
+      verdicts: (verdicts ?? []).map((v) => ({ role: v.role, decision: v.decision, confidence: v.confidence, keyReason: v.keyReason, citedRules: v.citedRules ?? [] })),
       consensus: { finalDecision: consensus.finalDecision, executeVotes: consensus.executeVotes, total: (consensus.executeVotes ?? 0) + (consensus.holdVotes ?? 0) },
     })
+
+    // Ratify gate — in-app approval for high-value moves (no wallet popup). Timeout/HOLD => skip.
+    const moveUsd = state?.positionsUsd ?? 0
+    if (consensus.finalDecision === 'EXECUTE' && awaitRatify && shouldRatify(moveUsd)) {
+      emit({ type: 'ratify:request', cycleId, decision: 'EXECUTE', moveUsd, deadlineMs: ratifyDeadlineMs })
+      const verdict = await awaitRatify({ cycleId, decision: 'EXECUTE', moveUsd, deadlineMs: ratifyDeadlineMs })
+      const approved = verdict === 'EXECUTE'
+      emit({ type: 'ratify:resolved', cycleId, approved })
+      if (!approved) {
+        emit({ type: 'execute', cycleId, outcome: 'held_unratified', txHash: null })
+        return finishCycle(cycleId, { cycleId, outcome: 'held_unratified', consensus }, state)
+      }
+    }
 
     const txResult = await stages.executeRebalance(consensus, sim, state, config)
     const outcome = consensus.finalDecision === 'EXECUTE' ? 'executed' : 'held'

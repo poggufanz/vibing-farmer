@@ -238,3 +238,68 @@ describe('loop events + goal stop', () => {
     expect(events.find((e) => e.type === 'stopped')?.reason).toBe('goal_met')
   })
 })
+
+describe('loop ratify gate', () => {
+  function ratifyStages() {
+    return {
+      loadConfig: async () => ({ minExpectedValueUSD: 0 }),
+      loadPlaybook: async () => [],
+      fetchState: async () => ({ positionsUsd: 200 }),
+      runGates: () => ({ pass: true, candidates: [] }),
+      runSimulation: async () => ({ expectedValue: 100, bull: {}, base: {}, bear: {}, weights: {} }),
+      runCouncil: async () => ([{ role: 'riskAuditor', decision: 'EXECUTE', confidence: 0.9, keyReason: 'ok', citedRules: ['defi-001'] }]),
+      evaluateConsensus: () => ({ finalDecision: 'EXECUTE', executeVotes: 3, holdVotes: 0 }),
+      executeRebalance: async () => ({ txHash: '0xabc' }),
+    }
+  }
+
+  it('executes without ratify when shouldRatify is false', async () => {
+    const events = []
+    const loop = createAutonomousLoop({
+      stages: ratifyStages(), onEvent: (e) => events.push(e),
+      shouldRatify: () => false,
+      awaitRatify: async () => 'HOLD',
+    })
+    const r = await loop.runOneCycle()
+    expect(r.outcome).toBe('executed')
+    expect(events.find((e) => e.type === 'ratify:request')).toBeUndefined()
+  })
+
+  it('requests ratify and executes on EXECUTE verdict', async () => {
+    const events = []
+    const loop = createAutonomousLoop({
+      stages: ratifyStages(), onEvent: (e) => events.push(e),
+      shouldRatify: () => true,
+      awaitRatify: async () => 'EXECUTE',
+    })
+    const r = await loop.runOneCycle()
+    expect(events.find((e) => e.type === 'ratify:request')?.moveUsd).toBe(200)
+    expect(events.find((e) => e.type === 'ratify:resolved')?.approved).toBe(true)
+    expect(r.outcome).toBe('executed')
+  })
+
+  it('holds (held_unratified) on HOLD verdict and skips execute', async () => {
+    const events = []
+    let executed = false
+    const stages = ratifyStages()
+    stages.executeRebalance = async () => { executed = true; return {} }
+    const loop = createAutonomousLoop({
+      stages, onEvent: (e) => events.push(e),
+      shouldRatify: () => true,
+      awaitRatify: async () => 'HOLD',
+    })
+    const r = await loop.runOneCycle()
+    expect(executed).toBe(false)
+    expect(r.outcome).toBe('held_unratified')
+    expect(events.find((e) => e.type === 'execute')?.outcome).toBe('held_unratified')
+  })
+
+  it('council event carries citedRules', async () => {
+    const events = []
+    const loop = createAutonomousLoop({
+      stages: ratifyStages(), onEvent: (e) => events.push(e), shouldRatify: () => false,
+    })
+    await loop.runOneCycle()
+    expect(events.find((e) => e.type === 'council')?.verdicts[0].citedRules).toEqual(['defi-001'])
+  })
+})
