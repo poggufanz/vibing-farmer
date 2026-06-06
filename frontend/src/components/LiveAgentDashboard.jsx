@@ -6,6 +6,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { subscribeLoop } from '../agents/agentController.js'
 import SimulationPlayback from './SimulationPlayback.jsx'
+import CouncilDebateDrawer from './CouncilDebateDrawer.jsx'
 
 const mono = { fontFamily: 'var(--font-mono)', fontSize: 10.5 }
 const panel = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px 16px' }
@@ -27,6 +28,8 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
   const [council, setCouncil] = useState(null)
   const [progress, setProgress] = useState(null)
   const [stopped, setStopped] = useState(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [ratify, setRatify] = useState({ active: false, cycleId: null })
   const decisionSeq = useRef(0)
 
   useEffect(() => {
@@ -46,6 +49,8 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
           })
           break
         case 'execute': setCycle((c) => ({ ...c, phase: e.outcome })); break
+        case 'ratify:request': setRatify({ active: true, cycleId: e.cycleId }); setDrawerOpen(true); break
+        case 'ratify:resolved': setRatify({ active: false, cycleId: null }); break
         case 'goal': setProgress(e); break
         case 'cycle:end': setCycle((c) => ({ ...c, phase: 'waiting' })); break
         case 'stopped': setStopped(e.reason); break
@@ -81,10 +86,19 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
 
       {/* COUNCIL */}
       <div style={panel}>
-        <div style={head}><span style={title}>Council</span>
-          <span style={{ ...mono, color: council ? DECISION_COLOR[council.consensus.finalDecision] : 'var(--text-muted)' }}>
-            {council ? council.consensus.finalDecision : 'idle'}
-          </span></div>
+        <div style={head}>
+          <span style={title}>Council</span>
+          <span style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+            {council && (
+              <button onClick={() => setDrawerOpen(true)} style={{ ...mono, appearance: 'none', background: 'transparent', border: '1px solid var(--border-strong)', borderRadius: 4, color: 'inherit', padding: '2px 7px', cursor: 'pointer' }}>
+                view debate
+              </button>
+            )}
+            <span style={{ ...mono, color: council ? DECISION_COLOR[council.consensus.finalDecision] : 'var(--text-muted)' }}>
+              {council ? council.consensus.finalDecision : 'idle'}
+            </span>
+          </span>
+        </div>
         {council ? council.verdicts.map((v, i) => (
           <div key={i} style={{ ...mono, display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
             <span style={{ color: 'var(--text-muted)' }}>{v.role}</span>
@@ -106,6 +120,14 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
           {gp?.axes?.profit && <span>profit ${gp.axes.profit.current?.toFixed?.(2)}/{gp.axes.profit.target}</span>}
         </div>
       </div>
+
+      <CouncilDebateDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        council={council}
+        sim={sim}
+        ratify={ratify}
+      />
     </div>
   )
 }
