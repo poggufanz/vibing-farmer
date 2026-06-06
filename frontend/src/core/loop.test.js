@@ -184,3 +184,57 @@ describe('start / stop — loop control', () => {
     expect(stages.fetchState).toHaveBeenCalledTimes(2)
   })
 })
+
+// --- Goal-based rework: stage events + graceful goal stop ---
+// NOTE: imports reuse the top-of-file `describe/it/expect/vi` + `createAutonomousLoop`.
+
+function passingStages(overrides = {}) {
+  return {
+    loadConfig: async () => ({ minExpectedValueUSD: 0 }),
+    loadPlaybook: async () => [],
+    fetchState: async () => ({ pools: [] }),
+    runGates: () => ({ pass: true, candidates: [] }),
+    runSimulation: async () => ({ expectedValue: 100, bull: {}, base: {}, bear: {}, weights: {} }),
+    runCouncil: async () => ([{ decision: 'EXECUTE', confidence: 0.9 }]),
+    evaluateConsensus: () => ({ finalDecision: 'EXECUTE', executeVotes: 3, total: 3 }),
+    executeRebalance: async () => ({}),
+    ...overrides,
+  }
+}
+
+describe('loop events + goal stop', () => {
+  it('emits ordered stage events for one cycle', async () => {
+    const events = []
+    const loop = createAutonomousLoop({
+      stages: passingStages(), onEvent: (e) => events.push(e.type),
+    })
+    await loop.runOneCycle()
+    expect(events).toEqual([
+      'cycle:start', 'state', 'gate', 'sim', 'council', 'execute', 'goal', 'cycle:end',
+    ])
+  })
+
+  it('graceful-stops the run loop when the goal is met', async () => {
+    let cycles = 0
+    const loop = createAutonomousLoop({
+      stages: passingStages(),
+      sleep: async () => {},
+      onEvent: () => { },
+      evaluateGoal: () => { cycles += 1; return { met: cycles >= 2, progressPct: cycles * 50, axes: {} } },
+    })
+    await loop.start()           // resolves only because goal stops it
+    expect(cycles).toBe(2)
+    expect(loop.running).toBe(false)
+  })
+
+  it('emits a stopped event with reason goal_met', async () => {
+    const events = []
+    const loop = createAutonomousLoop({
+      stages: passingStages(), sleep: async () => {},
+      onEvent: (e) => events.push(e),
+      evaluateGoal: () => ({ met: true, progressPct: 100, axes: {} }),
+    })
+    await loop.start()
+    expect(events.find((e) => e.type === 'stopped')?.reason).toBe('goal_met')
+  })
+})
