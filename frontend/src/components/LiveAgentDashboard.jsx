@@ -4,7 +4,7 @@
 // Pure presentation over the event stream; the loop is the source of truth.
 
 import React, { useEffect, useState, useRef } from 'react'
-import { subscribeLoop } from '../agents/agentController.js'
+import { subscribeLoop, stopAutonomousAgent } from '../agents/agentController.js'
 import SimulationFanChart from './SimulationFanChart.jsx'
 import CouncilDebateDrawer from './CouncilDebateDrawer.jsx'
 
@@ -30,14 +30,27 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
   const [stopped, setStopped] = useState(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [ratify, setRatify] = useState({ active: false, cycleId: null })
+  const [history, setHistory] = useState([])
+  const [narration, setNarration] = useState('Waiting for the first cycle…')
+  const [expanded, setExpanded] = useState(null)
   const decisionSeq = useRef(0)
 
   useEffect(() => {
     const off = subscribeLoop((e) => {
+      const note = (cycleId, n, text, patch = {}) => {
+        setNarration(text)
+        setHistory((h) => {
+          const idx = h.findIndex((c) => c.cycleId === cycleId)
+          if (idx === -1) return [{ n, cycleId, stages: [text], ...patch }, ...h].slice(0, 12)
+          const next = [...h]
+          next[idx] = { ...next[idx], stages: [...next[idx].stages, text], ...patch }
+          return next
+        })
+      }
       switch (e.type) {
-        case 'cycle:start': setCycle({ n: e.n, phase: 'fetching' }); break
-        case 'gate': setCycle((c) => ({ ...c, phase: e.pass ? 'simulating' : 'gated' })); break
-        case 'sim': setSim(e.timelines); setCycle((c) => ({ ...c, phase: 'deliberating' })); break
+        case 'cycle:start': setCycle({ n: e.n, phase: 'fetching' }); note(e.cycleId, e.n, `Cycle #${e.n} — fetching state`); break
+        case 'gate': setCycle((c) => ({ ...c, phase: e.pass ? 'simulating' : 'gated' })); note(e.cycleId, undefined, e.pass ? 'Gates passed' : `Gate blocked: ${e.reason}`); break
+        case 'sim': setSim(e.timelines); setCycle((c) => ({ ...c, phase: 'deliberating' })); note(e.cycleId, undefined, `Simulated timelines · E[value] $${Number(e.timelines?.expectedValue ?? 0).toFixed(2)}`); break
         case 'council':
           setCouncil(e)
           setCycle((c) => ({ ...c, phase: 'deciding' }))
@@ -47,8 +60,9 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
             reason: e.verdicts.find((v) => v.decision === e.consensus.finalDecision)?.keyReason ?? '',
             seq: decisionSeq.current,
           })
+          note(e.cycleId, undefined, `Council: ${e.consensus.finalDecision} (${e.consensus.executeVotes}/${e.consensus.total})`)
           break
-        case 'execute': setCycle((c) => ({ ...c, phase: e.outcome })); break
+        case 'execute': setCycle((c) => ({ ...c, phase: e.outcome })); note(e.cycleId, undefined, `Outcome: ${e.outcome}`, { outcome: e.outcome }); break
         case 'ratify:request': setRatify({ active: true, cycleId: e.cycleId }); setDrawerOpen(true); break
         case 'ratify:resolved': setRatify({ active: false, cycleId: null }); break
         case 'goal': setProgress(e); break
@@ -73,8 +87,13 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
           </span>
         </div>
         <div style={{ ...mono, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-          {stopped ? 'Goal reached — agent stopped gracefully.' : 'Running loop → simulation → council each cycle. No action needed.'}
+          {stopped ? 'Goal reached — agent stopped gracefully.' : narration}
         </div>
+        {!stopped && (
+          <button onClick={() => stopAutonomousAgent()} style={{ ...mono, marginTop: 10, appearance: 'none', background: 'transparent', border: '1px solid var(--border-strong)', borderRadius: 4, color: 'inherit', padding: '4px 10px', cursor: 'pointer' }}>
+            pause agent
+          </button>
+        )}
       </div>
 
       {/* SIMULATION */}
@@ -107,6 +126,28 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
             </span>
           </div>
         )) : <div style={{ ...mono, color: 'var(--text-muted)', opacity: 0.6 }}>specialists convene once the simulation completes</div>}
+      </div>
+
+      {/* CYCLE HISTORY */}
+      <div style={panel}>
+        <div style={head}><span style={title}>Cycle history</span>
+          <span style={{ ...mono, color: 'var(--text-muted)' }}>{history.length} recorded</span></div>
+        {history.length === 0 ? (
+          <div style={{ ...mono, color: 'var(--text-muted)', opacity: 0.6 }}>cycles appear here as they run</div>
+        ) : history.map((c) => (
+          <div key={c.cycleId} style={{ borderBottom: '1px solid var(--border)', padding: '6px 0' }}>
+            <button onClick={() => setExpanded(expanded === c.cycleId ? null : c.cycleId)}
+              style={{ ...mono, width: '100%', textAlign: 'left', appearance: 'none', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
+              <span>cycle #{c.n ?? '—'}</span>
+              <span style={{ color: c.outcome === 'executed' ? 'var(--ok)' : 'var(--text-muted)' }}>{c.outcome ?? 'running'}</span>
+            </button>
+            {expanded === c.cycleId && (
+              <div style={{ ...mono, color: 'var(--text-muted)', marginTop: 6, paddingLeft: 8, lineHeight: 1.7 }}>
+                {c.stages.map((s, i) => <div key={i}>· {s}</div>)}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* GOAL */}
