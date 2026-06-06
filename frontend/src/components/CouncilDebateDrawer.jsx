@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { submitRatify } from '../agents/agentController.js'
-import SimulationPlayback from './SimulationPlayback.jsx'
+import SimulationFanChart from './SimulationFanChart.jsx'
 
 const mono = { fontFamily: 'var(--font-mono)', fontSize: 11 }
 const DECISION_COLOR = { EXECUTE: 'var(--ok)', HOLD: 'var(--text-muted)' }
@@ -70,7 +70,7 @@ export default function CouncilDebateDrawer({ open, onClose, council, sim, ratif
         {sim && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ ...mono, color: 'var(--text-muted)', marginBottom: 6 }}>alternate timelines</div>
-            <SimulationPlayback timelines={sim} />
+            <SimulationFanChart timelines={sim} />
           </div>
         )}
 

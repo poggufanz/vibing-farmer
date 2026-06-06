@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState, useRef } from 'react'
 import { subscribeLoop } from '../agents/agentController.js'
-import SimulationPlayback from './SimulationPlayback.jsx'
+import SimulationFanChart from './SimulationFanChart.jsx'
 import CouncilDebateDrawer from './CouncilDebateDrawer.jsx'
 
 const mono = { fontFamily: 'var(--font-mono)', fontSize: 10.5 }
@@ -81,7 +81,7 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
       <div style={panel}>
         <div style={head}><span style={title}>Simulation</span>
           <span style={{ ...mono, color: 'var(--text-muted)' }}>{sim ? 'alternate timelines' : 'awaiting first cycle'}</span></div>
-        {sim ? <SimulationPlayback timelines={sim} /> : <div style={{ ...mono, color: 'var(--text-muted)', opacity: 0.6 }}>…</div>}
+        {sim ? <SimulationFanChart timelines={sim} /> : <div style={{ ...mono, color: 'var(--text-muted)', opacity: 0.6 }}>…</div>}
       </div>
 
       {/* COUNCIL */}
