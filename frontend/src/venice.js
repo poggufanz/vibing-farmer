@@ -6,9 +6,12 @@ import { saveStrategy, saveReasoning } from './history.js'
 import { loadSettings } from './settingsStore.js'
 import { hashStrategy } from './attestation.js'
 
-// AI provider priority: Venice x402 → DeepSeek (dev) → hardcoded fallback
+// AI provider chain: Venice x402 → DeepSeek → hardcoded fallback
+// Providers are tried in order; first success wins. DeepSeek (server proxy) is ALWAYS the
+// last network attempt before the hardcoded equal-split, so a Venice failure falls straight
+// through to DeepSeek instead of dropping to the static fallback.
 // Venice x402: wallet SIWE auth, pays USDC on Base — no API key needed
-// DeepSeek: dev mode, OpenAI-compat, needs API key
+// DeepSeek: OpenAI-compat — dev key direct, else server proxy (key stays server-side)
 // Fallback: hardcoded equal split — always works
 
 /**
@@ -41,30 +44,67 @@ async function callChatCompletions(url, model, headers, messages, isVenice, sign
   return content
 }
 
-function resolveProvider(veniceAuth, devApiKey) {
-  if (veniceAuth) return {
+// Ordered provider chain. Always ends with the DeepSeek server proxy so any earlier
+// provider (Venice, or a dev DeepSeek key) failing falls straight through to DeepSeek.
+function resolveProviderChain(veniceAuth, devApiKey) {
+  const chain = []
+  // 1. Venice x402 — wallet SIWE auth, pays USDC on Base, no API key
+  if (veniceAuth) chain.push({
     url: `${VENICE_BASE_URL}/chat/completions`,
     model: VENICE_MODEL,
     headers: { 'X-Sign-In-With-X': veniceAuth },
     isVenice: true,
-    name: 'venice-ai'
-  }
-  // Manual dev override: direct DeepSeek with a user-supplied key
-  if (devApiKey) return {
+    name: 'venice-ai',
+  })
+  // 2. DeepSeek direct — dev override with a user-supplied key
+  if (devApiKey) chain.push({
     url: `${DEEPSEEK_BASE_URL}/chat/completions`,
     model: DEEPSEEK_MODEL,
     headers: { 'Authorization': `Bearer ${devApiKey}` },
     isVenice: false,
-    name: 'deepseek-ai'
-  }
-  // Default (production): server-side proxy — key never reaches the client
-  return {
+    name: 'deepseek-ai',
+  })
+  // 3. DeepSeek via server proxy — always last network attempt; key stays server-side
+  chain.push({
     url: AI_PROXY_URL,
     model: DEEPSEEK_MODEL,
     headers: {},
     isVenice: false,
-    name: 'deepseek-proxy'
+    name: 'deepseek-proxy',
+  })
+  return chain
+}
+
+/**
+ * Try each provider in order; return the first successful raw content + the provider used.
+ * On external-signal abort (caller cancel / app timeout) stop immediately. Throws the last
+ * error only when EVERY provider fails — the caller then applies its hardcoded fallback.
+ * @param {Array} chain - from resolveProviderChain
+ * @param {Array} messages
+ * @param {AbortSignal} [signal] - caller-managed; when absent each attempt gets its own timeout
+ * @returns {Promise<{content:string, provider:object}>}
+ */
+async function callChain(chain, messages, signal) {
+  let lastErr
+  for (const provider of chain) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const controller = signal ? null : new AbortController()
+    const timeout = controller ? setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS) : null
+    try {
+      const content = await callChatCompletions(
+        provider.url, provider.model, provider.headers, messages, provider.isVenice,
+        signal || controller.signal,
+      )
+      return { content, provider }
+    } catch (err) {
+      lastErr = err
+      console.warn(`[ai] ${provider.name} failed: ${err.message}`)
+      if (signal?.aborted) throw err // external cancel/timeout — do not keep trying
+    } finally {
+      if (timeout) clearTimeout(timeout)
+    }
   }
+  throw lastErr ?? new Error('No AI provider available')
 }
 
 /**
@@ -112,11 +152,7 @@ export async function generateStrategy({ amount, riskLevel, numVaults, veniceAut
   const safeNumVaults = Math.min(numVaults, vaultData.length) // fixes high-risk fallback bug
 
   const effectiveDevKey = devApiKey || settings.veniceApiKey || null
-  const provider = resolveProvider(veniceAuth, effectiveDevKey)
-  if (!provider) {
-    console.warn('[ai] No provider — using fallback strategy')
-    return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData }
-  }
+  const chain = resolveProviderChain(veniceAuth, effectiveDevKey)
 
   const userPrompt = `User profile:
 - Amount: ${amount} USDC
@@ -127,20 +163,16 @@ export async function generateStrategy({ amount, riskLevel, numVaults, veniceAut
 
 Select optimal vault(s) from the catalog above. APY and TVL data are real-time from DeFiLlama. Consider live market context if present. Respond in JSON only.`
 
-  // Caller may pass a signal (app-managed 1-min timeout + confirm); else use an internal timeout
-  const controller = signal ? null : new AbortController()
-  const timeout = controller ? setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS) : null
-  const sig = signal || controller.signal
-
   try {
-    const content = await callChatCompletions(
-      provider.url, provider.model, provider.headers,
+    // Caller may pass a signal (app-managed 1-min timeout + confirm); else callChain
+    // gives each provider attempt its own timeout. Tries Venice, then DeepSeek.
+    const { content, provider } = await callChain(
+      chain,
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      provider.isVenice,
-      sig
+      signal,
     )
     const parsed = validateVeniceResponse(JSON.parse(content), vaultData)
     console.log(`[ai] Strategy via ${provider.name} · skill: ${skill.source} · vaults: ${vaultDataSource}`)
@@ -167,10 +199,8 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
     })
     return { ...parsed, generatedBy: provider.name, skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData, strategyHash, attestation: null }
   } catch (err) {
-    console.warn(`[ai] Strategy failed (${provider.name}), using fallback:`, err.message)
+    console.warn('[ai] Strategy failed (all providers), using fallback:', err.message)
     return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData }
-  } finally {
-    if (timeout) clearTimeout(timeout)
   }
 }
 
@@ -189,25 +219,16 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
  * @returns {Promise<string>} raw JSON string content
  */
 export async function completeJSON({ systemPrompt, userPrompt, veniceAuth = null, devApiKey = null, signal }) {
-  const provider = resolveProvider(veniceAuth, devApiKey)
-
-  const controller = signal ? null : new AbortController()
-  const timeout = controller ? setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS) : null
-  const sig = signal || controller.signal
-
-  try {
-    return await callChatCompletions(
-      provider.url, provider.model, provider.headers,
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      provider.isVenice,
-      sig,
-    )
-  } finally {
-    if (timeout) clearTimeout(timeout)
-  }
+  const chain = resolveProviderChain(veniceAuth, devApiKey)
+  const { content } = await callChain(
+    chain,
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    signal,
+  )
+  return content
 }
 
 /**
@@ -233,15 +254,11 @@ export async function generateAgentSkills({ agentId, vault, amount, veniceAuth, 
     approvedByUser: false
   }
 
-  const provider = resolveProvider(veniceAuth, devApiKey)
-  if (!provider) return fallback
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS)
+  const chain = resolveProviderChain(veniceAuth, devApiKey)
 
   try {
-    const content = await callChatCompletions(
-      provider.url, provider.model, provider.headers,
+    const { content, provider } = await callChain(
+      chain,
       [
         {
           role: 'system',
@@ -258,22 +275,19 @@ Respond with JSON schema:
     "swap": { "maxSlippage": 0.5, "dexPreference": "uniswap-v3", "maxRetries": 2, "timeoutSeconds": 30 },
     "deposit": { "maxAmount": "${Math.floor(amount * 1e6)}", "vaultAddress": "${vault}", "expiresAt": ${expiresAt} }
   },
-  "generatedBy": "${provider.name}",
+  "generatedBy": "ai",
   "approvedByUser": false
 }`
         }
       ],
-      provider.isVenice,
-      controller.signal
     )
     const result = JSON.parse(content)
+    result.generatedBy = provider.name
     console.log(`[ai] Skills via ${provider.name}`)
     return result
   } catch (err) {
-    console.warn(`[ai] Skill gen failed (${provider.name}), using fallback:`, err.message)
+    console.warn('[ai] Skill gen failed (all providers), using fallback:', err.message)
     return fallback
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
@@ -333,7 +347,7 @@ function validateVeniceResponse(response, vaultData = VAULT_CATALOG) {
 export async function classifyRisk(searchAnswer, protocol) {
   if (!searchAnswer || searchAnswer.length < 20) return 'none'
 
-  const provider = resolveProvider(null, null) // server proxy — key stays server-side
+  const chain = resolveProviderChain(null, null) // server proxy — key stays server-side
   const messages = [
     { role: 'system', content: 'You are a DeFi security analyst. Respond ONLY with JSON: {"severity":"high|medium|low|none"}.' },
     {
@@ -349,15 +363,11 @@ Classify the threat level for a user with funds deposited in ${protocol}:
     },
   ]
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS)
   try {
-    const content = await callChatCompletions(provider.url, provider.model, provider.headers, messages, provider.isVenice, controller.signal)
+    const { content } = await callChain(chain, messages)
     const word = String(JSON.parse(content).severity || '').toLowerCase()
     return ['high', 'medium', 'low', 'none'].includes(word) ? word : 'none'
   } catch {
     return 'none'
-  } finally {
-    clearTimeout(timeout)
   }
 }
