@@ -53,15 +53,15 @@ export default function StrategyConsole({ amount, setAmount, risk, setRisk, goal
     <section className="card enter">
       <div className="eyebrow">
         <span className="num">01</span>
-        <span>AI Strategy · goal-first · autonomous</span>
+        <span>AI strategy · goal-first autonomous</span>
         <span className="rule" />
-        <span>set once</span>
+        <span>Set once</span>
       </div>
 
-      <h1 className="h-display">Set your goal · the swarm farms toward it autonomously.</h1>
+      <h1 className="h-display">Set your goal. The swarm farms toward it autonomously.</h1>
       <p className="lede">
         Define the outcome you want, how much to deposit, and how much freedom the agent has.
-        The AI drafts the multi-agent strategy live. You grant permission once — no further wallet popups.
+        The AI drafts the multi-agent strategy live. You grant permission once, with no further wallet popups.
       </p>
 
       <div className="amount-block">
@@ -93,8 +93,8 @@ export default function StrategyConsole({ amount, setAmount, risk, setRisk, goal
           {AUTONOMY_LEVELS.map((l) => (
             <button key={l.id} type="button" onClick={() => setAutonomyLevel(l.id)}
               style={{ textAlign: 'left', appearance: 'none', cursor: 'pointer', borderRadius: 8, padding: '10px 12px',
-                background: autonomyLevel === l.id ? 'rgba(255,255,255,0.05)' : 'transparent',
-                border: `1px solid ${autonomyLevel === l.id ? 'var(--info)' : 'var(--border)'}`, color: 'inherit' }}>
+                background: autonomyLevel === l.id ? 'var(--accent-soft)' : 'transparent',
+                border: `1px solid ${autonomyLevel === l.id ? 'var(--border-accent)' : 'var(--border)'}`, color: 'inherit' }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>{l.label}</div>
               <div style={{ ...mono, color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.5 }}>{l.desc}</div>
             </button>
@@ -107,19 +107,19 @@ export default function StrategyConsole({ amount, setAmount, risk, setRisk, goal
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
           <span style={{ ...mono, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI strategy draft</span>
           <span style={{ ...mono, color: drafting ? 'var(--info)' : shown?.estimate ? 'var(--text-muted)' : 'var(--ok)' }}>
-            {drafting ? 'drafting…' : shown?.estimate ? 'local estimate' : shown ? 'live' : 'enter amount'}
+            {drafting ? 'Drafting…' : shown?.estimate ? 'Local estimate' : shown ? 'Live' : 'Enter amount'}
           </span>
         </div>
         {shown ? (
           <>
             <div style={{ ...mono, color: 'var(--text-muted)', marginBottom: 8 }}>
-              {agents.length} worker{agents.length > 1 ? 's' : ''} · blended APY {shown.blendedApy ?? '—'}%
+              {agents.length} worker{agents.length > 1 ? 's' : ''} · blended APY {shown.blendedApy ?? '-'}%
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
               {agents.map((a, i) => (
                 <div key={a.id ?? i} style={{ ...mono, padding: '8px 10px', background: 'var(--bg-input)', borderRadius: 6 }}>
-                  <div style={{ color: 'var(--info)' }}>{a.id ?? `worker-${i + 1}`}</div>
-                  <div style={{ color: 'var(--text-muted)', marginTop: 3 }}>{a.allocation ?? a.vault?.name ?? '—'} USDC</div>
+                  <div style={{ color: 'var(--text)' }}>{a.id ?? `worker-${i + 1}`}</div>
+                  <div style={{ color: 'var(--text-muted)', marginTop: 3 }}>{a.allocation ?? a.vault?.name ?? '-'} USDC</div>
                 </div>
               ))}
             </div>

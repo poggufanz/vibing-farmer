@@ -18,10 +18,10 @@ function VerdictRow({ v, revealed }) {
         <span style={{ ...mono, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{v.role}</span>
         <span style={{ ...mono, color: DECISION_COLOR[v.decision] ?? 'var(--text-muted)' }}>{v.decision} · {(v.confidence ?? 0).toFixed(2)}</span>
       </div>
-      <div style={{ fontSize: 12.5, marginTop: 4, lineHeight: 1.5 }}>{v.keyReason || '—'}</div>
+      <div style={{ fontSize: 12.5, marginTop: 4, lineHeight: 1.5 }}>{v.keyReason || 'No stated reason'}</div>
       {v.citedRules?.length > 0 && (
         <div style={{ ...mono, color: 'var(--info)', opacity: 0.8, marginTop: 4 }}>
-          cites {v.citedRules.join(', ')}
+          Cites {v.citedRules.join(', ')}
         </div>
       )}
     </div>
@@ -57,19 +57,19 @@ export default function CouncilDebateDrawer({ open, onClose, council, sim, ratif
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>AI Council · debate</div>
-          <button onClick={onClose} style={{ ...mono, appearance: 'none', background: 'transparent', border: '1px solid var(--border-strong)', borderRadius: 4, color: 'inherit', padding: '3px 8px', cursor: 'pointer' }}>close</button>
+          <button onClick={onClose} style={{ ...mono, appearance: 'none', background: 'transparent', border: '1px solid var(--border-strong)', borderRadius: 4, color: 'inherit', padding: '3px 8px', cursor: 'pointer' }}>Close</button>
         </div>
 
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
           {STAGES.map((s, i) => (
             <span key={s} style={{ ...mono, padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.05em',
-              background: i <= stageIdx ? 'var(--info)' : 'var(--bg-input)', color: i <= stageIdx ? '#000' : 'var(--text-muted)' }}>{s}</span>
+              background: i <= stageIdx ? 'var(--accent)' : 'var(--bg-input)', color: i <= stageIdx ? 'var(--accent-fg)' : 'var(--text-muted)' }}>{s}</span>
           ))}
         </div>
 
         {sim && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ ...mono, color: 'var(--text-muted)', marginBottom: 6 }}>alternate timelines</div>
+            <div style={{ ...mono, color: 'var(--text-muted)', marginBottom: 6 }}>Alternate timelines</div>
             <SimulationFanChart timelines={sim} />
           </div>
         )}
@@ -78,14 +78,14 @@ export default function CouncilDebateDrawer({ open, onClose, council, sim, ratif
 
         {stageIdx >= 1 && dissent && (
           <div style={{ ...mono, color: 'var(--text-muted)', marginTop: 12, padding: '10px 12px', background: 'var(--bg-input)', borderRadius: 6, lineHeight: 1.6 }}>
-            critic · weakest case is <strong style={{ color: 'inherit' }}>{dissent.role}</strong> at {(dissent.confidence ?? 0).toFixed(2)} — {dissent.keyReason}
+            Critic · weakest case is <strong style={{ color: 'inherit' }}>{dissent.role}</strong> at {(dissent.confidence ?? 0).toFixed(2)}. {dissent.keyReason}
           </div>
         )}
 
         {stageIdx >= 2 && consensus && (
           <div style={{ marginTop: 16 }}>
             <div style={{ ...mono, color: DECISION_COLOR[consensus.finalDecision] ?? 'var(--text-muted)', marginBottom: 10 }}>
-              consensus · {consensus.finalDecision} ({consensus.executeVotes}/{consensus.total} execute)
+              Consensus · {consensus.finalDecision} ({consensus.executeVotes}/{consensus.total} execute)
             </div>
             {canRatify && (
               <div style={{ display: 'flex', gap: 8 }}>

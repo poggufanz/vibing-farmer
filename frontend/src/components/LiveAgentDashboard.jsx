@@ -11,7 +11,7 @@ import CouncilDebateDrawer from './CouncilDebateDrawer.jsx'
 const mono = { fontFamily: 'var(--font-mono)', fontSize: 10.5 }
 const panel = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px 16px' }
 const head = { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }
-const title = { fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-muted)' }
+const title = { fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em', color: 'var(--text)' }
 const DECISION_COLOR = { EXECUTE: 'var(--ok)', HOLD: 'var(--text-muted)' }
 
 function Bar({ pct }) {
@@ -48,7 +48,7 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
         })
       }
       switch (e.type) {
-        case 'cycle:start': setCycle({ n: e.n, phase: 'fetching' }); note(e.cycleId, e.n, `Cycle #${e.n} — fetching state`); break
+        case 'cycle:start': setCycle({ n: e.n, phase: 'fetching' }); note(e.cycleId, e.n, `Cycle #${e.n}: fetching state`); break
         case 'gate': setCycle((c) => ({ ...c, phase: e.pass ? 'simulating' : 'gated' })); note(e.cycleId, undefined, e.pass ? 'Gates passed' : `Gate blocked: ${e.reason}`); break
         case 'sim': setSim(e.timelines); setCycle((c) => ({ ...c, phase: 'deliberating' })); note(e.cycleId, undefined, `Simulated timelines · E[value] $${Number(e.timelines?.expectedValue ?? 0).toFixed(2)}`); break
         case 'council':
@@ -83,15 +83,15 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
         <div style={head}>
           <span style={title}>Loop</span>
           <span style={{ ...mono, color: stopped ? 'var(--text-muted)' : 'var(--ok)' }}>
-            {stopped ? `stopped · ${stopped}` : `cycle #${cycle.n} · ${cycle.phase}`}
+            {stopped ? `Stopped · ${stopped}` : `Cycle #${cycle.n} · ${cycle.phase}`}
           </span>
         </div>
         <div style={{ ...mono, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-          {stopped ? 'Goal reached — agent stopped gracefully.' : narration}
+          {stopped ? 'Goal reached. Agent stopped gracefully.' : narration}
         </div>
         {!stopped && (
           <button onClick={() => stopAutonomousAgent()} style={{ ...mono, marginTop: 10, appearance: 'none', background: 'transparent', border: '1px solid var(--border-strong)', borderRadius: 4, color: 'inherit', padding: '4px 10px', cursor: 'pointer' }}>
-            pause agent
+            Pause agent
           </button>
         )}
       </div>
@@ -99,7 +99,7 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
       {/* SIMULATION */}
       <div style={panel}>
         <div style={head}><span style={title}>Simulation</span>
-          <span style={{ ...mono, color: 'var(--text-muted)' }}>{sim ? 'alternate timelines' : 'awaiting first cycle'}</span></div>
+          <span style={{ ...mono, color: 'var(--text-muted)' }}>{sim ? 'Alternate timelines' : 'Awaiting first cycle'}</span></div>
         {sim ? <SimulationFanChart timelines={sim} /> : <div style={{ ...mono, color: 'var(--text-muted)', opacity: 0.6 }}>…</div>}
       </div>
 
@@ -110,11 +110,11 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
           <span style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
             {council && (
               <button onClick={() => setDrawerOpen(true)} style={{ ...mono, appearance: 'none', background: 'transparent', border: '1px solid var(--border-strong)', borderRadius: 4, color: 'inherit', padding: '2px 7px', cursor: 'pointer' }}>
-                view debate
+                View debate
               </button>
             )}
             <span style={{ ...mono, color: council ? DECISION_COLOR[council.consensus.finalDecision] : 'var(--text-muted)' }}>
-              {council ? council.consensus.finalDecision : 'idle'}
+              {council ? council.consensus.finalDecision : 'Idle'}
             </span>
           </span>
         </div>
@@ -125,7 +125,7 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
               {v.decision} ({(v.confidence ?? 0).toFixed(2)})
             </span>
           </div>
-        )) : <div style={{ ...mono, color: 'var(--text-muted)', opacity: 0.6 }}>specialists convene once the simulation completes</div>}
+        )) : <div style={{ ...mono, color: 'var(--text-muted)', opacity: 0.6 }}>Specialists convene once the simulation completes.</div>}
       </div>
 
       {/* CYCLE HISTORY */}
@@ -133,12 +133,12 @@ export default function LiveAgentDashboard({ goal, onCouncilDecision }) {
         <div style={head}><span style={title}>Cycle history</span>
           <span style={{ ...mono, color: 'var(--text-muted)' }}>{history.length} recorded</span></div>
         {history.length === 0 ? (
-          <div style={{ ...mono, color: 'var(--text-muted)', opacity: 0.6 }}>cycles appear here as they run</div>
+          <div style={{ ...mono, color: 'var(--text-muted)', opacity: 0.6 }}>Cycles appear here as they run.</div>
         ) : history.map((c) => (
           <div key={c.cycleId} style={{ borderBottom: '1px solid var(--border)', padding: '6px 0' }}>
             <button onClick={() => setExpanded(expanded === c.cycleId ? null : c.cycleId)}
               style={{ ...mono, width: '100%', textAlign: 'left', appearance: 'none', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
-              <span>cycle #{c.n ?? '—'}</span>
+              <span>Cycle #{c.n ?? '-'}</span>
               <span style={{ color: c.outcome === 'executed' ? 'var(--ok)' : 'var(--text-muted)' }}>{c.outcome ?? 'running'}</span>
             </button>
             {expanded === c.cycleId && (

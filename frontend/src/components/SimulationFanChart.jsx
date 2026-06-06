@@ -35,12 +35,12 @@ export default function SimulationFanChart({ timelines }) {
       <path d={band} fill="var(--ok)" opacity="0.08" />
       <path d={path(bull)} stroke="var(--ok)" strokeWidth="1.5" fill="none" />
       <path d={path(base)} stroke="var(--info)" strokeWidth="1.5" fill="none" />
-      <path d={path(bear)} stroke="var(--text-muted)" strokeWidth="1.5" fill="none" />
+      <path d={path(bear)} stroke="var(--danger)" strokeWidth="1.5" fill="none" />
       <circle cx={x1} cy={yb(ev)} r="3.5" fill="var(--info)" />
 
       <text x={x1 + 2} y={yb(bull)} style={mono} fill="var(--ok)" dominantBaseline="middle">bull ${bull.toFixed(1)} ({(w.bull * 100).toFixed(0)}%)</text>
       <text x={x1 + 2} y={yb(base)} style={mono} fill="var(--info)" dominantBaseline="middle">base ${base.toFixed(1)} ({(w.base * 100).toFixed(0)}%)</text>
-      <text x={x1 + 2} y={yb(bear)} style={mono} fill="var(--text-muted)" dominantBaseline="middle">bear ${bear.toFixed(1)} ({(w.bear * 100).toFixed(0)}%)</text>
+      <text x={x1 + 2} y={yb(bear)} style={mono} fill="var(--danger)" dominantBaseline="middle">bear ${bear.toFixed(1)} ({(w.bear * 100).toFixed(0)}%)</text>
       <text x={x0} y={H - 6} style={mono} fill="var(--text-muted)">now</text>
       <text x={(x0 + x1) / 2} y={14} style={{ ...mono, fontSize: 11 }} fill="var(--info)" textAnchor="middle">E[value] ${ev.toFixed(2)}</text>
     </svg>

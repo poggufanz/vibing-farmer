@@ -34,11 +34,11 @@ export default function RatifyPrompt() {
     <div role="alertdialog" aria-live="assertive" style={{
       position: 'fixed', right: 24, bottom: 24, zIndex: 80, width: 320,
       background: 'var(--bg-card)', border: '1px solid var(--border-strong)',
-      borderLeft: '3px solid var(--info)', borderRadius: 10, padding: '14px 16px',
+      borderLeft: '3px solid var(--accent)', borderRadius: 10, padding: '14px 16px',
       boxShadow: '0 10px 40px rgba(0,0,0,0.4)',
     }}>
-      <div style={{ ...mono, color: 'var(--info)', letterSpacing: '0.04em', marginBottom: 6 }}>
-        ⚖ Council wants to EXECUTE
+      <div style={{ ...mono, color: 'var(--accent)', letterSpacing: '0.04em', marginBottom: 6 }}>
+        Council wants to EXECUTE
       </div>
       <div style={{ ...mono, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 10 }}>
         High-value move · ${Number(req.moveUsd).toFixed(2)}. Approve within{' '}
