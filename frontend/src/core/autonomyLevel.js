@@ -9,8 +9,8 @@ export const AUTONOMY_LEVELS = [
 ]
 
 const SCOPES = {
-  conservative: { minCooldownHours: 12, whitelistOnly: true, requireApprovalAboveUsd: 50 },
-  balanced: { minCooldownHours: 6, whitelistOnly: true, requireApprovalAboveUsd: null },
+  conservative: { minCooldownHours: 12, whitelistOnly: true, requireApprovalAboveUsd: 0 },
+  balanced: { minCooldownHours: 6, whitelistOnly: true, requireApprovalAboveUsd: 100 },
   full: { minCooldownHours: 0, whitelistOnly: false, requireApprovalAboveUsd: null },
 }
 

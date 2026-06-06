@@ -14,6 +14,14 @@ describe('resolveAutonomyScope', () => {
     expect(resolveAutonomyScope().level).toBe('balanced')
   })
 
+  it('conservative ratifies every move (ceiling 0)', () => {
+    expect(resolveAutonomyScope('conservative').requireApprovalAboveUsd).toBe(0)
+  })
+
+  it('balanced ratifies only high-value moves (ceiling 100)', () => {
+    expect(resolveAutonomyScope('balanced').requireApprovalAboveUsd).toBe(100)
+  })
+
   it('full control removes whitelist + approval ceiling and zeroes cooldown', () => {
     const s = resolveAutonomyScope('full')
     expect(s.whitelistOnly).toBe(false)
