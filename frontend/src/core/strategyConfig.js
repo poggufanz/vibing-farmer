@@ -1,5 +1,6 @@
 import { VAULT_CATALOG } from '../config.js'
 import { loadSettings } from '../settingsStore.js'
+import { resolveAutonomyScope } from './autonomyLevel.js'
 
 export const STRATEGY_DEFAULTS = {
   riskTolerance: 'moderate',
@@ -16,6 +17,8 @@ export const STRATEGY_DEFAULTS = {
   },
 }
 
+export const LOOP_PROFILE_INTERVAL_MS = { demo: 20_000, real: 30 * 60 * 1000 }
+
 /**
  * Pure builder — derives the loop config from wallet + settings + catalog.
  * @param {object} args
@@ -29,6 +32,9 @@ export function buildStrategyConfig({ walletAddress, permissionContext = null, c
   const whitelist = catalog.map((v) => v.protocol)
   const watchedPools = catalog.map((v) => v.address)
 
+  const scope = resolveAutonomyScope(settings.autonomyLevel)
+  const intervalMs = LOOP_PROFILE_INTERVAL_MS[settings.loopProfile] ?? LOOP_PROFILE_INTERVAL_MS.demo
+
   return {
     walletAddress,
     permissionContext,
@@ -36,9 +42,15 @@ export function buildStrategyConfig({ walletAddress, permissionContext = null, c
     minExpectedValueUSD: settings.minExpectedValueUSD ?? STRATEGY_DEFAULTS.minExpectedValueUSD,
     maxSlippageBps: settings.maxSlippageBps ?? STRATEGY_DEFAULTS.maxSlippageBps,
     loopIntervalMinutes: settings.loopIntervalMinutes ?? STRATEGY_DEFAULTS.loopIntervalMinutes,
-    whitelist,
+    intervalMs,
+    autonomyLevel: scope.level,
+    whitelist: scope.whitelistOnly ? whitelist : [],   // [] = no whitelist restriction (full control)
     watchedPools,
-    thresholds: { ...STRATEGY_DEFAULTS.thresholds, ...(settings.thresholds ?? {}) },
+    thresholds: {
+      ...STRATEGY_DEFAULTS.thresholds,
+      ...(settings.thresholds ?? {}),
+      MIN_COOLDOWN_HOURS: scope.minCooldownHours,       // autonomy + demo profile relax the churn gate
+    },
   }
 }
 

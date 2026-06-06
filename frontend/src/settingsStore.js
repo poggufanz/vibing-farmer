@@ -13,6 +13,9 @@ export const SETTINGS_KEYS = {
   alertBanner: 'yv_alert_banner',           // boolean
   timestampFormat: 'yv_timestamp_format',   // 'relative' | 'absolute'
   language: 'yv_language',                  // 'en' | 'id'
+  autonomyLevel: 'yv_autonomy_level',       // 'conservative' | 'balanced' | 'full'
+  loopProfile: 'yv_loop_profile',           // 'demo' (~20s) | 'real' (30min)
+  revokeOnStop: 'yv_revoke_on_stop',        // boolean
 }
 
 export const SETTINGS_DEFAULTS = {
@@ -26,6 +29,9 @@ export const SETTINGS_DEFAULTS = {
   alertBanner: true,
   timestampFormat: 'relative',
   language: 'en',
+  autonomyLevel: 'balanced',     // 'conservative' | 'balanced' | 'full'
+  loopProfile: 'demo',           // 'demo' (~20s) | 'real' (30min)
+  revokeOnStop: false,           // revoke the session grant when the goal stops the loop
 }
 
 // Secret API keys live in sessionStorage, not localStorage: they clear on tab

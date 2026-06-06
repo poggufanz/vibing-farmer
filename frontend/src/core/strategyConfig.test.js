@@ -27,7 +27,19 @@ describe('buildStrategyConfig', () => {
     expect(cfg.minExpectedValueUSD).toBe(15)
     expect(cfg.riskTolerance).toBe('moderate')
     expect(cfg.thresholds.MAX_GAS_USD).toBe(25)
-    expect(cfg.thresholds.MIN_COOLDOWN_HOURS).toBe(12)
+    // Cooldown now comes from the autonomy scope; default autonomy is 'balanced' (6h).
+    expect(cfg.thresholds.MIN_COOLDOWN_HOURS).toBe(6)
+  })
+
+  it('derives interval + autonomy scope: full control zeroes cooldown and drops whitelist', () => {
+    const cfg = buildStrategyConfig({
+      walletAddress: '0xUser', catalog: CATALOG,
+      settings: { autonomyLevel: 'full', loopProfile: 'demo' },
+    })
+    expect(cfg.intervalMs).toBe(20_000)
+    expect(cfg.autonomyLevel).toBe('full')
+    expect(cfg.thresholds.MIN_COOLDOWN_HOURS).toBe(0)
+    expect(cfg.whitelist).toEqual([]) // no whitelist restriction under full control
   })
 
   it('maps risk tolerance from settings when provided', () => {
