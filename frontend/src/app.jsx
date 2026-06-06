@@ -5,7 +5,7 @@
 import React, { useState as useS, useEffect as useE, useRef as useR } from 'react';
 import { isDevMode } from './devFlag.js';
 
-import { Icon, Sidebar, TopBar, StepRail, STEPS } from './components.jsx';
+import { Icon, Sidebar, TopBar, StepRail, STEPS, GoalStatusBar } from './components.jsx';
 import {
   InputScreen, ThinkingCard, ConnectCard,
   PermissionCard, SuccessCard, shortAddr, fakeHash,
@@ -34,7 +34,7 @@ import { getReadProvider } from './readProvider.js';
 import SkillDrawer from './components/SkillDrawer.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
 import { saveTransaction } from './history.js';
-import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEvent, harvestVault, emergencyWithdraw } from './agents/agentController.js';
+import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEvent, harvestVault, emergencyWithdraw, startAutonomousAgent, stopAutonomousAgent, subscribeLoop } from './agents/agentController.js';
 import AgentDashboard from './components/AgentDashboard.jsx';
 import HomePage from './components/HomePage.jsx';
 import LandingHero from './components/LandingHero.jsx';
@@ -45,6 +45,13 @@ import { WalletPanel, PermissionPanel, SkillPanel, PalettePicker, PALETTES } fro
 import VerificationPanel from './components/VerificationPanel.jsx';
 import AICouncilPanel from './components/AICouncilPanel.jsx';
 import AutonomousLoopPanel from './components/AutonomousLoopPanel.jsx';
+import GoalDefinition from './components/GoalDefinition.jsx';
+import WorkerReview from './components/WorkerReview.jsx';
+import LiveAgentDashboard from './components/LiveAgentDashboard.jsx';
+import CouncilDecisionToast from './components/CouncilDecisionToast.jsx';
+import { loadGoal, saveGoal } from './goal/goalConfig.js';
+import { evaluateGoal } from './goal/goalTracker.js';
+import { getCurrentPortfolioAPY } from './core/gates.js';
 import { runNarration } from './narration/councilNarrator.js';
 import { saveSessionMemory, loadLatestSession } from './memory/sessionMemory.js';
 import { loadSettings, saveSetting } from './settingsStore.js';
@@ -187,6 +194,8 @@ const App = () => {
 
   // Unified flow: verification gate + AI-council narration + restored memory
   const [verifyOpen, setVerifyOpen] = useS(false);   // RightRail shows VerificationPanel
+  const [goal, setGoal] = useS(() => loadGoal());
+  const [councilToast, setCouncilToast] = useS(null); // { decision, reason, seq }
   const [narration, setNarration] = useS(null);      // AI-council narration result
   const [narrating, setNarrating] = useS(false);
   const sessionMetaRef = useR(null);                 // { sessionId, startedAt }
@@ -409,6 +418,18 @@ const App = () => {
     return () => { unsub(); stopBackgroundAgent(); };
   }, [stage, agentEnabled, realAddress, strategy]);
 
+  // Live flow: react to loop stop (goal met) -> complete stage; raise council toasts.
+  useE(() => {
+    if (stage !== "execute") return;
+    const off = subscribeLoop((e) => {
+      if (e.type === "stopped" && e.reason === "goal_met") {
+        setStage("done");
+        addLog({ event: "AgentCompleted", meta: "goal reached · autonomous loop stopped" });
+      }
+    });
+    return off;
+  }, [stage]);
+
   const dismissAlert = (id) => setAgentData((d) => ({ ...d, alerts: d.alerts.filter((a) => a.id !== id) }));
 
   const handleHarvestNow = async (alert) => {
@@ -524,12 +545,19 @@ const App = () => {
   const handleAcceptStrategy = () => {
     if (strategy?.agents) {
       const sk = {};
-      strategy.agents.forEach((a) => { sk[a.id] = { state: "approved", skill: null }; });
+      strategy.agents.forEach((a) => { sk[a.id] = { state: "approved", skill: skillStates[a.id]?.skill ?? null }; });
       setSkillStates(sk);
     }
+    saveGoal(goal);
     if (!realAddress) { setStage("connect"); return; } // safety fallback
+    setStage("review");
+    addLog({ event: "OrchestratorPlanned", meta: "strategy accepted · review workers" });
+  };
+
+  const handleReviewApprove = () => {
     setVerifyOpen(true);
-    addLog({ event: "OrchestratorPlanned", meta: "strategy accepted · awaiting verification" });
+    setStage("permission");
+    addLog({ event: "OrchestratorPlanned", meta: "workers approved · awaiting permission" });
   };
 
   const handleRegenerate = () => {
@@ -660,6 +688,26 @@ const App = () => {
       setPermError(err.message);
       addLog({ event: "AgentFailed", meta: `permission denied: ${err.message}` });
     }
+  };
+
+  const buildEvaluateGoal = () => {
+    const principalUsd = Number(amount) || 0;
+    return (state, cyclesDone) => {
+      const apyPct = (() => { try { return getCurrentPortfolioAPY(state); } catch { return 0; } })();
+      const valueUsd = Number(state?.positionsUsd ?? principalUsd) || principalUsd;
+      return evaluateGoal(goal, { apyPct, valueUsd, principalUsd }, cyclesDone);
+    };
+  };
+
+  const startContinuousAgent = (ctx) => {
+    if (!realAddress) return;
+    startAutonomousAgent({
+      walletAddress: realAddress,
+      permissionContext: ctx ?? permContext ?? null,
+      goal,
+      evaluateGoal: buildEvaluateGoal(),
+    });
+    addLog({ event: "OrchestratorPlanned", meta: "autonomous loop started · running until goal" });
   };
 
   const startNarration = () => {
@@ -938,6 +986,7 @@ const App = () => {
       });
     }
     addLog({ event: "OrchestratorPlanned", meta: `multi-agent deployment finalized · ${strategy?.agents?.length} positions opened` });
+    startContinuousAgent(permContext);
 
     try {
       const meta = sessionMetaRef.current || { sessionId: `session-${Date.now()}`, startedAt: Date.now() };
@@ -964,6 +1013,7 @@ const App = () => {
   };
 
   const handleAgain = () => {
+    stopAutonomousAgent();
     setStage("strategy");
     navigate('/strategy');
     setFurthest(0);
@@ -1001,6 +1051,7 @@ const App = () => {
   const handleLanguageChange = (lang) => { setLanguage(lang); saveSetting("language", lang); };
   const handleDisconnect = () => {
     stopBackgroundAgent();
+    stopAutonomousAgent();
     setRealAddress(null); setConnectPhase("idle"); setPermActive(false); setPermContext(null); setPermExpiresAt(null); setVeniceAuth(null);
     addLog({ event: "PermissionRevoked", meta: "wallet disconnected · session cleared" });
   };
@@ -1067,7 +1118,22 @@ const App = () => {
           return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} onSubmit={handleSubmitPreference} />;
         if (strategyPhase === "thinking")
           return <ThinkingCard phase={thinkingPhase} times={thinkTimes} />;
-        return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} strategyHash={rawStrategy?.strategyHash} attestation={strategyAttestation} attesting={attesting} />;
+        return (
+          <>
+            <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} strategyHash={rawStrategy?.strategyHash} attestation={strategyAttestation} attesting={attesting} />
+            <GoalDefinition goal={goal} onChange={setGoal} />
+          </>
+        );
+      case "review":
+        return (
+          <WorkerReview
+            strategy={strategy}
+            skillStates={skillStates}
+            onEditSkill={(id) => { setOpenAgentId(id); setSkillDrawerOpen(true); }}
+            onApprove={handleReviewApprove}
+            onCancel={() => setStage("strategy")}
+          />
+        );
       case "connect":
         return <ConnectCard phase={connectPhase} error={connectError} mmVersion={mmVersion} onConnect={handleConnect} onUpgrade={handleUpgrade} onDone={handleConnectDone} onCancel={() => { setConnectPhase("idle"); setStage("strategy"); }} />;
       case "skills":
@@ -1175,12 +1241,15 @@ const App = () => {
           } />
           <Route path="/strategy" element={
             <>
-              <StepRail stage={stage} furthest={furthest} onStepClick={goBack} lang={language} />
+              <GoalStatusBar stage={stage} />
               <div className="stage" key={`${stage}-${strategyPhase}`}>
                 {renderStage()}
                 {(stage === "execute" || stage === "done") && (
                   <div style={{ maxWidth: 820, margin: "16px auto 0", width: "100%" }}>
-                    <AutonomousLoopPanel walletAddress={realAddress} permissionContext={permContext} />
+                    <LiveAgentDashboard
+                      goal={goal}
+                      onCouncilDecision={(d) => setCouncilToast(d)}
+                    />
                   </div>
                 )}
               </div>
@@ -1249,6 +1318,12 @@ const App = () => {
           onClose={() => setOpenAgentId(null)}
         />
       )}
+
+      <CouncilDecisionToast
+        decision={councilToast?.decision}
+        reason={councilToast?.reason}
+        seq={councilToast?.seq}
+      />
 
       {slowConfirm && (
         <div className="modal-backdrop">

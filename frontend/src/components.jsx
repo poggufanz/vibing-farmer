@@ -146,4 +146,25 @@ const StepRail = ({ stage, furthest = 0, onStepClick, lang = "en" }) => {
   );
 };
 
-export { Icon, Sidebar, TopBar, StepRail, STEPS };
+const PHASE_LABEL = {
+  strategy: "Configure your goal",
+  review: "Review your agent swarm",
+  permission: "Grant permission once",
+  execute: "Running autonomously",
+  done: "Goal reached",
+};
+const GoalStatusBar = ({ stage }) => {
+  const label = PHASE_LABEL[stage] ?? "";
+  if (!label) return null;
+  return (
+    <div className="goal-status" style={{
+      display: "flex", alignItems: "center", gap: 10, padding: "10px 0 16px",
+      fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.03em",
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: stage === "execute" ? "var(--ok)" : "var(--border-strong)" }} />
+      {label}
+    </div>
+  );
+};
+
+export { Icon, Sidebar, TopBar, StepRail, STEPS, GoalStatusBar };
