@@ -48,6 +48,7 @@ import GoalDefinition from './components/GoalDefinition.jsx';
 import WorkerReview from './components/WorkerReview.jsx';
 import LiveAgentDashboard from './components/LiveAgentDashboard.jsx';
 import CouncilDecisionToast from './components/CouncilDecisionToast.jsx';
+import RatifyPrompt from './components/RatifyPrompt.jsx';
 import { loadGoal, saveGoal } from './goal/goalConfig.js';
 import { evaluateGoal } from './goal/goalTracker.js';
 import { getCurrentPortfolioAPY } from './core/gates.js';
@@ -1441,6 +1442,7 @@ const App = () => {
           ))}
         </div>
       </TweaksPanel>}
+      <RatifyPrompt />
     </div>
   );
 };
