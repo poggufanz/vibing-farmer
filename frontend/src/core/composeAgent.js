@@ -67,6 +67,9 @@ export function createVibingFarmerAgent({
   onEvent = () => {},
   evaluateGoal = null,
   goal = null,
+  shouldRatify = () => false,
+  awaitRatify = null,
+  ratifyDeadlineMs = 15_000,
   scheduler = { setInterval: globalThis.setInterval.bind(globalThis), clearInterval: globalThis.clearInterval.bind(globalThis) },
   overrides = {},
 } = {}) {
@@ -83,7 +86,7 @@ export function createVibingFarmerAgent({
     createOutcomeEvaluator({ decisionLog, reflector, catalog: VAULT_CATALOG, logger })
 
   const stages = buildStages({ walletAddress, permissionContext, decisionLog, playbookStore, logger })
-  const loop = createAutonomousLoop({ stages, intervalMs, logger, onEvent, evaluateGoal })
+  const loop = createAutonomousLoop({ stages, intervalMs, logger, onEvent, evaluateGoal, shouldRatify, awaitRatify, ratifyDeadlineMs })
 
   let evaluatorTimer = null
 
