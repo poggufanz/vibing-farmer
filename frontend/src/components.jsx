@@ -153,15 +153,18 @@ const PHASE_LABEL = {
   execute: "Running autonomously",
   done: "Goal reached",
 };
-const GoalStatusBar = ({ stage }) => {
-  const label = PHASE_LABEL[stage] ?? "";
+const GoalStatusBar = ({ stage, goalReached = false }) => {
+  // The autonomous loop runs under the "done" stage after the initial deposit. Show
+  // "Running autonomously" until the loop graceful-stops on goal_met, then "Goal reached".
+  const running = stage === "execute" || (stage === "done" && !goalReached);
+  const label = stage === "done" && !goalReached ? "Running autonomously" : (PHASE_LABEL[stage] ?? "");
   if (!label) return null;
   return (
     <div className="goal-status" style={{
       display: "flex", alignItems: "center", gap: 10, padding: "10px 0 16px",
       fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.03em",
     }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: stage === "execute" ? "var(--ok)" : "var(--border-strong)" }} />
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: running ? "var(--ok)" : "var(--border-strong)" }} />
       {label}
     </div>
   );

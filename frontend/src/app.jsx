@@ -44,7 +44,6 @@ import SettingsPage from './components/SettingsPage.jsx';
 import { WalletPanel, PermissionPanel, SkillPanel, PalettePicker, PALETTES } from './components/RightRail.jsx';
 import VerificationPanel from './components/VerificationPanel.jsx';
 import AICouncilPanel from './components/AICouncilPanel.jsx';
-import AutonomousLoopPanel from './components/AutonomousLoopPanel.jsx';
 import GoalDefinition from './components/GoalDefinition.jsx';
 import WorkerReview from './components/WorkerReview.jsx';
 import LiveAgentDashboard from './components/LiveAgentDashboard.jsx';
@@ -196,6 +195,7 @@ const App = () => {
   const [verifyOpen, setVerifyOpen] = useS(false);   // RightRail shows VerificationPanel
   const [goal, setGoal] = useS(() => loadGoal());
   const [councilToast, setCouncilToast] = useS(null); // { decision, reason, seq }
+  const [goalReached, setGoalReached] = useS(false);  // loop graceful-stopped on goal_met
   const [narration, setNarration] = useS(null);      // AI-council narration result
   const [narrating, setNarrating] = useS(false);
   const sessionMetaRef = useR(null);                 // { sessionId, startedAt }
@@ -418,17 +418,20 @@ const App = () => {
     return () => { unsub(); stopBackgroundAgent(); };
   }, [stage, agentEnabled, realAddress, strategy]);
 
-  // Live flow: react to loop stop (goal met) -> complete stage; raise council toasts.
+  // Live flow: the autonomous loop runs under the "done" stage — handleExecDone already
+  // moved us there once the initial deposit landed. Watch for the graceful goal-stop to
+  // mark the goal reached (flips GoalStatusBar from "Running" to "Goal reached"), and
+  // honor the "revoke on stop" setting by clearing the session scope.
   useE(() => {
-    if (stage !== "execute") return;
     const off = subscribeLoop((e) => {
       if (e.type === "stopped" && e.reason === "goal_met") {
-        setStage("done");
+        setGoalReached(true);
         addLog({ event: "AgentCompleted", meta: "goal reached · autonomous loop stopped" });
+        if (loadSettings().revokeOnStop) { handleRevoke(); stopAutonomousAgent(); }
       }
     });
     return off;
-  }, [stage]);
+  }, []);
 
   const dismissAlert = (id) => setAgentData((d) => ({ ...d, alerts: d.alerts.filter((a) => a.id !== id) }));
 
@@ -1014,6 +1017,7 @@ const App = () => {
 
   const handleAgain = () => {
     stopAutonomousAgent();
+    setGoalReached(false);
     setStage("strategy");
     navigate('/strategy');
     setFurthest(0);
@@ -1052,6 +1056,7 @@ const App = () => {
   const handleDisconnect = () => {
     stopBackgroundAgent();
     stopAutonomousAgent();
+    setGoalReached(false);
     setRealAddress(null); setConnectPhase("idle"); setPermActive(false); setPermContext(null); setPermExpiresAt(null); setVeniceAuth(null);
     addLog({ event: "PermissionRevoked", meta: "wallet disconnected · session cleared" });
   };
@@ -1241,7 +1246,7 @@ const App = () => {
           } />
           <Route path="/strategy" element={
             <>
-              <GoalStatusBar stage={stage} />
+              <GoalStatusBar stage={stage} goalReached={goalReached} />
               <div className="stage" key={`${stage}-${strategyPhase}`}>
                 {renderStage()}
                 {(stage === "execute" || stage === "done") && (
