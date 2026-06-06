@@ -10,6 +10,8 @@ import {
 import { loadSettings, saveSetting, SETTINGS_DEFAULTS } from '../settingsStore.js'
 import { getHistorySummary, clearTransactions, clearStrategies, clearReasoningLog, clearAllHistory } from '../history.js'
 import { fmtRemaining } from '../ui.js'
+import { AUTONOMY_LEVELS } from '../core/autonomyLevel.js'
+import FullControlModal from './FullControlModal.jsx'
 
 const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '-')
 const eyebrow = { fontSize: 11, letterSpacing: '0.01em', color: 'var(--text-muted)', textTransform: 'capitalize', fontWeight: 500 }
@@ -108,6 +110,7 @@ export default function SettingsPage({
   const [s, setS] = useState(loadSettings)
   const [test, setTest] = useState({ venice: 'idle', tavily: 'idle' })
   const [confirmClear, setConfirmClear] = useState(false)
+  const [fullControlOpen, setFullControlOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [, setTick] = useState(0)
   const refresh = () => setTick((x) => x + 1)
@@ -175,6 +178,39 @@ export default function SettingsPage({
         <Section title="Execution Settings">
           <Row label="Autonomous Agent" desc="When enabled, agent monitors positions and alerts you in the background automatically.">
             <Toggle on={agentEnabled} onChange={(v) => setAgentEnabled?.(v)} onLabel="Enable" offLabel="Disable" />
+          </Row>
+          <Divider />
+          <SubLabel>Autonomy Level</SubLabel>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {AUTONOMY_LEVELS.map((lvl) => {
+              const active = (s.autonomyLevel ?? 'balanced') === lvl.id
+              return (
+                <label key={lvl.id} style={{
+                  display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px', cursor: 'pointer',
+                  border: `1px solid ${active ? (lvl.id === 'full' ? 'var(--danger)' : 'var(--accent, var(--border-strong))') : 'var(--border)'}`,
+                  borderRadius: 8, background: active ? 'rgba(255,255,255,0.04)' : 'transparent',
+                }}>
+                  <input type="radio" name="autonomyLevel" checked={active} onChange={() => {
+                    if (lvl.id === 'full' && !active) { setFullControlOpen(true); return }
+                    set('autonomyLevel', lvl.id)
+                  }} />
+                  <span>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: lvl.id === 'full' ? 'var(--danger)' : 'inherit' }}>{lvl.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>{lvl.desc}</div>
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+          <Divider />
+          <Row label="Loop cadence" desc="Demo runs cycles every ~20s so you can watch the agent live. Real cadence rebalances every 30 minutes.">
+            <select value={s.loopProfile ?? 'demo'} onChange={(e) => set('loopProfile', e.target.value)} style={inputStyle}>
+              <option value="demo">Demo (~20s)</option>
+              <option value="real">Real (30 min)</option>
+            </select>
+          </Row>
+          <Row label="Revoke on stop" desc="When the goal is reached, revoke the session permission as the agent stops.">
+            <Toggle on={!!s.revokeOnStop} onChange={(v) => set('revokeOnStop', v)} />
           </Row>
           <Divider />
           <SubLabel>Harvest Settings</SubLabel>
@@ -353,6 +389,11 @@ export default function SettingsPage({
           </div>
         </Section>
       </div>
+      <FullControlModal
+        open={fullControlOpen}
+        onCancel={() => setFullControlOpen(false)}
+        onConfirm={() => { set('autonomyLevel', 'full'); setFullControlOpen(false) }}
+      />
     </div>
   )
 }
