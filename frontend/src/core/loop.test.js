@@ -210,7 +210,7 @@ describe('loop events + goal stop', () => {
     })
     await loop.runOneCycle()
     expect(events).toEqual([
-      'cycle:start', 'state', 'gate', 'sim', 'council', 'execute', 'goal', 'cycle:end',
+      'cycle:start', 'playbook', 'fetch', 'state', 'gate', 'sim', 'council', 'execute', 'goal', 'cycle:end',
     ])
   })
 
@@ -236,6 +236,20 @@ describe('loop events + goal stop', () => {
     })
     await loop.start()
     expect(events.find((e) => e.type === 'stopped')?.reason).toBe('goal_met')
+  })
+
+  it('emits fetch and playbook observability events each cycle', async () => {
+    const events = []
+    const loop = createAutonomousLoop({
+      stages: passingStages(), sleep: async () => {},
+      onEvent: (e) => events.push(e),
+    })
+    await loop.runOneCycle()
+    const types = events.map((e) => e.type)
+    expect(types).toContain('fetch')
+    expect(types).toContain('playbook')
+    expect(types.indexOf('fetch')).toBeLessThan(types.indexOf('state'))
+    expect(types.indexOf('playbook')).toBeLessThan(types.indexOf('council'))
   })
 })
 
