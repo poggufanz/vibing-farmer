@@ -41,3 +41,6 @@ planning/
 docs/superpowers/
 .playwright-mcp/
 .kiro/
+graphify-out/
+
+design/agentdashboard/
