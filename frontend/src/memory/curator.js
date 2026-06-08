@@ -142,7 +142,11 @@ export async function runCurator(insight, decision, playbook, deps = {}) {
  * @returns {(insight:object, decision:object, playbook:Array)=>Promise<Array>}
  */
 export function createCurator(deps = {}) {
-  const { analyzer, now, maxSize, logger } = deps
-  return (insight, decision, playbook) =>
-    runCurator(insight, decision, playbook, { analyzer, now, maxSize, logger })
+  const { analyzer, now, maxSize, logger, onMemoryEvent } = deps
+  return async (insight, decision, playbook) => {
+    const before = playbook?.length ?? 0
+    const next = await runCurator(insight, decision, playbook, { analyzer, now, maxSize, logger })
+    onMemoryEvent?.({ stage: 'curator', payload: { rules: next.length, added: Math.max(0, next.length - before) } })
+    return next
+  }
 }

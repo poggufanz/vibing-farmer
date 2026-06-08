@@ -196,13 +196,14 @@ export function createOutcomeEvaluator(deps) {
     capDays,
     now,
     logger,
+    onMemoryEvent,
   } = deps
 
   const catalogApyByVault = buildCatalogApyMap(catalog)
 
   return {
-    run: () =>
-      runOutcomeEvaluator({
+    run: async () => {
+      const result = await runOutcomeEvaluator({
         decisionLog,
         fetchApyHistory,
         catalogApyByVault,
@@ -211,7 +212,10 @@ export function createOutcomeEvaluator(deps) {
         capDays,
         now,
         logger,
-      }),
+      })
+      onMemoryEvent?.({ stage: 'eval', payload: result })
+      return result
+    },
   }
 }
 

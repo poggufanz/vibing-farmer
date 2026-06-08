@@ -65,6 +65,7 @@ export function createVibingFarmerAgent({
   logger = console,
   intervalMs,
   onEvent = () => {},
+  onMemoryEvent = () => {},
   evaluateGoal = null,
   goal = null,
   shouldRatify = () => false,
@@ -76,14 +77,16 @@ export function createVibingFarmerAgent({
   const decisionLog = createDecisionLog(storage.decisionLog ? { storage: storage.decisionLog } : {})
   const playbookStore = createPlaybookStore(storage.playbook ? { storage: storage.playbook } : {})
 
-  // ACE evolution chain: analyzer ← curator ← reflector
-  const analyzer = createAnalyzer({ logger })
-  const curator = createCurator({ analyzer, logger })
-  const reflector = createReflector({ playbookStore, curator, logger })
+  // ACE evolution chain: analyzer ← curator ← reflector — each publishes its
+  // result to the memory bus so the dashboard's late-pipeline stages light up
+  // as the async (delayed-evaluation) engines complete, in real time.
+  const analyzer = createAnalyzer({ logger, onMemoryEvent })
+  const curator = createCurator({ analyzer, logger, onMemoryEvent })
+  const reflector = createReflector({ playbookStore, curator, logger, onMemoryEvent })
 
   const outcomeEvaluator =
     overrides.outcomeEvaluator ??
-    createOutcomeEvaluator({ decisionLog, reflector, catalog: VAULT_CATALOG, logger })
+    createOutcomeEvaluator({ decisionLog, reflector, catalog: VAULT_CATALOG, logger, onMemoryEvent })
 
   const stages = buildStages({ walletAddress, permissionContext, decisionLog, playbookStore, logger })
   const loop = createAutonomousLoop({ stages, intervalMs, logger, onEvent, evaluateGoal, shouldRatify, awaitRatify, ratifyDeadlineMs })

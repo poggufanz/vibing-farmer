@@ -183,6 +183,11 @@ const defaultAiComplete = async (p) => {
  * @returns {(playbook:Array)=>Promise<Array>}
  */
 export function createAnalyzer(deps = {}) {
-  const { aiComplete = defaultAiComplete, now, threshold, logger } = deps
-  return (playbook) => runBulletpointAnalyzer(playbook, { aiComplete, now, threshold, logger })
+  const { aiComplete = defaultAiComplete, now, threshold, logger, onMemoryEvent } = deps
+  return async (playbook) => {
+    const before = playbook?.length ?? 0
+    const result = await runBulletpointAnalyzer(playbook, { aiComplete, now, threshold, logger })
+    onMemoryEvent?.({ stage: 'bullet', payload: { merged: Math.max(0, before - result.length) } })
+    return result
+  }
 }

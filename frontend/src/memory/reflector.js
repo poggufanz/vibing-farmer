@@ -178,7 +178,10 @@ const defaultAiComplete = async (p) => {
  * @returns {(decision:object, outcome:object)=>Promise<Array>}
  */
 export function createReflector(deps) {
-  const { playbookStore, aiComplete = defaultAiComplete, curator, minAccuracyPct, logger } = deps
-  return (decision, outcome) =>
-    runReflector(decision, outcome, { playbookStore, aiComplete, curator, minAccuracyPct, logger })
+  const { playbookStore, aiComplete = defaultAiComplete, curator, minAccuracyPct, logger, onMemoryEvent } = deps
+  return async (decision, outcome) => {
+    const playbook = await runReflector(decision, outcome, { playbookStore, aiComplete, curator, minAccuracyPct, logger })
+    onMemoryEvent?.({ stage: 'reflector', payload: { tagged: dedupeCitedRules(decision.citedRules).length, rules: playbook.length } })
+    return playbook
+  }
 }
