@@ -80,15 +80,39 @@
       "skillPath": "skills/docs-generator/SKILL.md",
       "computedHash": "d1cbbf0a9e5b8c3e7a1e5b2c3a4f5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4"
     },
+    "documentation-and-adrs": {
+      "source": "addyosmani/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/documentation-and-adrs/SKILL.md",
+      "computedHash": "d751b98cb2894feb833af869f397aaaadd9a3a679882331c1a5b254e8ed1399a"
+    },
     "finance-expert": {
       "source": "personamanagmentlayer/pcl",
       "sourceType": "github",
       "computedHash": "83ff6d943fe47f1cec6c79b2d364303c2e058366c3fdfc6bc5938539cc914b33"
     },
+    "grill-with-docs": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/grill-with-docs/SKILL.md",
+      "computedHash": "7c212cee6a823b956aaec7dff2a846814fe9986caa2e62313734010c7bd3db70"
+    },
+    "handoff": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/handoff/SKILL.md",
+      "computedHash": "3fdffd9dce6fc3e9f9f756ba79d694c5f162e11c7e7fbc72a0958f204312e0b1"
+    },
     "humanizer": {
       "source": "softaworks/agent-toolkit",
       "sourceType": "github",
       "computedHash": "c948e831d5fdfbe2e1fbbba1ebf8ab410a8f077ba529ddd522fd9ae40e6cc653"
+    },
+    "improve-codebase-architecture": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
+      "computedHash": "5d9444ffe5c240f2d20081c42c547112e1b8c372375a14e4c98df4d94bde11e1"
     },
     "machine-learning-engineer": {
       "source": "404kidwiz/claude-supercode-skills",
