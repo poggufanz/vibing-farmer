@@ -139,3 +139,47 @@ export function enforceActionSpace(proposed, state) {
   const allocations = pool.map((p) => ({ ...p, allocation: +((Number(p.allocation) || 0) / sum).toFixed(4) }))
   return { allocations, violations }
 }
+
+const TURBULENCE_MULTIPLIER = { calm: 1, elevated: 1.3, turbulent: 1.8 }
+
+/**
+ * Project the reward of a strategy BEFORE execution. FinRL reward = delta portfolio
+ * value; here we project it as risk-adjusted expected yield on deployed capital.
+ * @param {Array<{address:string, allocation:number, expected_apy?:number, apy?:number, risk_tier?:string, drawdown?:number}>} allocations weights sum to 1.0
+ * @param {Object} state StrategyState
+ * @returns {{ blendedApy:number, riskPenalty:number, riskAdjustedScore:number, projectedAnnualUsdc:number, turbulence:string }}
+ */
+export function scoreReward(allocations, state) {
+  const byAddr = new Map(state.universe.map((v) => [v.address.toLowerCase(), v]))
+  let blended = 0
+  let drawWeighted = 0
+  let riskWeighted = 0
+  ;(allocations || []).forEach((a) => {
+    const obs = byAddr.get(String(a.address).toLowerCase()) || {}
+    const w = Number(a.allocation) || 0
+    const apy = Number(a.expected_apy != null ? a.expected_apy : (a.apy != null ? a.apy : obs.apy)) || 0
+    const draw = Math.abs(Number(a.drawdown != null ? a.drawdown : obs.drawdown) || 0)
+    blended += w * apy
+    drawWeighted += w * draw
+    riskWeighted += w * (RISK_RANK[normalizeRisk(a.risk_tier || obs.riskTier)] + 1)
+  })
+  const turbMult = TURBULENCE_MULTIPLIER[state.market.turbulence] || 1
+  const riskPenalty = +(drawWeighted * turbMult).toFixed(2)
+  const riskAdjustedScore = +(blended / (riskWeighted || 1)).toFixed(2)
+  const projectedAnnualUsdc = +((blended / 100) * (state.capital.amountUsdc || 0)).toFixed(2)
+  return { blendedApy: +blended.toFixed(2), riskPenalty, riskAdjustedScore, projectedAnnualUsdc, turbulence: state.market.turbulence }
+}
+
+/**
+ * Realized reward AFTER execution — closes the RL loop from agent memory entries.
+ * @param {Array<{gasUsed?:number, slippageActual?:number, status?:string}>} memoryEntries
+ * @returns {{ successRate:number, avgSlippage:number, totalGas:number }}
+ */
+export function realizedReward(memoryEntries) {
+  const e = memoryEntries || []
+  if (!e.length) return { successRate: 0, avgSlippage: 0, totalGas: 0 }
+  const ok = e.filter((m) => m.status === 'success').length
+  const slip = e.reduce((s, m) => s + (Number(m.slippageActual) || 0), 0)
+  const gas = e.reduce((s, m) => s + (Number(m.gasUsed) || 0), 0)
+  return { successRate: +(ok / e.length).toFixed(2), avgSlippage: +(slip / e.length).toFixed(3), totalGas: gas }
+}

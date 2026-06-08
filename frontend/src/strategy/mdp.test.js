@@ -111,3 +111,45 @@ describe('enforceActionSpace', () => {
     expect(ACTION_SPACE.allocate.constraint).toMatch(/sum to 1\.0/)
   })
 })
+
+import { scoreReward, realizedReward } from './mdp.js'
+
+describe('scoreReward (projected reward)', () => {
+  const state = buildStrategyState({ amountUsdc: 10000, riskLevel: 'high', numVaults: 2, vaultData: UNIVERSE, marketContext: null })
+  it('computes the allocation-weighted blended APY', () => {
+    const r = scoreReward([
+      { address: '0xAAA', allocation: 0.5, expected_apy: 4.8, risk_tier: 'low', drawdown: -1.2 },
+      { address: '0xCCC', allocation: 0.5, expected_apy: 9.4, risk_tier: 'high', drawdown: -6.5 },
+    ], state)
+    expect(r.blendedApy).toBeCloseTo(7.1, 2)
+  })
+  it('projects annual USDC yield on deployed capital', () => {
+    const r = scoreReward([{ address: '0xAAA', allocation: 1, expected_apy: 5, risk_tier: 'low', drawdown: -1 }], state)
+    expect(r.projectedAnnualUsdc).toBeCloseTo(500, 2) // 5% of 10000
+  })
+  it('a turbulent market inflates the risk penalty', () => {
+    const calm = buildStrategyState({ amountUsdc: 1000, riskLevel: 'high', numVaults: 1, vaultData: UNIVERSE, marketContext: null })
+    const turbulent = buildStrategyState({ amountUsdc: 1000, riskLevel: 'high', numVaults: 1, vaultData: UNIVERSE, marketContext: 'exploit drained pool' })
+    const alloc = [{ address: '0xCCC', allocation: 1, expected_apy: 9.4, risk_tier: 'high', drawdown: -6.5 }]
+    expect(scoreReward(alloc, turbulent).riskPenalty).toBeGreaterThan(scoreReward(alloc, calm).riskPenalty)
+  })
+  it('risk-adjusted score rewards safer allocations per unit of risk', () => {
+    const lowOnly = scoreReward([{ address: '0xAAA', allocation: 1, expected_apy: 4.8, risk_tier: 'low', drawdown: -1.2 }], state)
+    expect(lowOnly.riskAdjustedScore).toBeGreaterThan(0)
+  })
+})
+
+describe('realizedReward (closes the RL loop from memory)', () => {
+  it('returns zeros for no entries', () => {
+    expect(realizedReward([])).toEqual({ successRate: 0, avgSlippage: 0, totalGas: 0 })
+  })
+  it('aggregates success rate, avg slippage, and total gas', () => {
+    const r = realizedReward([
+      { status: 'success', slippageActual: 0.12, gasUsed: 45000 },
+      { status: 'failed', slippageActual: 0.30, gasUsed: 21000 },
+    ])
+    expect(r.successRate).toBe(0.5)
+    expect(r.avgSlippage).toBeCloseTo(0.21, 3)
+    expect(r.totalGas).toBe(66000)
+  })
+})
