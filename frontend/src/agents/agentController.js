@@ -1,12 +1,10 @@
 // agentController.js
 // Main-thread controller. Spawns the worker, routes its messages, asks Venice AI to
 // classify risk, and triggers execution via the existing 1Shot/relay flow.
-// Step 14: also exports startAutonomousAgent/stopAutonomousAgent for the composition root.
 
 import { saveTransaction } from '../history.js'
 import { relayHarvest, relayWithdraw } from '../relay.js'
 import { classifyRisk } from '../venice.js'
-import { createVibingFarmerAgent } from '../core/composeAgent.js'
 
 let worker = null
 let currentConfig = null
@@ -99,29 +97,4 @@ export async function emergencyWithdraw(vaultAddress, amount, userAddress) {
  *  entry with the real vault metadata. Returns { txHash, status }. */
 export async function withdrawFromVault(vaultAddress, amount, userAddress) {
   return relayWithdraw({ user: userAddress, vault: vaultAddress, amount })
-}
-
-// ─── Autonomous loop lifecycle (Step 14 composition root) ────────────────────
-// Separate from the demo parallel-deposit agent (startBackgroundAgent) — this is the
-// ongoing autonomous rebalance loop backed by the full stages pipeline.
-
-let _autonomousAgent = null
-
-/**
- * Start the autonomous rebalance loop. Idempotent — if already running, returns the
- * existing agent. Callers fire-and-forget; the loop runs until stopAutonomousAgent().
- * @param {{ walletAddress: string, permissionContext?: string }} opts
- * @returns {object} agent handle { loop, outcomeEvaluator, decisionLog, playbookStore }
- */
-export function startAutonomousAgent({ walletAddress, permissionContext }) {
-  if (_autonomousAgent) return _autonomousAgent
-  _autonomousAgent = createVibingFarmerAgent({ walletAddress, permissionContext })
-  _autonomousAgent.start()
-  return _autonomousAgent
-}
-
-/** Stop the autonomous rebalance loop and clear the outcome evaluator schedule. */
-export function stopAutonomousAgent() {
-  _autonomousAgent?.stop()
-  _autonomousAgent = null
 }

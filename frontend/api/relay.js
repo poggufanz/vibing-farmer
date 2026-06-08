@@ -53,17 +53,6 @@ function depositorAddress() {
   )
 }
 
-// Vault allowlist — prevents the funded server wallet from wasting gas on
-// executeAgentDeposit calls that will revert (contract enforces scope, but
-// the relay wallet still pays gas for the revert).
-// Set ALLOWED_VAULT_ADDRESSES=0xA,0xB,... in .env. When unset, all valid
-// addresses are forwarded (permissive default — contract is the final guard).
-function vaultAllowlist() {
-  const raw = process.env.ALLOWED_VAULT_ADDRESSES
-  if (!raw) return null
-  return new Set(raw.split(',').map((a) => a.trim().toLowerCase()))
-}
-
 // Warm-process caches — survive across calls in the same dev middleware process
 // or warm serverless lambda. Re-resolved from the API on cold start.
 let _client = null
@@ -169,15 +158,8 @@ export default async function handler(req, res) {
     return res.end(JSON.stringify({ error: 'Relay proxy not configured', configured: false }))
   }
 
-  let body
   try {
-    body = await readBody(req)
-  } catch {
-    res.statusCode = 400
-    return res.end(JSON.stringify({ error: 'Invalid JSON' }))
-  }
-
-  try {
+    const body = await readBody(req)
     const action = body.action
 
     if (action === 'wallet') {
@@ -201,9 +183,6 @@ export default async function handler(req, res) {
       if (!ADDRESS_RE.test(user || '')) return bad(res, 'Invalid user address')
       if (!ADDRESS_RE.test(vault || '')) return bad(res, 'Invalid vault address')
       if (!UINT_RE.test(String(amount ?? ''))) return bad(res, 'Invalid amount')
-      // Vault allowlist — reject unknown vaults to avoid burning relay wallet gas on reverts.
-      const allowlist = vaultAllowlist()
-      if (allowlist && !allowlist.has(vault.toLowerCase())) return bad(res, 'Vault not in allowlist')
 
       const wallet = await resolveServerWallet(client, bizId)
       const methodId = await resolveContractMethod(client, bizId, depositor, wallet.id)
