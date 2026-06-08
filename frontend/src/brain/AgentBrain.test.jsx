@@ -1,7 +1,9 @@
 // frontend/src/brain/AgentBrain.test.jsx
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render, screen, act, fireEvent, cleanup } from '@testing-library/react'
 import { AgentBrain } from './AgentBrain.jsx'
+
+afterEach(cleanup)
 
 function makeFakeAgentFactory() {
   let onEvent = () => {}
@@ -25,6 +27,27 @@ describe('AgentBrain container', () => {
     agent.push({ type: 'cycle:start', cycleId: 'c1', n: 1284, at: 0 })
     agent.push({ type: 'state', cycleId: 'c1', portfolioApy: 8.2, positionsUsd: 100 })
     expect(screen.getByText(/8.2/)).toBeTruthy()
+  })
+
+  it('flips Start → Stop → Start (stop control is not wedged on cycleId)', () => {
+    const agent = makeFakeAgentFactory()
+    render(<AgentBrain createAgent={agent} memoryBus={{ subscribe: () => () => {} }} />)
+    // idle: Start control visible
+    fireEvent.click(screen.getByText('Start cycle'))
+    // confirm modal → authorize starts the loop
+    fireEvent.click(screen.getByText(/authorize/i))
+    expect(screen.getByText('Stop')).toBeTruthy()
+    // clicking Stop must return to idle, not stay wedged on "Stop"
+    fireEvent.click(screen.getByText('Stop'))
+    expect(screen.getByText('Start cycle')).toBeTruthy()
+  })
+
+  it('a stopped event returns the control to idle', () => {
+    const agent = makeFakeAgentFactory()
+    render(<AgentBrain createAgent={agent} memoryBus={{ subscribe: () => () => {} }} autoStart />)
+    expect(screen.getByText('Stop')).toBeTruthy()
+    agent.push({ type: 'stopped', reason: 'user' })
+    expect(screen.getByText('Start cycle')).toBeTruthy()
   })
 
   it('shows decision toast on a council EXECUTE consensus', () => {

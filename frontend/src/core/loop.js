@@ -29,7 +29,7 @@ export function createAutonomousLoop(deps) {
 
     const config = await stages.loadConfig()
     const playbook = await stages.loadPlaybook()
-    emit({ type: 'playbook', cycleId, rules: Array.isArray(playbook?.rules) ? playbook.rules.length : (playbook?.length ?? null) })
+    emit({ type: 'playbook', cycleId, rules: Array.isArray(playbook) ? playbook : (playbook?.rules ?? []) })
 
     const fetchStart = now()
     const state = await stages.fetchState(config)

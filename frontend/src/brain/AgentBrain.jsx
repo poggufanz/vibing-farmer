@@ -96,6 +96,10 @@ export function AgentBrain({ createAgent, memoryBus, autoStart = false }) {
   const [decisionToast, setDecisionToast] = useState(null)
   const [statusIdx, setStatusIdx] = useState(0)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // Loop active flag — drives the Start/Stop control. Set true on start(), cleared
+  // on stop() and on the loop's `stopped` event. NOT derived from cycleId (which
+  // lingers between cycles, leaving the control wedged on "Stop" forever).
+  const [running, setRunning] = useState(autoStart)
   const [specialists, setSpecialists] = useState({ riskAuditor: true, gasChecker: true, strategyGuard: true })
   const agentRef = useRef(null)
 
@@ -117,6 +121,7 @@ export function AgentBrain({ createAgent, memoryBus, autoStart = false }) {
       }
     }
     if (ev.type === 'execute') setOpen('execution')
+    if (ev.type === 'stopped') setRunning(false)
   }, [])
 
   useEffect(() => {
@@ -143,7 +148,7 @@ export function AgentBrain({ createAgent, memoryBus, autoStart = false }) {
   }, [])
 
   const revealed = STAGE_META.slice(0, Math.max(pipeline.revealedCount, autoStart ? 1 : 0))
-  const cycleState = pipeline.cycleId != null ? 'running' : 'idle'
+  const cycleState = running ? 'running' : 'idle'
   const activeIdx = STAGE_IDS.findIndex((id) => pipeline.stages.find((s) => s.id === id)?.state === 'running')
 
   const handleStartRequest = () => setConfirmOpen(true)
@@ -152,14 +157,18 @@ export function AgentBrain({ createAgent, memoryBus, autoStart = false }) {
     setConfirmOpen(false)
     setPipeline(initialPipeline())
     setOpen('state')
+    setRunning(true)
     agentRef.current?.start?.()
   }
-  const handleStop = () => agentRef.current?.stop?.()
+  const handleStop = () => {
+    setRunning(false)
+    agentRef.current?.stop?.()
+  }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: T.bgBase }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: T.bgBase }}>
       <Sidebar />
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Topbar cycle={pipeline.cyclesDone + 1} />
         <StepRail activeStep="execute" />
         <RunControl
@@ -170,7 +179,7 @@ export function AgentBrain({ createAgent, memoryBus, autoStart = false }) {
           onStart={handleStartRequest}
           onStop={handleStop}
         />
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {revealed.map((m) => {
             const Card = STAGE_COMPONENTS[m.id]
             const stage = pipeline.stages.find((s) => s.id === m.id)

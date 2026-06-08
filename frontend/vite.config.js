@@ -45,7 +45,8 @@ export default defineConfig(({ mode }) => {
       include: ['react-force-graph-2d']
     },
     test: {
-      environment: 'jsdom'
+      environment: 'jsdom',
+      exclude: ['**/node_modules/**', '**/e2e/**']
     }
   }
 })

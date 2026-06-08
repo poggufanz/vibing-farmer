@@ -36,6 +36,11 @@ desktop.ini
 # Context mode cache
 .ctx/
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+
 # Planning (personal notes, not for repo)
 planning/
 docs/superpowers/
