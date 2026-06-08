@@ -10,7 +10,15 @@
 // NEVER persisted or bundled. It only holds redemption authority scoped under the
 // user's freshly-signed root grant, and is discarded on reload. Same rationale as
 // the orchestrator key in redelegation.js.
-import { createWalletClient, custom } from 'viem'
+//
+// TRANSPORT: a local-account wallet client signs locally then broadcasts via
+// `eth_sendRawTransaction` — MetaMask's injected provider does NOT expose that
+// method to dapps (wallets gate raw broadcast to avoid nonce conflicts), so
+// `custom(window.ethereum)` makes every redemption fail and silently fall back
+// to the user-signed on-chain path (a popup, every time — worse than before).
+// Broadcast straight to the chain RPC instead, exactly like redelegation.js.
+import { createWalletClient, http } from 'viem'
+import { baseSepolia as chain } from 'viem/chains'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { erc7710WalletActions } from '@metamask/smart-accounts-kit/actions'
 
@@ -30,7 +38,8 @@ export function initSession({ permissionContext, delegationManager }) {
   sessionAccount = privateKeyToAccount(generatePrivateKey())
   sessionClient = createWalletClient({
     account: sessionAccount,
-    transport: custom(window.ethereum),
+    chain,
+    transport: http(import.meta.env.VITE_RPC_URL || 'https://sepolia.base.org'),
   }).extend(erc7710WalletActions())
 
   activeContext = permissionContext
