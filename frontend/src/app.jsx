@@ -22,6 +22,9 @@ import {
 import { ethers } from 'ethers';
 import { connectWallet, requestERC7715Permission, signSiweForVenice, switchToSepolia, getProvider } from './wallet.js';
 import { generateStrategy } from './venice.js';
+import { saveGrant, clearGrant } from './strategy/grantStore.js';
+import { initSession, clearSession } from './strategy/session.js';
+import { rehydrateSession } from './strategy/rehydrate.js';
 import { attestStrategyOnChain, formatAttestation } from './attestation.js';
 import { detectMetaMaskVersion } from './flaskDetect.js';
 import FlaskGate from './components/FlaskGate.jsx';
@@ -168,6 +171,17 @@ const App = () => {
   const [permError, setPermError] = useS(null);
   const [permActive, setPermActive] = useS(false);
   const [permExpiresAt, setPermExpiresAt] = useS(null);
+
+  // Rehydrate the single grant on mount: if a valid ERC-7715 grant is persisted,
+  // re-boot the ERC-7710 session so the user is never re-prompted within 24h.
+  useE(() => {
+    const r = rehydrateSession();
+    if (r.active) {
+      setPermActive(true);
+      setPermExpiresAt(r.expiresAt);
+      setPermContext(r.permissionContext);
+    }
+  }, []);
 
   // 30-second tick to refresh countdown displays
   const [, setClock] = useS(0);
@@ -614,9 +628,24 @@ const App = () => {
     setPermError(null);
     try {
       const permResult = await requestERC7715Permission(86400);
+      const expiresAtMs = Date.now() + 86400 * 1000;
+
+      // Boot the ERC-7710 session + persist the single grant → all later actions
+      // redeem with zero popup, and reload/re-entry within 24h skips this step.
+      if (permResult.delegationManager) {
+        initSession({
+          permissionContext: permResult.permissionContext,
+          delegationManager: permResult.delegationManager,
+        });
+        saveGrant({
+          permissionContext: permResult.permissionContext,
+          delegationManager: permResult.delegationManager,
+          expiresAt: expiresAtMs,
+        });
+      }
+
       setPermContext(permResult.permissionContext);
       setPermActive(true);
-      const expiresAtMs = Date.now() + 86400 * 1000;
       setPermExpiresAt(expiresAtMs);
       const ag = strategy?.agents || [];
       ag.forEach((a) => addLog({
@@ -883,6 +912,8 @@ const App = () => {
     setPermContext(null);
     setPermError(null);
     setPermExpiresAt(null);
+    clearSession();
+    clearGrant();
     setVeniceAuth(null);
     setMarketLive(null);
     setVaultLive(null);
@@ -894,6 +925,8 @@ const App = () => {
   const handleRevoke = () => {
     setPermActive(false);
     setPermExpiresAt(null);
+    clearSession();
+    clearGrant();
     (strategy?.agents || []).forEach((a) =>
       addLog({ event: "PermissionRevoked", agent: a.id, meta: "agent halted · scope cleared" })
     );
@@ -904,6 +937,8 @@ const App = () => {
   const handleDisconnect = () => {
     stopBackgroundAgent();
     setRealAddress(null); setConnectPhase("idle"); setPermActive(false); setPermContext(null); setPermExpiresAt(null); setVeniceAuth(null);
+    clearSession();
+    clearGrant();
     addLog({ event: "PermissionRevoked", meta: "wallet disconnected · session cleared" });
   };
   const handleSwitchNetwork = async () => {
