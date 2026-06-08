@@ -1,6 +1,7 @@
 import { ethers } from 'ethers'
 import { ONE_SHOT_RELAYER_URL, AGENT_VAULT_DEPOSITOR_ADDRESS, SEPOLIA_CHAIN_ID } from './config.js'
 import { grantAgentPermissionOnChain, executeAgentDepositOnChain, batchCalls, executeWithdrawOnChain, executeHarvestOnChain } from './wallet.js'
+import { redeemCall, hasSession } from './strategy/session.js'
 
 /**
  * Encode calldata for executeAgentDeposit.
@@ -167,12 +168,24 @@ export async function submitRelay({ to, calldata, permissionContext }) {
  * @returns {Promise<{txHash: string}>}
  */
 export async function relayGrantPermission({ agentId, vault, maxAmount, expiresAt, permissionContext }) {
-  // Sepolia not supported by 1Shot → broadcast real tx via user signer (tx.wait for real timing)
+  const calldata = await encodeGrantAgentPermission(agentId, vault, maxAmount, expiresAt)
+
+  // 1) Session redemption — zero popup, redeemed from the user's smart account.
+  if (hasSession()) {
+    try {
+      const txHash = await redeemCall({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: calldata })
+      return { txHash, status: 'redeemed' }
+    } catch (e) {
+      console.warn('[relay] grant redeem failed, falling back:', e?.message)
+    }
+  }
+
+  // 2) Keyless 1Shot relay (mainnet only) — unchanged.
   if (!ONESHOT_SUPPORTED_CHAINS.has(String(SEPOLIA_CHAIN_ID))) {
+    // 3) On-chain user-signed (one popup) — last resort.
     const txHash = await grantAgentPermissionOnChain(agentId, vault, maxAmount, expiresAt)
     return { txHash, status: 'onchain' }
   }
-  const calldata = await encodeGrantAgentPermission(agentId, vault, maxAmount, expiresAt)
   return submitRelay({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, calldata, permissionContext })
 }
 
@@ -187,16 +200,27 @@ export async function relayGrantPermission({ agentId, vault, maxAmount, expiresA
  * @returns {Promise<{txHash: string}>}
  */
 export async function relayDeposit({ agentId, user, vault, amount, permissionContext }) {
-  // Base Sepolia: keyless relayer can't serve it → try the Managed-API proxy first
-  // (real, gas-abstracted via the 1Shot server wallet), then fall back to a
-  // user-signed on-chain tx if the proxy isn't configured/funded.
+  const calldata = await encodeExecuteAgentDeposit(agentId, user, vault, amount)
+
+  // 1) Session redemption — zero popup, redeemed from the user's smart account.
+  if (hasSession()) {
+    try {
+      const txHash = await redeemCall({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: calldata })
+      return { txHash, status: 'redeemed' }
+    } catch (e) {
+      console.warn('[relay] deposit redeem failed, falling back:', e?.message)
+    }
+  }
+
+  // 2) Base Sepolia: managed proxy (real, gas-abstracted), then on-chain.
   if (!ONESHOT_SUPPORTED_CHAINS.has(String(SEPOLIA_CHAIN_ID))) {
     const managed = await relayDepositManaged({ agentId, user, vault, amount })
     if (managed) return managed
     const txHash = await executeAgentDepositOnChain(agentId, user, vault, amount)
     return { txHash, status: 'onchain' }
   }
-  const calldata = await encodeExecuteAgentDeposit(agentId, user, vault, amount)
+
+  // 3) Keyless 1Shot relay (mainnet only).
   return submitRelay({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, calldata, permissionContext })
 }
 
