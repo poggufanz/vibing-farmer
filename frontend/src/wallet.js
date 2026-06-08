@@ -2,6 +2,7 @@ import { ethers } from 'ethers'
 import { SEPOLIA_CHAIN_ID_HEX, AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, VAULT_ABI, USDC_SEPOLIA } from './config.js'
 import { requireFlask } from './flaskDetect.js'
 import { getReadProvider } from './readProvider.js'
+import { prepareSessionAccount } from './strategy/session.js'
 
 /**
  * Normalize the wallet_requestExecutionPermissions result into the fields the
@@ -118,12 +119,18 @@ export async function requestERC7715Permission(expirySeconds = 86400) {
     throw err
   }
 
+  // To redeem autonomously later, the grant MUST name our session account
+  // as the allowed redeemer. 1Shot relay handles this implicitly on mainnet,
+  // but for raw ERC-7710 redemption we must specify it up front.
+  const sessionAddress = prepareSessionAccount()
+
   const result = await window.ethereum.request({
     method: 'wallet_requestExecutionPermissions',
     params: [{
       chainId: SEPOLIA_CHAIN_ID_HEX,
       from: account,
       to: AGENT_VAULT_DEPOSITOR_ADDRESS,
+      redeemer: [sessionAddress],
       permission: {
         type: 'erc20-token-periodic',
         isAdjustmentAllowed: false,

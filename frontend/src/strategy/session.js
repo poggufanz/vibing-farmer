@@ -28,14 +28,35 @@ let activeContext = null
 let activeManager = null
 
 /**
+ * Generate (or reuse) the ephemeral session account WITHOUT booting a client.
+ *
+ * MUST be called BEFORE requesting the ERC-7715 grant, and its address passed
+ * as the grant's `redeemer`. Redemption authority is bound at grant time —
+ * MetaMask only lets the address(es) named as `redeemer` redeem the resulting
+ * delegation. Generating the key AFTER the grant (the original chicken-and-egg
+ * bug here) means the grant names no one in particular, so when this account
+ * later tries to redeem, the DelegationManager reverts with `msg.sender !=
+ * delegate` — silently, because relayCall wraps it in a try/catch and falls
+ * back to the popup-per-call path. That's why every agent kept prompting.
+ *
+ * @returns {string} the session account address to pass as `redeemer`
+ */
+export function prepareSessionAccount() {
+  if (!sessionAccount) sessionAccount = privateKeyToAccount(generatePrivateKey())
+  return sessionAccount.address
+}
+
+/**
  * Boot the ERC-7710 session from a granted permission. Idempotent per grant.
+ * Reuses the account from prepareSessionAccount() — the SAME address that was
+ * named as `redeemer` when the grant was requested, so redemption succeeds.
  * @param {{permissionContext: string, delegationManager: string}} grant
  */
 export function initSession({ permissionContext, delegationManager }) {
   if (!permissionContext || !delegationManager) throw new Error('initSession: missing context/manager')
   if (!window?.ethereum) throw new Error('initSession: no wallet provider')
 
-  sessionAccount = privateKeyToAccount(generatePrivateKey())
+  if (!sessionAccount) sessionAccount = privateKeyToAccount(generatePrivateKey())
   sessionClient = createWalletClient({
     account: sessionAccount,
     chain,
