@@ -3,6 +3,22 @@ import { SEPOLIA_CHAIN_ID_HEX, AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, VAU
 import { requireFlask } from './flaskDetect.js'
 import { getReadProvider } from './readProvider.js'
 
+/**
+ * Normalize the wallet_requestExecutionPermissions result into the fields the
+ * session layer needs. SAK returns an array of PermissionResponse objects, each
+ * carrying { context, delegationManager, dependencies }.
+ * @param {any} result
+ * @returns {{permissionContext: string, delegationManager: string|null, grantedPermissions: Array}}
+ */
+export function parseGrantResult(result) {
+  const first = Array.isArray(result) ? result[0] : result
+  return {
+    permissionContext: first?.context || first?.permissionContext || result?.permissionContext || '0xmock',
+    delegationManager: first?.delegationManager || null,
+    grantedPermissions: Array.isArray(result) ? result : (result?.grantedPermissions || []),
+  }
+}
+
 let ethersProvider = null
 let account = null
 
@@ -122,11 +138,7 @@ export async function requestERC7715Permission(expirySeconds = 86400) {
   })
 
   if (!result) throw new Error('No permission result returned from MetaMask')
-
-  return {
-    permissionContext: result.permissionContext || result.context || '0xmock',
-    grantedPermissions: result.grantedPermissions || []
-  }
+  return parseGrantResult(result)
 }
 
 /**
