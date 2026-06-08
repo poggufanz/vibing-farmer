@@ -12,6 +12,7 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { Icon } from './components.jsx';
 import { shortAddr } from './screens.jsx';
 import { VAULT_CATALOG } from './config.js';
+import { buildStrategyState, scoreReward, riskCeiling } from './strategy/mdp.js';
 
 /* ---------- Strategy data — generated per-flow ---------- */
 // Derived from VAULT_CATALOG so addresses stay in sync with config automatically.
@@ -48,11 +49,17 @@ const buildStrategy = (amount, risk) => {
     };
   });
   const blendedApy = agents.reduce((acc, a, i) => acc + Number(a.vault.apy) * (a.allocation / total), 0);
+  // Formal MDP reward for the offline fallback strategy (no AI / no live market).
+  const mdpFullState = buildStrategyState({ amountUsdc: total, riskLevel: risk, numVaults: agents.length, vaultData: VAULT_CATALOG, marketContext: null });
+  const fallbackAllocations = agents.map((a) => ({ address: a.vault.addr || a.vault.address, allocation: a.allocation / total, apy: Number(a.vault.apy), risk_tier: a.vault.risk }));
+  const reward = scoreReward(fallbackAllocations, mdpFullState);
   return {
     agents,
     total,
     blendedApy: blendedApy.toFixed(1),
     risk,
+    reward,
+    mdpState: { turbulence: 'calm', signals: [], universeSize: VAULT_CATALOG.length, riskCeiling: riskCeiling(mdpFullState), profileRisk: mdpFullState.profile.riskLevel, capitalUsdc: total, actionViolations: [] },
   };
 };
 

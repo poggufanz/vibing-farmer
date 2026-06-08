@@ -111,7 +111,7 @@ const mapVeniceToStrategy = (veniceResult, amount, risk) => {
     };
   });
   const blended = agents.reduce((acc, a) => acc + Number(a.vault.apy) * (a.allocation / total), 0);
-  return { agents, total, blendedApy: blended.toFixed(1), risk, rationale: veniceResult.strategy_summary || veniceResult.rationale };
+  return { agents, total, blendedApy: blended.toFixed(1), risk, rationale: veniceResult.strategy_summary || veniceResult.rationale, reward: veniceResult.reward || null, mdpState: veniceResult.mdpState || null };
 };
 
 // Worker monitoring list from ALL held positions (not just the latest strategy), enriched
