@@ -3,6 +3,7 @@ import { generateAgentSkills } from './venice.js'
 import { saveSkill } from './skills.js'
 import { batchCalls } from './wallet.js'
 import { isUnsupportedByOneShot, useManagedRelay, buildGrantCall, buildDepositCall } from './relay.js'
+import { hasSession } from './strategy/session.js'
 
 /**
  * Orchestrator Agent — receives Venice plan, dispatches Worker Agents in parallel.
@@ -69,7 +70,9 @@ export class OrchestratorAgent {
     //   No managed relay: batch GRANTS + DEPOSITS together (1 popup, user pays gas)
     let batchedHash = null   // set → workers skip both grant AND deposit (legacy full-batch)
     let grantsBatched = false // set → workers skip grant only, still relay deposit via 1Shot
-    if (isUnsupportedByOneShot()) {
+    // When an ERC-7710 session is active, every grant + deposit is redeemed
+    // per-worker with zero popup — so skip the EIP-5792 pre-batch entirely.
+    if (isUnsupportedByOneShot() && !hasSession()) {
       const expiresAt = Math.floor(Date.now() / 1000) + 3600
       const grantCalls = []
       const depositCalls = []
