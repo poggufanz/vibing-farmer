@@ -130,6 +130,19 @@ export async function requestERC7715Permission(expirySeconds = 86400) {
 }
 
 /**
+ * One-shot connect + ERC-7715 grant for the autonomous brain (OnboardingGate).
+ * Wraps connectWallet() + requestERC7715Permission() — the same calls app.jsx's
+ * handleConnect/handlePermConfirm make — into the single popup the brain needs.
+ * @param {number} expirySeconds - seconds from now
+ * @returns {Promise<{walletAddress: string, permissionContext: string}>}
+ */
+export async function connectAndGrant(expirySeconds = 86400) {
+  const walletAddress = await connectWallet()
+  const { permissionContext } = await requestERC7715Permission(expirySeconds)
+  return { walletAddress, permissionContext }
+}
+
+/**
  * Call grantAgentPermission on AgentVaultDepositor directly (user signs tx).
  * @param {string} agentId - bytes32 hex string
  * @param {string} vault - vault address
