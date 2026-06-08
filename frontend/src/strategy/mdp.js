@@ -75,3 +75,67 @@ export function buildStrategyState({ amountUsdc, riskLevel, numVaults, vaultData
     observedAt: Date.now(),
   }
 }
+
+/** Static description of what a strategy action may contain. Surfaced in the UI. */
+export const ACTION_SPACE = {
+  allocate: { type: 'continuous', perVault: [0, 1], constraint: 'weights sum to 1.0' },
+  execute: {
+    swap: { maxSlippagePct: [0.1, 1.0] },
+    deposit: { boundedBy: 'agent skill maxAmount + expiresAt' },
+  },
+}
+
+/** Turbulence regime -> the highest risk tier any allocated vault may hold. */
+const TURBULENCE_CEILING = { calm: 'high', elevated: 'medium', turbulent: 'low' }
+
+const RANK_TO_TIER = ['low', 'medium', 'high']
+
+/**
+ * The effective risk ceiling for a state: the stricter of the user's profile
+ * risk and the market-turbulence gate.
+ * @param {Object} state StrategyState
+ * @returns {'low'|'medium'|'high'}
+ */
+export function riskCeiling(state) {
+  const profileRank = RISK_RANK[state.profile.riskLevel]
+  const turbRank = RISK_RANK[TURBULENCE_CEILING[state.market.turbulence]]
+  return RANK_TO_TIER[Math.min(profileRank, turbRank)]
+}
+
+/**
+ * Enforce the action space on a proposed allocation. Returns a NEW
+ * { allocations, violations }: every kept vault respects the risk ceiling and
+ * the weights are re-normalized to sum exactly 1.0. Pure — mutates nothing.
+ * @param {Array<{address:string, allocation:number, risk_tier?:string}>} proposed
+ * @param {Object} state StrategyState
+ * @returns {{ allocations: Array, violations: string[] }}
+ */
+export function enforceActionSpace(proposed, state) {
+  const violations = []
+  const byAddr = new Map(state.universe.map((v) => [v.address.toLowerCase(), v]))
+  const ceiling = RISK_RANK[riskCeiling(state)]
+
+  const kept = (proposed || []).filter((p) => {
+    const obs = byAddr.get(String(p.address).toLowerCase())
+    if (!obs) { violations.push(`unknown vault ${p.address}`); return false }
+    const tier = RISK_RANK[normalizeRisk(p.risk_tier || obs.riskTier)]
+    if (tier > ceiling) {
+      violations.push(`${obs.protocol} (${normalizeRisk(p.risk_tier || obs.riskTier)}) exceeds ${RANK_TO_TIER[ceiling]} ceiling under ${state.market.turbulence} market`)
+      return false
+    }
+    return true
+  })
+
+  let pool = kept
+  if (!pool.length) {
+    const safest = [...state.universe].sort((a, b) => RISK_RANK[a.riskTier] - RISK_RANK[b.riskTier])[0]
+    if (safest) {
+      pool = [{ address: safest.address, allocation: 1, risk_tier: safest.riskTier }]
+      violations.push('all proposals gated — fell back to safest vault')
+    }
+  }
+
+  const sum = pool.reduce((s, p) => s + (Number(p.allocation) || 0), 0) || 1
+  const allocations = pool.map((p) => ({ ...p, allocation: +((Number(p.allocation) || 0) / sum).toFixed(4) }))
+  return { allocations, violations }
+}
