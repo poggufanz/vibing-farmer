@@ -438,6 +438,38 @@ const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate, strategy
         ))}
       </div>
 
+      {strategy.reward && strategy.mdpState && (
+        <div className="mdp-panel" style={{ marginTop: 16, border: "1px solid var(--border)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
+          <div className="mono" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", fontSize: 11 }}>
+            <div style={{ padding: "12px 14px", borderRight: "1px solid var(--border)" }}>
+              <div style={{ color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>State · observed</div>
+              <div style={{ color: "var(--text)" }}>market · {strategy.mdpState.turbulence}</div>
+              <div style={{ color: "var(--text-muted)" }}>universe · {strategy.mdpState.universeSize} vaults</div>
+              <div style={{ color: "var(--text-muted)" }}>capital · {strategy.mdpState.capitalUsdc} USDC</div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRight: "1px solid var(--border)" }}>
+              <div style={{ color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Action · bounded</div>
+              <div style={{ color: "var(--text)" }}>risk ceiling · {strategy.mdpState.riskCeiling}</div>
+              <div style={{ color: "var(--text-muted)" }}>weights · sum to 1.0</div>
+              <div style={{ color: strategy.mdpState.actionViolations && strategy.mdpState.actionViolations.length ? "var(--warn, #c87)" : "var(--text-muted)" }}>
+                gated · {strategy.mdpState.actionViolations ? strategy.mdpState.actionViolations.length : 0}
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px" }}>
+              <div style={{ color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Reward · projected</div>
+              <div style={{ color: "var(--text)" }}>risk-adj · {strategy.reward.riskAdjustedScore}</div>
+              <div style={{ color: "var(--text-muted)" }}>≈ {strategy.reward.projectedAnnualUsdc} USDC / yr</div>
+              <div style={{ color: "var(--text-muted)" }}>risk penalty · {strategy.reward.riskPenalty}</div>
+            </div>
+          </div>
+          {strategy.mdpState.actionViolations && strategy.mdpState.actionViolations.length > 0 && (
+            <div className="mono" style={{ padding: "8px 14px", borderTop: "1px solid var(--border)", fontSize: 10, color: "var(--text-muted)" }}>
+              {strategy.mdpState.actionViolations[0]}
+            </div>
+          )}
+        </div>
+      )}
+
       {(attestation || attesting || strategyHash) && (
         <div className="mono" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 16, padding: "9px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", fontSize: 11, color: "var(--text-muted)" }}>
           {attestation ? (
