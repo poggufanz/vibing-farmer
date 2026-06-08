@@ -23,7 +23,7 @@ import { ethers } from 'ethers';
 import { connectWallet, requestERC7715Permission, signSiweForVenice, switchToSepolia, getProvider } from './wallet.js';
 import { generateStrategy } from './venice.js';
 import { saveGrant, clearGrant } from './strategy/grantStore.js';
-import { initSession, clearSession } from './strategy/session.js';
+import { initSession, clearSession, hasSession } from './strategy/session.js';
 import { rehydrateSession } from './strategy/rehydrate.js';
 import { attestStrategyOnChain, formatAttestation } from './attestation.js';
 import { detectMetaMaskVersion } from './flaskDetect.js';
@@ -613,7 +613,16 @@ const App = () => {
     updateSkillState(id, { state: "pending", skill: skillObj });
   };
 
-  const handleSkillsContinue = () => setStage("permission");
+  const handleSkillsContinue = () => {
+    // A valid persisted grant means the user already signed once — skip the
+    // permission card entirely and go straight to execution (true "ask once").
+    if (hasSession() && permActive && permContext) {
+      setStage("execute");
+      startExecution(permContext);
+      return;
+    }
+    setStage("permission");
+  };
 
   /* ----- PERMISSION (step 04) ----- */
   const handleGrant = () => setPermPhase("prompting");
@@ -629,6 +638,20 @@ const App = () => {
     try {
       const permResult = await requestERC7715Permission(86400);
       const expiresAtMs = Date.now() + 86400 * 1000;
+
+      // DIAGNOSTIC: confirm what Flask actually returned. If delegationManager
+      // is missing here, session redemption never boots and every later action
+      // falls back to the popup-per-call path — this line tells us why.
+      console.log('[strategy] ERC-7715 grant result:', {
+        permissionContext: permResult.permissionContext,
+        delegationManager: permResult.delegationManager,
+        grantedPermissions: permResult.grantedPermissions,
+      });
+      const gp = permResult.grantedPermissions;
+      console.log("chain id:", gp?.[0]?.chainId);
+      console.log("context:", gp?.[0]?.context);
+      console.log("signerMeta:", gp?.[0]?.signerMeta);
+      console.log("accountMeta:", gp?.[0]?.accountMeta);
 
       // Boot the ERC-7710 session + persist the single grant → all later actions
       // redeem with zero popup, and reload/re-entry within 24h skips this step.
