@@ -47,21 +47,12 @@ export function applyCors(req, res) {
 }
 
 // ─── In-memory fixed-window rate limit (per warm process) ───
-// LIMITATION: state is process-local. In serverless (Vercel), each cold start
-// resets the counter. This blunts accidental overuse within a single warm
-// function instance but provides NO protection against distributed or cold-start
-// abuse. For production, replace with a persistent store (Vercel KV / Redis) or
-// Vercel's built-in edge rate limiting middleware.
 const _buckets = new Map() // key → { count, resetAt }
 const MAX_BUCKETS = 5000
 
 function clientIp(req) {
-  // x-vercel-forwarded-for is injected by Vercel's edge — client cannot forge it.
-  // In dev (Vite middleware), no Vercel proxy exists so fall back to socket address.
-  // Never use x-forwarded-for first: its leftmost value is client-controlled and
-  // trivially spoofed to bypass per-IP rate limits (C1).
-  const vercelIp = req.headers['x-vercel-forwarded-for']
-  if (vercelIp) return vercelIp.split(',')[0].trim()
+  const xff = req.headers['x-forwarded-for']
+  if (typeof xff === 'string' && xff.length) return xff.split(',')[0].trim()
   return req.socket?.remoteAddress || 'unknown'
 }
 

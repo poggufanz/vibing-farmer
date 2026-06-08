@@ -4,7 +4,6 @@
 import React, { useState, useEffect } from 'react'
 import AgentActionPreview from './AgentActionPreview.jsx'
 import WithdrawModal from './WithdrawModal.jsx'
-import AutonomousLoopPanel from './AutonomousLoopPanel.jsx'
 import { loadSettings, t } from '../settingsStore.js'
 
 const POSITION_INTERVAL = 5 * 60 * 1000 // mirrors worker INTERVALS.position
@@ -169,7 +168,7 @@ function AlertCard({ alert, lang = 'en', onHarvest, onEmergencyWithdraw, onRevie
 
 // ─── AgentDashboard ──────────────────────────────────────────────────────────
 export default function AgentDashboard({
-  active, positions = {}, alerts = [], vaultMeta = {}, lastUpdated = null, userAddress, permissionContext, settings = {},
+  active, positions = {}, alerts = [], vaultMeta = {}, lastUpdated = null, userAddress, settings = {},
   withdrawEnabled = true, onHarvest, onEmergencyWithdraw, onReview, onDismiss, onWithdrawSuccess, onNewStrategy,
 }) {
   const [now, setNow] = useState(Date.now())
@@ -400,8 +399,6 @@ export default function AgentDashboard({
           ))
         )}
       </div>
-
-      <AutonomousLoopPanel walletAddress={userAddress} permissionContext={permissionContext} />
 
       <AgentActionPreview preview={preview} onConfirm={confirmPreview} onCancel={() => setPreview(null)} />
       {withdrawVault && (

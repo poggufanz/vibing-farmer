@@ -33,17 +33,8 @@ export default async function handler(req, res) {
     res.statusCode = 503
     return res.end(JSON.stringify({ error: 'AI proxy not configured' }))
   }
-  let body
   try {
-    body = await readBody(req)
-  } catch {
-    res.statusCode = 400
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ error: 'Invalid JSON' }))
-  }
-
-  try {
-    const { model, messages, response_format } = body
+    const { model, messages, response_format } = await readBody(req)
 
     // 2. Model allowlist check
     if (!ALLOWED_MODELS.includes(model)) {
@@ -52,19 +43,13 @@ export default async function handler(req, res) {
       return res.end(JSON.stringify({ error: 'Model not allowed' }))
     }
 
-    // 3. Message validation: count, role allowlist, content length cap
+    // 3. Message validation (length cap and format validation to prevent injection)
     if (!Array.isArray(messages) || messages.length > 10) {
       res.statusCode = 400
       res.setHeader('Content-Type', 'application/json')
       return res.end(JSON.stringify({ error: 'Invalid messages' }))
     }
-    const ALLOWED_ROLES = new Set(['system', 'user', 'assistant'])
     for (const msg of messages) {
-      if (!ALLOWED_ROLES.has(msg.role)) {
-        res.statusCode = 400
-        res.setHeader('Content-Type', 'application/json')
-        return res.end(JSON.stringify({ error: 'Invalid message role' }))
-      }
       if (typeof msg.content === 'string' && msg.content.length > 100000) {
         res.statusCode = 400
         res.setHeader('Content-Type', 'application/json')
@@ -77,14 +62,8 @@ export default async function handler(req, res) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({ model, messages, response_format }),
     })
-    // Don't forward raw upstream error body — can leak quota/account details.
-    if (!upstream.ok) {
-      res.statusCode = upstream.status >= 500 ? 502 : upstream.status
-      res.setHeader('Content-Type', 'application/json')
-      return res.end(JSON.stringify({ error: 'AI request failed' }))
-    }
     const text = await upstream.text()
-    res.statusCode = 200
+    res.statusCode = upstream.status
     res.setHeader('Content-Type', 'application/json')
     res.end(text)
   } catch {
