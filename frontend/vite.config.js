@@ -43,6 +43,9 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       include: ['react-force-graph-2d']
+    },
+    test: {
+      environment: 'jsdom'
     }
   }
 })
