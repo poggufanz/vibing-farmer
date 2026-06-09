@@ -22,6 +22,9 @@ import {
 import { ethers } from 'ethers';
 import { connectWallet, requestERC7715Permission, signSiweForVenice, switchToSepolia, getProvider } from './wallet.js';
 import { generateStrategy } from './venice.js';
+import { saveGrant, clearGrant } from './strategy/grantStore.js';
+import { initSession, clearSession, hasSession, saveSessionGrant } from './strategy/session.js';
+import { rehydrateSession } from './strategy/rehydrate.js';
 import { attestStrategyOnChain, formatAttestation } from './attestation.js';
 import { detectMetaMaskVersion } from './flaskDetect.js';
 import FlaskGate from './components/FlaskGate.jsx';
@@ -111,7 +114,7 @@ const mapVeniceToStrategy = (veniceResult, amount, risk) => {
     };
   });
   const blended = agents.reduce((acc, a) => acc + Number(a.vault.apy) * (a.allocation / total), 0);
-  return { agents, total, blendedApy: blended.toFixed(1), risk, rationale: veniceResult.strategy_summary || veniceResult.rationale };
+  return { agents, total, blendedApy: blended.toFixed(1), risk, rationale: veniceResult.strategy_summary || veniceResult.rationale, reward: veniceResult.reward || null, mdpState: veniceResult.mdpState || null };
 };
 
 // Worker monitoring list from ALL held positions (not just the latest strategy), enriched
@@ -168,6 +171,17 @@ const App = () => {
   const [permError, setPermError] = useS(null);
   const [permActive, setPermActive] = useS(false);
   const [permExpiresAt, setPermExpiresAt] = useS(null);
+
+  // Rehydrate the single grant on mount: if a valid ERC-7715 grant is persisted,
+  // re-boot the ERC-7710 session so the user is never re-prompted within 24h.
+  useE(() => {
+    const r = rehydrateSession();
+    if (r.active) {
+      setPermActive(true);
+      setPermExpiresAt(r.expiresAt);
+      setPermContext(r.permissionContext);
+    }
+  }, []);
 
   // 30-second tick to refresh countdown displays
   const [, setClock] = useS(0);
@@ -599,7 +613,16 @@ const App = () => {
     updateSkillState(id, { state: "pending", skill: skillObj });
   };
 
-  const handleSkillsContinue = () => setStage("permission");
+  const handleSkillsContinue = () => {
+    // A valid persisted grant means the user already signed once — skip the
+    // permission card entirely and go straight to execution (true "ask once").
+    if (hasSession() && permActive && permContext) {
+      setStage("execute");
+      startExecution(permContext);
+      return;
+    }
+    setStage("permission");
+  };
 
   /* ----- PERMISSION (step 04) ----- */
   const handleGrant = () => setPermPhase("prompting");
@@ -614,9 +637,38 @@ const App = () => {
     setPermError(null);
     try {
       const permResult = await requestERC7715Permission(86400);
+      const expiresAtMs = Date.now() + 86400 * 1000;
+
+      // DIAGNOSTIC: confirm what Flask actually returned. If delegationManager
+      // is missing here, session redemption never boots and every later action
+      // falls back to the popup-per-call path — this line tells us why.
+      console.log('[strategy] ERC-7715 grant result:', {
+        permissionContext: permResult.permissionContext,
+        delegationManager: permResult.delegationManager,
+        grantedPermissions: permResult.grantedPermissions,
+      });
+      const gp = permResult.grantedPermissions;
+      console.log("chain id:", gp?.[0]?.chainId);
+      console.log("context:", gp?.[0]?.context);
+      console.log("signerMeta:", gp?.[0]?.signerMeta);
+      console.log("accountMeta:", gp?.[0]?.accountMeta);
+
+      // Boot the ERC-7710 session + persist the single grant → all later actions
+      // redeem with zero popup, and reload/re-entry within 24h skips this step.
+      if (permResult.delegationManager) {
+        initSession({
+          permissionContext: permResult.permissionContext,
+          delegationManager: permResult.delegationManager,
+        });
+        saveSessionGrant({
+          permissionContext: permResult.permissionContext,
+          delegationManager: permResult.delegationManager,
+          expiresAt: expiresAtMs,
+        });
+      }
+
       setPermContext(permResult.permissionContext);
       setPermActive(true);
-      const expiresAtMs = Date.now() + 86400 * 1000;
       setPermExpiresAt(expiresAtMs);
       const ag = strategy?.agents || [];
       ag.forEach((a) => addLog({
@@ -883,6 +935,8 @@ const App = () => {
     setPermContext(null);
     setPermError(null);
     setPermExpiresAt(null);
+    clearSession();
+    clearGrant();
     setVeniceAuth(null);
     setMarketLive(null);
     setVaultLive(null);
@@ -894,6 +948,8 @@ const App = () => {
   const handleRevoke = () => {
     setPermActive(false);
     setPermExpiresAt(null);
+    clearSession();
+    clearGrant();
     (strategy?.agents || []).forEach((a) =>
       addLog({ event: "PermissionRevoked", agent: a.id, meta: "agent halted · scope cleared" })
     );
@@ -904,6 +960,8 @@ const App = () => {
   const handleDisconnect = () => {
     stopBackgroundAgent();
     setRealAddress(null); setConnectPhase("idle"); setPermActive(false); setPermContext(null); setPermExpiresAt(null); setVeniceAuth(null);
+    clearSession();
+    clearGrant();
     addLog({ event: "PermissionRevoked", meta: "wallet disconnected · session cleared" });
   };
   const handleSwitchNetwork = async () => {

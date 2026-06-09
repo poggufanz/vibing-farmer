@@ -12,6 +12,7 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { Icon } from './components.jsx';
 import { shortAddr } from './screens.jsx';
 import { VAULT_CATALOG } from './config.js';
+import { buildStrategyState, scoreReward, riskCeiling } from './strategy/mdp.js';
 
 /* ---------- Strategy data — generated per-flow ---------- */
 // Derived from VAULT_CATALOG so addresses stay in sync with config automatically.
@@ -48,11 +49,17 @@ const buildStrategy = (amount, risk) => {
     };
   });
   const blendedApy = agents.reduce((acc, a, i) => acc + Number(a.vault.apy) * (a.allocation / total), 0);
+  // Formal MDP reward for the offline fallback strategy (no AI / no live market).
+  const mdpFullState = buildStrategyState({ amountUsdc: total, riskLevel: risk, numVaults: agents.length, vaultData: VAULT_CATALOG, marketContext: null });
+  const fallbackAllocations = agents.map((a) => ({ address: a.vault.addr || a.vault.address, allocation: a.allocation / total, apy: Number(a.vault.apy), risk_tier: a.vault.risk }));
+  const reward = scoreReward(fallbackAllocations, mdpFullState);
   return {
     agents,
     total,
     blendedApy: blendedApy.toFixed(1),
     risk,
+    reward,
+    mdpState: { turbulence: 'calm', signals: [], universeSize: VAULT_CATALOG.length, riskCeiling: riskCeiling(mdpFullState), profileRisk: mdpFullState.profile.riskLevel, capitalUsdc: total, actionViolations: [] },
   };
 };
 
@@ -430,6 +437,38 @@ const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate, strategy
           </div>
         ))}
       </div>
+
+      {strategy.reward && strategy.mdpState && (
+        <div className="mdp-panel" style={{ marginTop: 16, border: "1px solid var(--border)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
+          <div className="mono" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", fontSize: 11 }}>
+            <div style={{ padding: "12px 14px", borderRight: "1px solid var(--border)" }}>
+              <div style={{ color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>State · observed</div>
+              <div style={{ color: "var(--text)" }}>market · {strategy.mdpState.turbulence}</div>
+              <div style={{ color: "var(--text-muted)" }}>universe · {strategy.mdpState.universeSize} vaults</div>
+              <div style={{ color: "var(--text-muted)" }}>capital · {strategy.mdpState.capitalUsdc} USDC</div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRight: "1px solid var(--border)" }}>
+              <div style={{ color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Action · bounded</div>
+              <div style={{ color: "var(--text)" }}>risk ceiling · {strategy.mdpState.riskCeiling}</div>
+              <div style={{ color: "var(--text-muted)" }}>weights · sum to 1.0</div>
+              <div style={{ color: strategy.mdpState.actionViolations && strategy.mdpState.actionViolations.length ? "var(--warn, #c87)" : "var(--text-muted)" }}>
+                gated · {strategy.mdpState.actionViolations ? strategy.mdpState.actionViolations.length : 0}
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px" }}>
+              <div style={{ color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Reward · projected</div>
+              <div style={{ color: "var(--text)" }}>risk-adj · {strategy.reward.riskAdjustedScore}</div>
+              <div style={{ color: "var(--text-muted)" }}>≈ {strategy.reward.projectedAnnualUsdc} USDC / yr</div>
+              <div style={{ color: "var(--text-muted)" }}>risk penalty · {strategy.reward.riskPenalty}</div>
+            </div>
+          </div>
+          {strategy.mdpState.actionViolations && strategy.mdpState.actionViolations.length > 0 && (
+            <div className="mono" style={{ padding: "8px 14px", borderTop: "1px solid var(--border)", fontSize: 10, color: "var(--text-muted)" }}>
+              {strategy.mdpState.actionViolations[0]}
+            </div>
+          )}
+        </div>
+      )}
 
       {(attestation || attesting || strategyHash) && (
         <div className="mono" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 16, padding: "9px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", fontSize: 11, color: "var(--text-muted)" }}>

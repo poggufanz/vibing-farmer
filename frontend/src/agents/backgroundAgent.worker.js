@@ -171,5 +171,9 @@ async function ethCall(to, method, addressParam) {
   })
   const json = await res.json()
   if (json.error) throw new Error(json.error.message || 'eth_call failed')
-  return BigInt(json.result || '0x0').toString()
+  // Empty hex '0x' (no contract code on this network, or view returned nothing) is
+  // truthy, so `|| '0x0'` won't catch it — BigInt('0x') throws. Treat as zero.
+  const result = json.result
+  if (!result || result === '0x') return '0'
+  return BigInt(result).toString()
 }

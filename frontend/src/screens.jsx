@@ -346,17 +346,18 @@ const PermissionCard = ({ strategy, onGrant, phase, error, onConfirm, onReject }
     <section className="card enter">
       <div className="eyebrow">
         <span className="num">04</span>
-        <span>Scoped permission · ERC-7715 · {agents.length} grant{agents.length === 1 ? "" : "s"}</span>
+        <span>Scoped permission · ERC-7715 · sign once</span>
         <span className="rule" />
-        <span>signed by smart account · batched</span>
+        <span>then fully autonomous · ERC-7710 redemption</span>
       </div>
 
       <h1 className="h-display">
-        Authorize {agents.length} agents · each scoped to their own vault.
+        Sign once. Every agent runs without another popup.
       </h1>
       <p className="lede">
-        These permissions are batched in a single signature, but each worker receives its own scope: a specific vault,
-        a maximum amount, and automatic expiration. Outside this scope, the <span className="mono">VaultDepositor.sol</span> contract will <b>revert</b>.
+        This single signature grants a scoped, expiring permission. From here, the orchestrator and every worker
+        execute Swap → Approve → Deposit by <b>redeeming</b> this grant — no further MetaMask prompts. Outside the
+        granted scope, <span className="mono">AgentVaultDepositor.sol</span> still <b>reverts</b>.
       </p>
 
       <div className="perm-doc">
