@@ -587,7 +587,59 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
   );
 };
 
+// ── Autonomous monitor-loop status — NEVER-STOP loop + AI Council made visible ──
+// Pure presentational. Props: { running, cycle, summary, rows } where rows are
+// newest-first cycle records from cycleJournal.getCycles() (sliced by caller).
+const LoopStatusPanel = ({ running, cycle, summary, rows }) => {
+  const badge = (verdict) => ({
+    keep:    { bg: 'rgba(52,199,89,0.14)',  fg: '#34c759' },
+    discard: { bg: 'rgba(142,142,147,0.14)', fg: '#8e8e93' },
+    crash:   { bg: 'rgba(255,69,58,0.14)',  fg: '#ff453a' },
+    idle:    { bg: 'rgba(142,142,147,0.08)', fg: '#aeaeb2' },
+  }[verdict] || { bg: 'rgba(142,142,147,0.08)', fg: '#aeaeb2' })
+  return (
+    <div className="loop-status card" style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 999, background: running ? '#34c759' : '#8e8e93', boxShadow: running ? '0 0 8px #34c759' : 'none' }} />
+          <strong>Autonomous Monitor Loop</strong>
+          <span style={{ fontFamily: 'monospace', fontSize: 11, opacity: 0.6 }}>{running ? 'NEVER STOP · running' : 'stopped'}</span>
+        </div>
+        <span style={{ fontFamily: 'monospace', fontSize: 12, opacity: 0.7 }}>cycle {cycle}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 14, fontFamily: 'monospace', fontSize: 11, marginBottom: 12, opacity: 0.8 }}>
+        <span>keep {summary.keep}</span>
+        <span>discard {summary.discard}</span>
+        <span>crash {summary.crash}</span>
+        <span>idle {summary.idle}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {(rows || []).map((r, i) => {
+          const b = badge(r.verdict)
+          const rules = (r.citedRules || []).join(', ')
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'monospace', fontSize: 11 }}>
+              <span style={{ width: 36, opacity: 0.5 }}>#{String(r.cycle).padStart(2, '0')}</span>
+              <span style={{ padding: '1px 8px', borderRadius: 6, background: b.bg, color: b.fg, minWidth: 64, textAlign: 'center' }}>{r.verdict}</span>
+              <span style={{ opacity: 0.7 }}>
+                {r.verdict === 'crash' ? r.error
+                  : r.verdict === 'discard' ? `${r.reason || '—'}${rules ? ` · ${rules}` : ''}`
+                  : r.verdict === 'keep' ? `score ${r.score ?? '—'} · ${rules || '—'} · tx ${(r.txHash || '').slice(0, 10)}…`
+                  : `observe · ${r.turbulence || 'calm'}`}
+              </span>
+            </div>
+          )
+        })}
+        {(!rows || rows.length === 0) && (
+          <div style={{ opacity: 0.5, fontFamily: 'monospace', fontSize: 11 }}>no cycles yet — loop will tick on heartbeat</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export {
+  LoopStatusPanel,
   AgentGraph, AgentTiles, MemoryModal, StrategyCard, ExecuteCard,
   buildStrategy, makeInitialExecState, AGENT_PROTOCOLS, STEP_IDS, STEP_LABELS,
 };
