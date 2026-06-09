@@ -23,7 +23,7 @@ import { ethers } from 'ethers';
 import { connectWallet, requestERC7715Permission, signSiweForVenice, switchToSepolia, getProvider } from './wallet.js';
 import { generateStrategy } from './venice.js';
 import { saveGrant, clearGrant } from './strategy/grantStore.js';
-import { initSession, clearSession, hasSession } from './strategy/session.js';
+import { initSession, clearSession, hasSession, saveSessionGrant } from './strategy/session.js';
 import { rehydrateSession } from './strategy/rehydrate.js';
 import { attestStrategyOnChain, formatAttestation } from './attestation.js';
 import { detectMetaMaskVersion } from './flaskDetect.js';
@@ -660,7 +660,7 @@ const App = () => {
           permissionContext: permResult.permissionContext,
           delegationManager: permResult.delegationManager,
         });
-        saveGrant({
+        saveSessionGrant({
           permissionContext: permResult.permissionContext,
           delegationManager: permResult.delegationManager,
           expiresAt: expiresAtMs,

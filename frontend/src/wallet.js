@@ -2,7 +2,7 @@ import { ethers } from 'ethers'
 import { SEPOLIA_CHAIN_ID_HEX, AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, VAULT_ABI, USDC_SEPOLIA } from './config.js'
 import { requireFlask } from './flaskDetect.js'
 import { getReadProvider } from './readProvider.js'
-import { prepareSessionAccount } from './strategy/session.js'
+import { prepareSessionAccount, saveSessionGrant } from './strategy/session.js'
 
 /**
  * Normalize the wallet_requestExecutionPermissions result into the fields the
@@ -145,7 +145,9 @@ export async function requestERC7715Permission(expirySeconds = 86400) {
   })
 
   if (!result) throw new Error('No permission result returned from MetaMask')
-  return parseGrantResult(result)
+  const grantData = parseGrantResult(result)
+  saveSessionGrant(grantData)
+  return grantData
 }
 
 /**

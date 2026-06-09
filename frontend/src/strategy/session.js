@@ -100,4 +100,28 @@ export function clearSession() {
   sessionAccount = null
   activeContext = null
   activeManager = null
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('vibing_session_grant')
+  }
 }
+
+/**
+ * Save the session grant to localStorage so it can be reused without re-prompting.
+ * @param {{permissionContext: string, delegationManager: string, grantedPermissions: Array}} grantData
+ */
+export function saveSessionGrant(grantData) {
+  if (grantData && typeof localStorage !== 'undefined') {
+    localStorage.setItem('vibing_session_grant', JSON.stringify(grantData))
+  }
+}
+
+/**
+ * Retrieve the active session grant from localStorage.
+ * @returns {{permissionContext: string, delegationManager: string, grantedPermissions: Array}|null}
+ */
+export function getActiveSessionGrant() {
+  if (typeof localStorage === 'undefined') return null
+  const data = localStorage.getItem('vibing_session_grant')
+  return data ? JSON.parse(data) : null
+}
+
