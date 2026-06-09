@@ -1,6 +1,6 @@
 import { ethers } from 'ethers'
 import { ONE_SHOT_RELAYER_URL, AGENT_VAULT_DEPOSITOR_ADDRESS, SEPOLIA_CHAIN_ID } from './config.js'
-import { grantAgentPermissionOnChain, executeAgentDepositOnChain, batchCalls, executeWithdrawOnChain, executeHarvestOnChain } from './wallet.js'
+import { grantAgentPermissionOnChain, executeAgentDepositOnChain } from './wallet.js'
 import { redeemCall, hasSession } from './strategy/session.js'
 
 /**
@@ -247,43 +247,64 @@ export async function buildDepositCall({ agentId, user, vault, amount }) {
 }
 
 // ─── Background Agent: harvest + emergency withdraw ───────────────────────────
-// These are self-contained: the background agent owns its own agentId namespace and
-// batches grant → setAgentCapabilities → action in ONE confirmation (EIP-5792).
-// Never touches the deposit/orchestrator permission flow. Sepolia → user-signed batch.
+// Zero-popup autonomous monitor loop. The 1Shot server wallet is pre-authorized
+// as a session key in AgentVaultDepositor (via setupBgAgentsWithSessionKey called
+// once at "Start Monitoring"). All subsequent harvest/withdraw calls go through
+// the managed relay → server wallet → contract (session key check passes).
+// No MetaMask popups after setup.
 
-const BG_IFACE = new ethers.Interface([
-  'function grantAgentPermission(bytes32 agentId, address vault, uint256 maxAmount, uint256 expiresAt)',
-  'function setAgentCapabilities(bytes32 agentId, bool allowWithdraw, bool allowHarvest)',
-  'function executeWithdraw(bytes32 agentId, address user, address vault, uint256 amount)',
-  'function executeHarvest(bytes32 agentId, address user, address vault, bool recompound)',
-])
-const BG_MAX = 1_000_000_000_000n // nominal grant cap (1M USDC units); withdraw/harvest never consume it
-const bgAgentId = (vault) => ethers.id('yv-bg-' + vault.toLowerCase())
-const depCall = (fn, args) => ({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: BG_IFACE.encodeFunctionData(fn, args) })
+export const bgAgentId = (vault) => ethers.id('yv-bg-' + vault.toLowerCase())
 
-async function ensureBgSetup(agentId, vault) {
-  // Grant + enable capabilities as one batch (this estimates fine — no deep nesting).
-  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 3600)
-  const setupHash = await batchCalls([
-    depCall('grantAgentPermission', [agentId, vault, BG_MAX, expiresAt]),
-    depCall('setAgentCapabilities', [agentId, true, true]),
-  ])
-  if (!setupHash) throw new Error('Wallet lacks EIP-5792 batch support · cannot arm agent')
-}
+const RELAY_PROXY_URL = '/api/relay'
 
-/** Emergency withdraw `amount` (units) from `vault` back to `user`. Setup batch, then the action. */
-export async function relayWithdraw({ user, vault, amount }) {
-  const agentId = bgAgentId(vault)
-  await ensureBgSetup(agentId, vault)
-  // Action as a direct call with explicit gasLimit (MetaMask under-estimates it → OutOfGas)
-  const txHash = await executeWithdrawOnChain(agentId, user, vault, BigInt(amount))
-  return { txHash, status: 'onchain' }
-}
-
-/** Harvest rewards from `vault` for `user` (optionally recompound). Setup batch, then the action. */
+/**
+ * Harvest rewards from `vault` for `user` (optionally recompound).
+ * Zero-popup — uses managed relay, server wallet is pre-authorized session key.
+ */
 export async function relayHarvest({ user, vault, recompound = false }) {
   const agentId = bgAgentId(vault)
-  await ensureBgSetup(agentId, vault)
-  const txHash = await executeHarvestOnChain(agentId, user, vault, recompound)
-  return { txHash, status: 'onchain' }
+  const res = await fetch(RELAY_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'harvest', agentId, user, vault, recompound }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Relay harvest failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+/**
+ * Emergency withdraw `amount` (units) from `vault` back to `user`.
+ * Zero-popup — uses managed relay, server wallet is pre-authorized session key.
+ */
+export async function relayWithdraw({ user, vault, amount }) {
+  const agentId = bgAgentId(vault)
+  const res = await fetch(RELAY_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'withdraw', agentId, user, vault, amount: String(amount) }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Relay withdraw failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+/**
+ * Fetch the server wallet address that will be used as the session key.
+ * @returns {Promise<string>} server wallet address
+ */
+export async function getRelayerAddress() {
+  const res = await fetch(RELAY_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'wallet' }),
+  })
+  if (!res.ok) throw new Error('Could not fetch relayer wallet address')
+  const data = await res.json()
+  if (!data.address) throw new Error('Relayer wallet address missing from response')
+  return data.address
 }

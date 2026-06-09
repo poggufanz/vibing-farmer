@@ -57,7 +57,8 @@ import { councilVerdict } from './strategy/council.js';
 import { reflect } from './strategy/reflector.js';
 import { increment as playbookIncrement, weight as playbookWeight } from './strategy/playbook.js';
 import { saveCycle, getCycles, getJournalSummary } from './strategy/cycleJournal.js';
-import { relayHarvest, relayWithdraw } from './relay.js';
+import { relayHarvest, relayWithdraw, getRelayerAddress } from './relay.js';
+import { setupBgAgentsWithSessionKey } from './wallet.js';
 import { resolveCouncilConflict } from './venice.js';
 
 /* ---------- Background agent settings (localStorage: yv_agent_settings) ---------- */
@@ -210,6 +211,8 @@ const App = () => {
   // Real Web3 state
   const [realAddress, setRealAddress] = useS(null);
   const loopRef = useR(null);
+  // Tracks which user addresses have had session key setup done (survives re-renders).
+  const sessionKeySetupRef = useR(new Set());
   const [loopTick, setLoopTick] = useS(0);
   const [permContext, setPermContext] = useS(null);
   const [veniceAuth, setVeniceAuth] = useS(null);
@@ -420,6 +423,25 @@ const App = () => {
     // strategy — otherwise a new deposit would stop the agent watching earlier vaults.
     let activeVaults = buildActiveVaults(agentData.positions, strategy);
     if (!activeVaults.length) activeVaults = strategy.agents.map((a) => ({ address: a.vault.addr, name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }));
+    // ── Session key setup (once per user, zero-popup autonomous loop) ──────────
+    // When autoHarvest is enabled, pre-authorize the 1Shot server wallet as a
+    // session key in AgentVaultDepositor. One EIP-5792 batch popup (grant bg
+    // permissions + authorizeSessionKey) — after this, all harvest/withdraw calls
+    // route through the managed relay with zero MetaMask prompts.
+    if (agentSettings.autoHarvest && !sessionKeySetupRef.current.has(realAddress)) {
+      sessionKeySetupRef.current.add(realAddress); // mark eagerly to prevent double-call
+      getRelayerAddress()
+        .then((serverWallet) => setupBgAgentsWithSessionKey(
+          activeVaults.map((v) => v.address),
+          serverWallet
+        ))
+        .then(() => addLog({ event: 'OrchestratorPlanned', meta: 'session key · authorized — monitor loop now zero-popup' }))
+        .catch((err) => {
+          sessionKeySetupRef.current.delete(realAddress); // allow retry on next start
+          addLog({ event: 'AgentFailed', meta: `session key setup failed: ${err?.message}` });
+        });
+    }
+
     startBackgroundAgent({
       userAddress: realAddress,
       activeVaults,
@@ -448,6 +470,9 @@ const App = () => {
         resolveConflict: resolveCouncilConflict,
       }),
       execute: async (idea) => {
+        // Respect autoHarvest setting — if disabled the loop observes/suggests only,
+        // no on-chain calls, no MetaMask popups. User opts in explicitly.
+        if (!agentSettings.autoHarvest) return null;
         if (idea.kind === 'harvest') {
           const { txHash } = await relayHarvest({ user: realAddress, vault: idea.vaultAddress, recompound: false });
           saveTransaction({ txHash, vaultName: idea.vaultName, vaultAddress: idea.vaultAddress, amountUsdc: 0, workerLabel: 'MonitorLoop', network: 'sepolia' });

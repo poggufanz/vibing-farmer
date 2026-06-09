@@ -1,9 +1,9 @@
-// Contract addresses — Base Sepolia (84532) deploy 2026-06-03
-export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0xcAD4A07Db284AB55518AF406fD18877b2AC5A442'
-export const MOCK_VAULT_A_ADDRESS = '0x5a5e02F53CDbBc2E413e14105Cbf93c8504b8E17'
-export const MOCK_VAULT_B_ADDRESS = '0xc1f99AA5ce77BDfF69f9a20361aB8937F9f17139'
-export const MOCK_VAULT_C_ADDRESS = '0xfCab208782D0dAC2978BA411b01C45243DE63855'
-export const MOCK_VAULT_D_ADDRESS = '0x398b619382D319FeCC08c85E87320672d0104D59'
+// Contract addresses — Base Sepolia (84532) deploy 2026-06-10 (session key support)
+export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0x65A910Fb8d72752b52A9766b15a90DD149465D17'
+export const MOCK_VAULT_A_ADDRESS = '0x348d614fd9992754D98D148a38d08ED59d2beE17'
+export const MOCK_VAULT_B_ADDRESS = '0x459910d67ab96427bBD80b2BE49194d41f332e2C'
+export const MOCK_VAULT_C_ADDRESS = '0x0528cBa85dc37ff82aB01C03337c96886301E1EE'
+export const MOCK_VAULT_D_ADDRESS = '0x2E85f5F6306cCA91075C67A4345a93ab27299440'
 
 // Network — Base Sepolia (84532). 1Shot Managed API supports this testnet
 // (keyless permissionless relayer is mainnet-only — see relay.js).
@@ -31,6 +31,9 @@ export const DEPOSITOR_ABI = [
   'function grantAgentPermission(bytes32 agentId, address vault, uint256 maxAmount, uint256 expiresAt) external',
   'function setAgentCapabilities(bytes32 agentId, bool allowWithdraw, bool allowHarvest) external',
   'function revokeAgentPermission(bytes32 agentId) external',
+  'function authorizeSessionKey(address sessionKey, uint256 expiresAt) external',
+  'function revokeSessionKey(address sessionKey) external',
+  'function sessionKeys(address user, address sessionKey) external view returns (uint256 expiresAt)',
   'function executeAgentDeposit(bytes32 agentId, address user, address vault, uint256 amount) external',
   'function executeWithdraw(bytes32 agentId, address user, address vault, uint256 amount) external',
   'function executeHarvest(bytes32 agentId, address user, address vault, bool recompound) external',
@@ -42,6 +45,8 @@ export const DEPOSITOR_ABI = [
   'event DepositExecuted(bytes32 indexed agentId, address indexed user, address vault, uint256 amount, uint256 sharesReceived)',
   'event AgentCompleted(bytes32 indexed agentId, address indexed user, address vault, uint256 sharesReceived)',
   'event AgentFailed(bytes32 indexed agentId, address indexed user, string reason)',
+  'event SessionKeyAuthorized(address indexed user, address indexed sessionKey, uint256 expiresAt)',
+  'event SessionKeyRevoked(address indexed user, address indexed sessionKey)',
   'event WithdrawExecuted(address indexed user, address vault, uint256 amount, uint256 shares)',
   'event HarvestExecuted(address indexed user, address vault, uint256 rewards)',
   'event HarvestRecompounded(address indexed user, address vault, uint256 rewards)',

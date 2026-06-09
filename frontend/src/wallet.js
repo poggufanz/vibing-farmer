@@ -317,3 +317,60 @@ export async function signSiweForVenice(address) {
     chainId: 8453
   }))
 }
+
+/**
+ * One-time setup for zero-popup autonomous monitor loop.
+ * Bundles into a SINGLE EIP-5792 batch (1 MetaMask popup):
+ *   - grantAgentPermission for each vault's background agent
+ *   - setAgentCapabilities (allowWithdraw + allowHarvest) for each
+ *   - authorizeSessionKey(serverWalletAddress, expiry)
+ *
+ * After this, all harvest/withdraw calls go through the managed relay
+ * with the server wallet as msg.sender — zero MetaMask popups.
+ *
+ * @param {string[]} vaultAddresses - vaults to set up bg agents for
+ * @param {string} serverWalletAddress - the 1Shot relayer wallet address
+ * @param {number} expirySeconds - session key duration in seconds (default 30 days)
+ * @returns {Promise<string>} batch tx hash
+ */
+export async function setupBgAgentsWithSessionKey(vaultAddresses, serverWalletAddress, expirySeconds = 86400 * 30) {
+  if (!ethersProvider) throw new Error('Wallet not connected.')
+  if (!serverWalletAddress || !/^0x[0-9a-fA-F]{40}$/.test(serverWalletAddress)) {
+    throw new Error('Invalid server wallet address')
+  }
+
+  const iface = new ethers.Interface([
+    'function grantAgentPermission(bytes32 agentId, address vault, uint256 maxAmount, uint256 expiresAt)',
+    'function setAgentCapabilities(bytes32 agentId, bool allowWithdraw, bool allowHarvest)',
+    'function authorizeSessionKey(address sessionKey, uint256 expiresAt)',
+  ])
+
+  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + expirySeconds)
+  // Nominal cap — bg agents never consume usedAmount for withdraw/harvest.
+  // Just needs to be > 0 so the permission is considered active.
+  const BG_MAX = 1_000_000_000_000n
+
+  const calls = []
+
+  for (const vault of vaultAddresses) {
+    const agentId = ethers.id('yv-bg-' + vault.toLowerCase())
+    calls.push({
+      to: AGENT_VAULT_DEPOSITOR_ADDRESS,
+      data: iface.encodeFunctionData('grantAgentPermission', [agentId, vault, BG_MAX, expiresAt]),
+    })
+    calls.push({
+      to: AGENT_VAULT_DEPOSITOR_ADDRESS,
+      data: iface.encodeFunctionData('setAgentCapabilities', [agentId, true, true]),
+    })
+  }
+
+  // Authorize the server wallet as session key (once, covers all vaults)
+  calls.push({
+    to: AGENT_VAULT_DEPOSITOR_ADDRESS,
+    data: iface.encodeFunctionData('authorizeSessionKey', [serverWalletAddress, expiresAt]),
+  })
+
+  const txHash = await batchCalls(calls)
+  if (!txHash) throw new Error('Wallet lacks EIP-5792 batch support — cannot set up session key')
+  return txHash
+}
