@@ -290,19 +290,3 @@ export async function relayWithdraw({ user, vault, amount }) {
   }
   return res.json()
 }
-
-/**
- * Fetch the server wallet address that will be used as the session key.
- * @returns {Promise<string>} server wallet address
- */
-export async function getRelayerAddress() {
-  const res = await fetch(RELAY_PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'wallet' }),
-  })
-  if (!res.ok) throw new Error('Could not fetch relayer wallet address')
-  const data = await res.json()
-  if (!data.address) throw new Error('Relayer wallet address missing from response')
-  return data.address
-}

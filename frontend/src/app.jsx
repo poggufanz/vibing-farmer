@@ -431,10 +431,13 @@ const App = () => {
     if (agentSettings.autoHarvest && !sessionKeySetupRef.current.has(realAddress)) {
       sessionKeySetupRef.current.add(realAddress); // mark eagerly to prevent double-call
       getRelayerAddress()
-        .then((serverWallet) => setupBgAgentsWithSessionKey(
-          activeVaults.map((v) => v.address),
-          serverWallet
-        ))
+        .then((serverWallet) => {
+          if (!serverWallet) throw new Error('Relayer wallet not configured');
+          return setupBgAgentsWithSessionKey(
+            activeVaults.map((v) => v.address),
+            serverWallet
+          );
+        })
         .then(() => addLog({ event: 'OrchestratorPlanned', meta: 'session key · authorized — monitor loop now zero-popup' }))
         .catch((err) => {
           sessionKeySetupRef.current.delete(realAddress); // allow retry on next start
