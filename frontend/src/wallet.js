@@ -119,10 +119,8 @@ export async function requestERC7715Permission(expirySeconds = 86400) {
     throw err
   }
 
-  // To redeem autonomously later, the grant MUST name our session account
-  // as the allowed redeemer. 1Shot relay handles this implicitly on mainnet,
-  // but for raw ERC-7710 redemption we must specify it up front.
-  const sessionAddress = prepareSessionAccount()
+  // Prepare session account for potential ERC-7710 redemption paths.
+  prepareSessionAccount()
 
   const result = await window.ethereum.request({
     method: 'wallet_requestExecutionPermissions',
@@ -130,7 +128,6 @@ export async function requestERC7715Permission(expirySeconds = 86400) {
       chainId: SEPOLIA_CHAIN_ID_HEX,
       from: account,
       to: AGENT_VAULT_DEPOSITOR_ADDRESS,
-      redeemer: [sessionAddress],
       permission: {
         type: 'erc20-token-periodic',
         isAdjustmentAllowed: false,
