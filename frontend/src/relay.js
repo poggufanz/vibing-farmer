@@ -255,8 +255,6 @@ export async function buildDepositCall({ agentId, user, vault, amount }) {
 
 export const bgAgentId = (vault) => ethers.id('yv-bg-' + vault.toLowerCase())
 
-const RELAY_PROXY_URL = '/api/relay'
-
 /**
  * Harvest rewards from `vault` for `user` (optionally recompound).
  * Zero-popup — uses managed relay, server wallet is pre-authorized session key.
