@@ -378,7 +378,60 @@ const MemoryModal = ({ agentId, strategy, execMap, onClose }) => {
 /* ============================================
    Strategy card (step 02 result) — multi-agent
    ============================================ */
-const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate, strategyHash, attestation, attesting }) => {
+
+// Alternate-futures Monte Carlo distribution for the proposed allocation.
+// Pure presentational — all numbers come pre-computed from runSimulation (simulation.js).
+const SCENARIO_META = {
+  bull: { label: 'Bull', tone: 'var(--ok)' },
+  base: { label: 'Base', tone: 'var(--text)' },
+  bear: { label: 'Bear', tone: 'var(--warn, #c87)' },
+};
+
+const SimulationPanel = ({ simulation }) => {
+  if (!simulation || !simulation.scenarios?.length) return null;
+  const { scenarios, expectedValue, probProfit, horizonDays, runs, context } = simulation;
+  const evTone = expectedValue >= 0 ? 'var(--ok)' : 'var(--warn, #c87)';
+  const fmt = (n) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}`;
+  return (
+    <div className="sim-panel">
+      <div className="sim-head mono">
+        <span className="sim-title">Simulation engine · alternate futures</span>
+        <span className="sim-meta">{runs} runs × {scenarios.length} scenarios · {horizonDays}d horizon · {context.turbulence} regime</span>
+      </div>
+      <div className="sim-ev">
+        <div className="sim-ev-fig">
+          <span className="figure figure-md tnum" style={{ color: evTone }}>{fmt(expectedValue)}<span className="unit"> USDC</span></span>
+          <span className="label mono">expected value · probability-weighted net yield</span>
+        </div>
+        <div className="sim-ev-prob mono">
+          <span className="tnum" style={{ color: 'var(--text)' }}>{Math.round(probProfit * 100)}%</span>
+          <span className="label">chance of profit</span>
+        </div>
+      </div>
+      <div className="sim-grid">
+        {scenarios.map((s) => {
+          const meta = SCENARIO_META[s.name] || { label: s.name, tone: 'var(--text)' };
+          return (
+            <div key={s.name} className="sim-scenario">
+              <div className="sim-scenario-head mono">
+                <span style={{ color: meta.tone }}>● {meta.label}</span>
+                <span className="tnum" style={{ color: s.mean >= 0 ? 'var(--ok)' : 'var(--warn, #c87)' }}>{fmt(s.mean)}</span>
+              </div>
+              <div className="sim-band mono">
+                <span className="tnum">{fmt(s.p5)}</span>
+                <span className="sim-band-rule" />
+                <span className="tnum">{fmt(s.p95)}</span>
+              </div>
+              <div className="sim-scenario-foot mono">p5–p95 · {Math.round(s.probProfit * 100)}% profit</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate, strategyHash, attestation, attesting, simulation }) => {
   const customSkill = skillSource === "user-local" || skillSource === "user-file";
   const shortHash = (h) => h ? `${h.slice(0, 10)}...` : "";
   return (
@@ -472,6 +525,8 @@ const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate, strategy
           )}
         </div>
       )}
+
+      <SimulationPanel simulation={simulation} />
 
       {(attestation || attesting || strategyHash) && (
         <div className="mono" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 16, padding: "9px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", fontSize: 11, color: "var(--text-muted)" }}>

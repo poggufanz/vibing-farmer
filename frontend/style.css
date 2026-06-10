@@ -3353,3 +3353,43 @@ details.yv-collapse[open] > summary .yv-caret {
   .loop-heartbeat-track.cycling .loop-heartbeat-fill { animation: none; }
   .loop-heartbeat-fill { transition: none; }
 }
+
+/* ── Simulation engine panel (/strategy review · alternate futures) ── */
+.sim-panel {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.sim-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.sim-title { color: var(--text); letter-spacing: 0.02em; }
+.sim-meta { color: var(--text-faint); }
+.sim-ev {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sim-ev-fig { display: flex; flex-direction: column; gap: 2px; }
+.sim-ev-fig .label { color: var(--text-faint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+.sim-ev-prob { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 11px; }
+.sim-ev-prob .tnum { font-size: 18px; }
+.sim-ev-prob .label { color: var(--text-faint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+.sim-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+.sim-scenario { padding: 12px 14px; border-right: 1px solid var(--border); }
+.sim-scenario:last-child { border-right: none; }
+.sim-scenario-head { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 8px; }
+.sim-band { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--text-muted); }
+.sim-band-rule { flex: 1; height: 1px; background: var(--border); }
+.sim-scenario-foot { margin-top: 6px; font-size: 9px; color: var(--text-faint); }
