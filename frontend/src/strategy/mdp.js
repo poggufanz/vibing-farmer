@@ -37,6 +37,26 @@ export function deriveTurbulence(marketContext) {
   return { turbulence: 'calm', signals: [] }
 }
 
+/**
+ * Combined on-chain signal: market-context turbulence augmented by live gas.
+ * A high gas snapshot adds a 'gas-spike' signal and lifts an otherwise-calm
+ * regime to 'elevated' (network congestion ~ execution risk). Market-context
+ * turbulence always dominates. Pure — no network, no storage.
+ * @param {string|null} marketContext
+ * @param {{ level:'normal'|'elevated'|'high', gwei:number }|null} gas
+ * @returns {{ turbulence:'calm'|'elevated'|'turbulent', signals:string[] }}
+ */
+export function deriveSignals(marketContext, gas) {
+  const base = deriveTurbulence(marketContext)
+  const signals = [...base.signals]
+  let turbulence = base.turbulence
+  if (gas && gas.level === 'high') {
+    if (!signals.includes('gas-spike')) signals.push('gas-spike')
+    if (turbulence === 'calm') turbulence = 'elevated'
+  }
+  return { turbulence, signals }
+}
+
 /** Map a raw catalog/DeFiLlama vault into a normalized observation vector. */
 function toObservation(v) {
   return {
