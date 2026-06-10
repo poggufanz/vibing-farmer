@@ -80,9 +80,10 @@ function toObservation(v) {
  * @param {Array}  p.vaultData        // live DeFiLlama vaults or VAULT_CATALOG
  * @param {string|null} p.marketContext
  * @param {Object} [p.positions]      // { addr: { balance } } 6-decimal USDC strings
+ * @param {{ level:'normal'|'elevated'|'high', gwei:number }|null} [p.gas]  // optional live gas snapshot
  * @returns {Object} StrategyState
  */
-export function buildStrategyState({ amountUsdc, riskLevel, numVaults, vaultData, marketContext, positions = {} }) {
+export function buildStrategyState({ amountUsdc, riskLevel, numVaults, vaultData, marketContext, positions = {}, gas = null }) {
   const universe = (vaultData && vaultData.length ? vaultData : VAULT_CATALOG).map(toObservation)
   const holdings = positions || {}
   const heldUnits = Object.values(holdings).reduce((s, p) => s + Number(p && p.balance || 0), 0)
@@ -90,7 +91,7 @@ export function buildStrategyState({ amountUsdc, riskLevel, numVaults, vaultData
     capital: { amountUsdc: Number(amountUsdc) || 0, heldUsdc: heldUnits / 1e6 },
     profile: { riskLevel: normalizeRisk(riskLevel), numVaults: Number(numVaults) || 1 },
     portfolio: { holdings, heldVaultCount: Object.keys(holdings).length },
-    market: deriveTurbulence(marketContext),
+    market: deriveSignals(marketContext, gas),
     universe,
     observedAt: Date.now(),
   }

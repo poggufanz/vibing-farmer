@@ -180,3 +180,21 @@ describe('deriveSignals (market context + on-chain gas)', () => {
     expect(r.signals).not.toContain('gas-spike')
   })
 })
+
+describe('buildStrategyState gas awareness', () => {
+  it('adds a gas-spike signal when a high gas snapshot is supplied', () => {
+    const state = buildStrategyState({
+      amountUsdc: 1000, riskLevel: 'high', numVaults: 2,
+      vaultData: [], marketContext: 'markets calm', positions: {},
+      gas: { level: 'high', gwei: 120 },
+    })
+    expect(state.market.signals).toContain('gas-spike')
+  })
+  it('omits gas-spike when no gas snapshot is supplied', () => {
+    const state = buildStrategyState({
+      amountUsdc: 1000, riskLevel: 'high', numVaults: 2,
+      vaultData: [], marketContext: 'markets calm', positions: {},
+    })
+    expect(state.market.signals).not.toContain('gas-spike')
+  })
+})

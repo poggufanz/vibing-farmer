@@ -212,6 +212,7 @@ const App = () => {
   // Real Web3 state
   const [realAddress, setRealAddress] = useS(null);
   const loopRef = useR(null);
+  const latestGasRef = useR(null); // last live gas snapshot { level, gwei } for the monitor loop
   // Tracks which user addresses have had session key setup done (survives re-renders).
   const sessionKeySetupRef = useR(new Set());
   const [loopTick, setLoopTick] = useS(0);
@@ -467,6 +468,7 @@ const App = () => {
         vaultData: VAULT_CATALOG,
         marketContext: marketLive,
         positions: agentData.positions,
+        gas: latestGasRef.current,
       }),
       runGates: (proposed, state) => enforceActionSpace(proposed, state),
       gates: (state, idea) => evaluateGates(state, idea),
@@ -591,6 +593,7 @@ const App = () => {
         setMarketLive(!!veniceResult.marketContextUsed);
         setVaultLive(veniceResult.vaultDataSource === "defiLlama");
         if (veniceResult.mdpState?.gasLevel) {
+          latestGasRef.current = { level: veniceResult.mdpState.gasLevel, gwei: veniceResult.mdpState.gasGwei };
           addLog({ event: "OrchestratorPlanned", meta: `parallel fetch · gas ${veniceResult.mdpState.gasGwei} gwei (${veniceResult.mdpState.gasLevel})` });
         }
         if (veniceResult.dagTimings) {
