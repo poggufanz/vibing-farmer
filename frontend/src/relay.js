@@ -105,15 +105,16 @@ export async function getRelayerAddress() {
 /**
  * Submit via the 1Shot KEYLESS EIP-7710 relayer. Mainnet-only.
  * On unsupported chains (incl. Base Sepolia) callers use the on-chain fallback instead,
- * so this simulation branch should not be reached in normal flow.
+ * so this branch should not be reached in normal flow.
  */
 export async function submitRelay({ to, calldata, permissionContext }) {
   const chainStr = String(SEPOLIA_CHAIN_ID)
 
-  // Defensive: keyless relayer can't serve this chain → simulate rather than hard-fail.
+  // Keyless relayer can't serve this chain. Callers (relayDeposit/relayGrantPermission)
+  // already route Base Sepolia to the managed proxy / on-chain fallback BEFORE calling
+  // submitRelay, so reaching here is a real misconfiguration — fail loudly, never fake a tx.
   if (!ONESHOT_SUPPORTED_CHAINS.has(chainStr)) {
-    await new Promise(r => setTimeout(r, 700))
-    return { txHash: '0xsim_' + Date.now().toString(16), status: 'simulated' }
+    throw new Error(`1Shot keyless relayer does not support chain ${chainStr} — use the managed proxy`)
   }
 
   // Real 1Shot relay — EIP-7710 relayer_send7710Transaction
