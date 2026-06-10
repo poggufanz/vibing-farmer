@@ -96,4 +96,35 @@ describe('createMonitorLoop', () => {
     loop.stop()
     vi.useRealTimers()
   })
+
+  it('gated idea sleeps without simulate/council/execute (saves AI credit)', async () => {
+    const { saved, deps } = makeDeps({
+      gates: vi.fn(() => ({ passed: false, blockedBy: 'turbulence', reason: 'turbulent market — deposit blocked', results: [] })),
+    })
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea({ kind: 'deposit', proposed: [], currentAllocations: [] })
+    expect(deps.gates).toHaveBeenCalledOnce()
+    expect(deps.simulate).not.toHaveBeenCalled()
+    expect(deps.council).not.toHaveBeenCalled()
+    expect(deps.execute).not.toHaveBeenCalled()
+    expect(saved[0]).toMatchObject({ cycle: 1, phase: 'gate', verdict: 'gated', gate: 'turbulence' })
+  })
+
+  it('passing gates proceed to council as before', async () => {
+    const { saved, deps } = makeDeps({
+      gates: vi.fn(() => ({ passed: true, blockedBy: null, reason: null, results: [] })),
+    })
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea({ kind: 'rebalance', proposed: [], currentAllocations: [] })
+    expect(deps.council).toHaveBeenCalledOnce()
+    expect(saved[0]).toMatchObject({ verdict: 'keep' })
+  })
+
+  it('defaults to pass-through gates when none injected', async () => {
+    const { deps } = makeDeps()
+    delete deps.gates
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea({ kind: 'rebalance', proposed: [], currentAllocations: [] })
+    expect(deps.council).toHaveBeenCalledOnce()
+  })
 })

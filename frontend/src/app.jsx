@@ -2,7 +2,7 @@
    VIBING FARMER — App (multi-agent + real Web3)
    Design state machine wired to real wallet.js / venice.js / orchestrator.js
    ============================================ */
-import React, { useState as useS, useEffect as useE, useRef as useR } from 'react';
+import React, { useState as useS, useEffect as useE, useRef as useR, useMemo as useM } from 'react';
 import { isDevMode } from './devFlag.js';
 
 import { Icon, Sidebar, TopBar, StepRail, STEPS } from './components.jsx';
@@ -52,6 +52,8 @@ import VaultDetailPage from './components/VaultDetailPage.jsx';
 import TxDetailPage from './components/TxDetailPage.jsx';
 
 import { buildStrategyState, enforceActionSpace, scoreReward } from './strategy/mdp.js';
+import { runSimulation, allocationsFromStrategy } from './strategy/simulation.js';
+import { evaluateGates } from './strategy/gates.js';
 import { createMonitorLoop } from './strategy/monitorLoop.js';
 import { councilVerdict } from './strategy/council.js';
 import { reflect } from './strategy/reflector.js';
@@ -211,6 +213,7 @@ const App = () => {
   // Real Web3 state
   const [realAddress, setRealAddress] = useS(null);
   const loopRef = useR(null);
+  const latestGasRef = useR(null); // last live gas snapshot { level, gwei } for the monitor loop
   // Tracks which user addresses have had session key setup done (survives re-renders).
   const sessionKeySetupRef = useR(new Set());
   const [loopTick, setLoopTick] = useS(0);
@@ -466,8 +469,10 @@ const App = () => {
         vaultData: VAULT_CATALOG,
         marketContext: marketLive,
         positions: agentData.positions,
+        gas: latestGasRef.current,
       }),
       runGates: (proposed, state) => enforceActionSpace(proposed, state),
+      gates: (state, idea) => evaluateGates(state, idea),
       simulate: (allocations, state) => scoreReward(allocations, state),
       council: (input) => councilVerdict(input, {
         weight: playbookWeight,
@@ -501,6 +506,32 @@ const App = () => {
   }, [stage, agentEnabled, realAddress, strategy]);
 
   const dismissAlert = (id) => setAgentData((d) => ({ ...d, alerts: d.alerts.filter((a) => a.id !== id) }));
+
+  // Monte Carlo "alternate futures" for the proposed allocation. Recomputes only when
+  // the strategy / inputs change. Uses the SAME live signals shown in the review panel —
+  // turbulence regime (mdpState) + live gas — so the distribution reflects real context.
+  const simulation = useM(() => {
+    if (!strategy?.agents?.length) return null;
+    const state = buildStrategyState({
+      amountUsdc: Number(amount) || 0,
+      riskLevel: risk,
+      numVaults: strategy.agents.length,
+      vaultData: VAULT_CATALOG,
+      marketContext: marketLive,
+      positions: agentData.positions,
+      gas: latestGasRef.current,
+    });
+    return runSimulation(allocationsFromStrategy(strategy), state, {
+      runs: 200,
+      horizonDays: 30,
+      seed: 1,
+      context: {
+        turbulence: strategy.mdpState?.turbulence || state.market.turbulence,
+        apyTrendPct: 0,
+        gasGwei: latestGasRef.current?.gwei || null,
+      },
+    });
+  }, [strategy, amount, risk]);
 
   const handleHarvestNow = async (alert) => {
     try {
@@ -589,6 +620,7 @@ const App = () => {
         setMarketLive(!!veniceResult.marketContextUsed);
         setVaultLive(veniceResult.vaultDataSource === "defiLlama");
         if (veniceResult.mdpState?.gasLevel) {
+          latestGasRef.current = { level: veniceResult.mdpState.gasLevel, gwei: veniceResult.mdpState.gasGwei };
           addLog({ event: "OrchestratorPlanned", meta: `parallel fetch · gas ${veniceResult.mdpState.gasGwei} gwei (${veniceResult.mdpState.gasLevel})` });
         }
         if (veniceResult.dagTimings) {
@@ -1176,7 +1208,7 @@ const App = () => {
           return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} onSubmit={handleSubmitPreference} />;
         if (strategyPhase === "thinking")
           return <ThinkingCard phase={thinkingPhase} times={thinkTimes} />;
-        return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} strategyHash={rawStrategy?.strategyHash} attestation={strategyAttestation} attesting={attesting} />;
+        return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} strategyHash={rawStrategy?.strategyHash} attestation={strategyAttestation} attesting={attesting} simulation={simulation} />;
       case "connect":
         return <ConnectCard phase={connectPhase} error={connectError} mmVersion={mmVersion} onConnect={handleConnect} onUpgrade={handleUpgrade} onDone={handleConnectDone} onCancel={() => { setConnectPhase("idle"); setStage("strategy"); }} />;
       case "skills":

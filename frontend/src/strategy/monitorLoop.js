@@ -9,6 +9,7 @@
  * @param {Object} deps
  * @param {() => Promise<Object>} deps.getState                                        // mdp StrategyState
  * @param {(proposed:Array, state:Object) => {allocations:Array, violations:string[]}} deps.runGates
+ * @param {(state:Object, idea:Object) => {passed:boolean, blockedBy:string|null, reason:string|null}} [deps.gates]  // pure fast-fail gates — FIRST defense, no AI/network
  * @param {(allocations:Array, state:Object) => Object} deps.simulate                   // mdp.scoreReward
  * @param {(input:Object) => Promise<Object>} deps.council                              // councilVerdict (async)
  * @param {(idea:Object, allocations:Array) => Promise<string>} deps.execute            // → txHash
@@ -17,7 +18,7 @@
  * @param {number} [deps.heartbeatMs]
  * @param {(phase:string)=>void} [deps.onPhase]  // live pipeline progress for UI — never blocks the loop
  */
-export function createMonitorLoop({ getState, runGates, simulate, council, execute, reflect, journal, heartbeatMs = 60_000, onPhase }) {
+export function createMonitorLoop({ getState, runGates, gates = () => ({ passed: true }), simulate, council, execute, reflect, journal, heartbeatMs = 60_000, onPhase }) {
   let timer = null
   let cycle = 0
   let running = false
@@ -37,7 +38,15 @@ export function createMonitorLoop({ getState, runGates, simulate, council, execu
         return
       }
 
+      // FIRST line of defense — pure math, no AI, no network. A blocked gate
+      // sleeps the loop here, before simulate/council, so no Venice credit burns.
       phase('gate')
+      const gate = gates(state, idea)
+      if (!gate.passed) {
+        journal.saveCycle({ cycle, phase: 'gate', verdict: 'gated', gate: gate.blockedBy, reason: gate.reason, turbulence: state.market.turbulence })
+        return
+      }
+
       const { allocations, violations } = runGates(idea.proposed, state)
       phase('simulate')
       const projectedReward = simulate(allocations, state)
