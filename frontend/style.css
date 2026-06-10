@@ -3116,6 +3116,9 @@ details.yv-collapse[open] > summary .yv-caret {
   flex-direction: column;
   gap: 12px;
 }
+.loop-status.embedded {
+  margin-top: 0;
+}
 
 .loop-head {
   display: flex;

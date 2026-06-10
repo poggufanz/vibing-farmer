@@ -1197,24 +1197,7 @@ const App = () => {
           />
         );
       case "done":
-        return (
-          <>
-            <SuccessCard strategy={strategy} onAgain={handleAgain} address={realAddress} />
-            {agentEnabled && (
-              // loopTick re-renders the parent on each journal write; no key remount
-              // so the panel's internal 1s countdown clock and CSS animations persist.
-              <LoopStatusPanel
-                running={loopRef.current?.isRunning() || false}
-                cycle={loopRef.current?.getCycle() || 0}
-                summary={getJournalSummary()}
-                rows={getCycles().slice(0, 8)}
-                phase={loopPhase}
-                nextTickAt={loopRef.current?.getNextTickAt() || null}
-                heartbeatMs={loopRef.current?.getHeartbeatMs() || (agentSettings.apyInterval || 10) * 60 * 1000}
-              />
-            )}
-          </>
-        );
+        return <SuccessCard strategy={strategy} onAgain={handleAgain} address={realAddress} />;
       default:
         return null;
     }
@@ -1316,6 +1299,23 @@ const App = () => {
                   onDismiss={dismissAlert}
                   onWithdrawSuccess={handleWithdrawSuccess}
                   onNewStrategy={handleAgain}
+                  loopStatus={agentEnabled ? {
+                    running: loopRef.current?.isRunning() || false,
+                    phase: loopPhase,
+                    cycle: loopRef.current?.getCycle() || 0,
+                  } : null}
+                  // loopTick re-renders the parent on each journal write; no key remount
+                  // so the panel's internal 1s countdown clock and CSS animations persist.
+                  loopPanel={agentEnabled && (
+                    <LoopStatusPanel
+                      running={loopRef.current?.isRunning() || false}
+                      summary={getJournalSummary()}
+                      rows={getCycles().slice(0, 8)}
+                      phase={loopPhase}
+                      nextTickAt={loopRef.current?.getNextTickAt() || null}
+                      heartbeatMs={loopRef.current?.getHeartbeatMs() || (agentSettings.apyInterval || 10) * 60 * 1000}
+                    />
+                  )}
                 />
               </div>
             </div>

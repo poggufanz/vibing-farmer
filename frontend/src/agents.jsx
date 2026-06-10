@@ -640,7 +640,7 @@ const loopRowDetail = (r) => {
   return `observed market · ${r.turbulence || 'calm'} · no action needed`;
 };
 
-const LoopStatusPanel = ({ running, cycle, summary, rows, phase, nextTickAt, heartbeatMs }) => {
+const LoopStatusPanel = ({ running, summary, rows, phase, nextTickAt, heartbeatMs }) => {
   // Internal 1s clock — the countdown and relative timestamps tick even when
   // the loop itself sleeps, which is what makes the panel feel alive.
   const [now, setNow] = useSAg(() => Date.now());
@@ -658,18 +658,7 @@ const LoopStatusPanel = ({ running, cycle, summary, rows, phase, nextTickAt, hea
   const activeIdx = LOOP_PHASES.indexOf(phase);
 
   return (
-    <div className={`loop-status card enter ${running ? 'is-running' : 'is-stopped'}`}>
-      <div className="loop-head">
-        <div className="loop-title">
-          <span className={`loop-pulse ${!running ? 'off' : cycling ? 'cycling' : 'live'}`} />
-          <strong>Autonomous monitor loop</strong>
-          <span className="loop-state">
-            {!running ? 'stopped' : cycling ? `evaluating · ${phase}` : 'standing by · never stops'}
-          </span>
-        </div>
-        <span className="loop-cycleno">cycle {String(cycle).padStart(2, '0')}</span>
-      </div>
-
+    <div className={`loop-status embedded ${running ? 'is-running' : 'is-stopped'}`}>
       {running && (
         <div className="loop-vitals">
           <span className={`loop-countdown ${cycling ? 'busy' : ''}`}>
