@@ -583,10 +583,14 @@ const App = () => {
           veniceAuth: null, // wallet not connected yet at step 1
           devApiKey: devApiKey || null,
           signal: ctrl.signal,
+          address: realAddress || null, // positions node runs only when connected
         });
         setSkillSource(veniceResult.skillSource || "default");
         setMarketLive(!!veniceResult.marketContextUsed);
         setVaultLive(veniceResult.vaultDataSource === "defiLlama");
+        if (veniceResult.mdpState?.gasLevel) {
+          addLog({ event: "OrchestratorPlanned", meta: `parallel fetch · gas ${veniceResult.mdpState.gasGwei} gwei (${veniceResult.mdpState.gasLevel})` });
+        }
         setRawStrategy(veniceResult); // carries strategyHash → attestation effect picks it up once a provider exists
         if (veniceResult.generatedBy !== "fallback") {          s = mapVeniceToStrategy(veniceResult, amount, risk);
           addLog({ event: "OrchestratorPlanned", meta: `strategy via ${veniceResult.generatedBy} · ${(veniceResult.strategy_summary || veniceResult.rationale)?.slice(0, 60)}` });
