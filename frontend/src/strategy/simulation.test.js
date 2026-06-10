@@ -1,6 +1,6 @@
 // frontend/src/strategy/simulation.test.js
 import { describe, it, expect } from 'vitest'
-import { simulatePath, runScenario, SCENARIOS, deriveScenarioParams } from './simulation.js'
+import { simulatePath, runScenario, SCENARIOS, deriveScenarioParams, runSimulation, allocationsFromStrategy } from './simulation.js'
 import { makeRng } from './rng.js'
 
 // Minimal hand-built StrategyState — the engine must not depend on buildStrategyState.
@@ -113,5 +113,65 @@ describe('deriveScenarioParams', () => {
     deriveScenarioParams({ turbulence: 'turbulent', apyTrendPct: 5 })
     expect(SCENARIOS[1].apyDriftPct).toBe(0)
     expect(SCENARIOS[1].apyVolPct).toBe(1)
+  })
+})
+
+describe('allocationsFromStrategy', () => {
+  it('converts agent USDC amounts into normalized weights carrying apy', () => {
+    const strategy = {
+      total: 100,
+      agents: [
+        { vault: { addr: '0xA', apy: '5' }, allocation: 25 },
+        { vault: { addr: '0xB', apy: '10' }, allocation: 75 },
+      ],
+    }
+    const allocs = allocationsFromStrategy(strategy)
+    expect(allocs).toEqual([
+      { address: '0xA', allocation: 0.25, apy: 5 },
+      { address: '0xB', allocation: 0.75, apy: 10 },
+    ])
+  })
+
+  it('returns an empty array for a null strategy', () => {
+    expect(allocationsFromStrategy(null)).toEqual([])
+  })
+})
+
+describe('runSimulation', () => {
+  function makeState(over = {}) {
+    return {
+      capital: { amountUsdc: 1000, heldUsdc: 0 },
+      universe: [{ address: '0xB', apy: 10 }],
+      market: { turbulence: 'calm', signals: [] },
+      ...over,
+    }
+  }
+  const allocations = [{ address: '0xB', allocation: 1, apy: 10 }]
+
+  it('runs every scenario and reports a probability-weighted expected value', () => {
+    const sim = runSimulation(allocations, makeState(), { runs: 200, horizonDays: 30, seed: 1, context: { turbulence: 'calm', apyTrendPct: 0, gasGwei: 30 } })
+    expect(sim.scenarios.map((s) => s.name)).toEqual(['bull', 'base', 'bear'])
+    expect(sim.horizonDays).toBe(30)
+    expect(sim.runs).toBe(200)
+    expect(sim.capitalUsdc).toBe(1000)
+    // EV sits between the bear mean and the bull mean.
+    const means = sim.scenarios.map((s) => s.mean)
+    expect(sim.expectedValue).toBeLessThanOrEqual(Math.max(...means))
+    expect(sim.expectedValue).toBeGreaterThanOrEqual(Math.min(...means))
+    expect(sim.probProfit).toBeGreaterThanOrEqual(0)
+    expect(sim.probProfit).toBeLessThanOrEqual(1)
+    expect(sim.context.turbulence).toBe('calm')
+  })
+
+  it('is deterministic for a given seed + context', () => {
+    const opts = { runs: 100, horizonDays: 30, seed: 5, context: { turbulence: 'elevated', apyTrendPct: 0.5, gasGwei: 40 } }
+    expect(runSimulation(allocations, makeState(), opts)).toEqual(runSimulation(allocations, makeState(), opts))
+  })
+
+  it('a turbulent context lowers the expected value vs calm', () => {
+    const base = { runs: 300, horizonDays: 60, seed: 2 }
+    const calm = runSimulation(allocations, makeState(), { ...base, context: { turbulence: 'calm', apyTrendPct: 0, gasGwei: 30 } })
+    const turb = runSimulation(allocations, makeState(), { ...base, context: { turbulence: 'turbulent', apyTrendPct: 0, gasGwei: 30 } })
+    expect(calm.expectedValue).toBeGreaterThan(turb.expectedValue)
   })
 })

@@ -123,3 +123,70 @@ export function deriveScenarioParams(context = {}) {
     apyVolPct: +(s.apyVolPct + volBoost).toFixed(2),
   }))
 }
+
+/** Rough one-time entry gas in USDC from a gwei snapshot (deposit ≈ 150k gas, ETH ≈ $3000). */
+function gasToUsdc(gwei) {
+  const g = Number(gwei)
+  if (!g) return 0.5
+  const GAS_UNITS = 150000
+  const ETH_USD = 3000
+  return +(g * 1e-9 * GAS_UNITS * ETH_USD).toFixed(2)
+}
+
+/**
+ * Public entry point: run the full scenario sweep and compute the
+ * probability-weighted expected value + expected probability of profit.
+ * @param {Array<{address:string, allocation:number, apy?:number}>} allocations
+ * @param {Object} state StrategyState
+ * @param {{runs?:number, horizonDays?:number, seed?:number, entryGasUsdc?:number, context?:{turbulence?:string, apyTrendPct?:number, gasGwei?:number}}} [opts]
+ * @returns {{scenarios:Array, expectedValue:number, probProfit:number, horizonDays:number, runs:number, capitalUsdc:number, context:Object}}
+ */
+export function runSimulation(allocations, state, opts = {}) {
+  const context = opts.context || {}
+  const entryGasUsdc = opts.entryGasUsdc != null ? opts.entryGasUsdc : gasToUsdc(context.gasGwei)
+  const params = deriveScenarioParams(context)
+  const seed = opts.seed != null ? opts.seed : 1
+  const scenarios = params.map((p, i) =>
+    runScenario(allocations, state, p, {
+      runs: opts.runs || DEFAULT_RUNS,
+      horizonDays: opts.horizonDays || DEFAULT_HORIZON_DAYS,
+      entryGasUsdc,
+      seed: (seed + i * 7919) >>> 0,
+    })
+  )
+  const totalWeight = params.reduce((s, p) => s + (Number(p.weight) || 0), 0) || 1
+  const expectedValue = +(
+    scenarios.reduce((s, sc, i) => s + sc.mean * (Number(params[i].weight) || 0), 0) / totalWeight
+  ).toFixed(2)
+  const probProfit = +(
+    scenarios.reduce((s, sc, i) => s + sc.probProfit * (Number(params[i].weight) || 0), 0) / totalWeight
+  ).toFixed(3)
+  return {
+    scenarios,
+    expectedValue,
+    probProfit,
+    horizonDays: opts.horizonDays || DEFAULT_HORIZON_DAYS,
+    runs: opts.runs || DEFAULT_RUNS,
+    capitalUsdc: Number(state.capital?.amountUsdc) || 0,
+    context: {
+      turbulence: context.turbulence || 'calm',
+      apyTrendPct: Number(context.apyTrendPct) || 0,
+      gasGwei: Number(context.gasGwei) || null,
+    },
+  }
+}
+
+/**
+ * Adapt the wizard's strategy.agents (USDC amounts) into normalized allocation
+ * weights carrying each vault's APY. Mirrors how app.jsx builds the strategy.
+ * @param {{total?:number, agents?:Array<{vault?:{addr?:string, apy?:string|number}, allocation?:number}>}} strategy
+ * @returns {Array<{address:string, allocation:number, apy:number}>}
+ */
+export function allocationsFromStrategy(strategy) {
+  const total = Number(strategy?.total) || 0
+  return (strategy?.agents || []).map((a) => ({
+    address: a.vault?.addr,
+    allocation: total ? +(((Number(a.allocation) || 0) / total)).toFixed(4) : 0,
+    apy: Number(a.vault?.apy) || 0,
+  }))
+}
