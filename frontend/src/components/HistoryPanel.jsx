@@ -82,6 +82,13 @@ const StratList = ({ rows }) => {
             {r.strategySource} · {r.vaultDataSource === 'defiLlama' ? 'DeFiLlama data' : 'static data'}
             {r.marketContextUsed ? ' · live market' : ''}
           </div>
+feat: surface DAG timing, ERC-7715 context, and skill errors to UIfeat: surface DAG timing, ERC-7715 context, and skill errors to UI          {r.dagTimings && (
+            <div className="hist-card-meta mono">
+              dag {r.dagWallMs}ms · {Object.entries(r.dagTimings)
+                .map(([id, ms]) => `${id} ${Math.round(ms)}ms`)
+                .join(' · ')}
+            </div>
+          )}
         </div>
       ))}
     </div>

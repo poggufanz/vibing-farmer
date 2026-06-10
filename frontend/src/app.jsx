@@ -591,6 +591,10 @@ const App = () => {
         if (veniceResult.mdpState?.gasLevel) {
           addLog({ event: "OrchestratorPlanned", meta: `parallel fetch · gas ${veniceResult.mdpState.gasGwei} gwei (${veniceResult.mdpState.gasLevel})` });
         }
+        if (veniceResult.dagTimings) {
+          const breakdown = Object.entries(veniceResult.dagTimings).map(([id, ms]) => `${id} ${Math.round(ms)}ms`).join(' · ');
+          addLog({ event: "OrchestratorPlanned", meta: `dag · wall ${veniceResult.dagWallMs}ms`, detail: breakdown });
+        }
         setRawStrategy(veniceResult); // carries strategyHash → attestation effect picks it up once a provider exists
         if (veniceResult.generatedBy !== "fallback") {          s = mapVeniceToStrategy(veniceResult, amount, risk);
           addLog({ event: "OrchestratorPlanned", meta: `strategy via ${veniceResult.generatedBy} · ${(veniceResult.strategy_summary || veniceResult.rationale)?.slice(0, 60)}` });
@@ -739,19 +743,15 @@ const App = () => {
       const permResult = await requestERC7715Permission(86400);
       const expiresAtMs = Date.now() + 86400 * 1000;
 
-      // DIAGNOSTIC: confirm what Flask actually returned. If delegationManager
-      // is missing here, session redemption never boots and every later action
-      // falls back to the popup-per-call path — this line tells us why.
-      console.log('[strategy] ERC-7715 grant result:', {
-        permissionContext: permResult.permissionContext,
-        delegationManager: permResult.delegationManager,
-        grantedPermissions: permResult.grantedPermissions,
-      });
+      // If delegationManager is missing here, session redemption never boots and
+      // every later action falls back to the popup-per-call path — surface the
+      // grant context to the activity log so that's diagnosable without devtools.
       const gp = permResult.grantedPermissions;
-      console.log("chain id:", gp?.[0]?.chainId);
-      console.log("context:", gp?.[0]?.context);
-      console.log("signerMeta:", gp?.[0]?.signerMeta);
-      console.log("accountMeta:", gp?.[0]?.accountMeta);
+      addLog({
+        event: "PermissionGranted",
+        meta: `erc-7715 granted · chain ${gp?.[0]?.chainId ?? "?"} · delegationManager ${permResult.delegationManager ? shortAddr(permResult.delegationManager) : "missing"}`,
+        detail: `context: ${shortAddr(gp?.[0]?.context || permResult.permissionContext || "")}\nsignerMeta: ${JSON.stringify(gp?.[0]?.signerMeta)}\naccountMeta: ${JSON.stringify(gp?.[0]?.accountMeta)}`,
+      });
 
       // Boot the ERC-7710 session + persist the single grant → all later actions
       // redeem with zero popup, and reload/re-entry within 24h skips this step.
@@ -842,6 +842,15 @@ const App = () => {
             event: "RedelegationRedeemed",
             agent: data.to || `worker-${data.workerId}`,
             meta: `deposit executed · tx ${shortAddr(data.txHash)}`,
+          });
+          return;
+        }
+        if (evName === "skill-gen-failed") {
+          const dId = agentMapRef.current?.[data.agentId] || data.agentId;
+          addLog({
+            event: "AgentFailed",
+            agent: dId,
+            meta: `skill gen failed · ${data.error} · using fallback skill`,
           });
           return;
         }

@@ -64,6 +64,15 @@ export class OrchestratorAgent {
     )
     this.onEvent('orchestrator-step', { step: 'generating-skills', status: 'done' })
 
+    // Surface skill-gen failures (e.g. Venice 401/402) — fallback still lets the
+    // agent run, but the user should see the AI call didn't actually happen.
+    skillsResults.forEach((r, i) => {
+      const skill = r.value?.skill
+      if (skill?.error) {
+        this.onEvent('skill-gen-failed', { agentId: vaultPlans[i].agentId, error: skill.error })
+      }
+    })
+
     // Batch strategy (EIP-5792):
     //   Managed relay active (Base Sepolia): batch GRANTS only (1 popup) → deposits via 1Shot relay
     //   No managed relay: batch GRANTS + DEPOSITS together (1 popup, user pays gas)

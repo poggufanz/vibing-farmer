@@ -122,7 +122,7 @@ export async function generateStrategy({ amount, riskLevel, numVaults, veniceAut
   const provider = resolveProvider(veniceAuth, effectiveDevKey)
   if (!provider) {
     console.warn('[ai] No provider — using fallback strategy')
-    return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData }
+    return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData, dagTimings: dag.timings, dagWallMs: Math.round(dag.wallMs) }
   }
 
   const userPrompt = `User profile:
@@ -197,6 +197,8 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
       marketContextUsed: marketContext !== null,
       blendedApy: parsed.selected_vaults.reduce((sum, v) => sum + ((v.expected_apy || 0) * (v.allocation || 0)), 0).toFixed(2),
       strategyHash,
+      dagTimings: dag.timings,
+      dagWallMs: Math.round(dag.wallMs),
     })
     parsed.selected_vaults.forEach(v => {
       if (v.reasoning) saveReasoning({
@@ -204,10 +206,10 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
         reasoning: v.reasoning, expectedApy: v.expected_apy, amountUsdc: amount, riskLevel, modelUsed: provider.model,
       })
     })
-    return { ...parsed, generatedBy: provider.name, skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData, strategyHash, attestation: null, reward, mdpState }
+    return { ...parsed, generatedBy: provider.name, skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData, strategyHash, attestation: null, reward, mdpState, dagTimings: dag.timings, dagWallMs: Math.round(dag.wallMs) }
   } catch (err) {
     console.warn(`[ai] Strategy failed (${provider.name}), using fallback:`, err.message)
-    return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData }
+    return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData, dagTimings: dag.timings, dagWallMs: Math.round(dag.wallMs) }
   } finally {
     if (timeout) clearTimeout(timeout)
   }
@@ -274,7 +276,7 @@ Respond with JSON schema:
     return result
   } catch (err) {
     console.warn(`[ai] Skill gen failed (${provider.name}), using fallback:`, err.message)
-    return fallback
+    return { ...fallback, error: err.message }
   } finally {
     clearTimeout(timeout)
   }
