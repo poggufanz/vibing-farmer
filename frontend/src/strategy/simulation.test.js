@@ -1,6 +1,6 @@
 // frontend/src/strategy/simulation.test.js
 import { describe, it, expect } from 'vitest'
-import { simulatePath, runScenario, SCENARIOS } from './simulation.js'
+import { simulatePath, runScenario, SCENARIOS, deriveScenarioParams } from './simulation.js'
 import { makeRng } from './rng.js'
 
 // Minimal hand-built StrategyState — the engine must not depend on buildStrategyState.
@@ -85,5 +85,33 @@ describe('runScenario', () => {
     const bull = runScenario(allocations, makeState(), SCENARIOS[0], opts)
     const bear = runScenario(allocations, makeState(), SCENARIOS[2], opts)
     expect(bull.mean).toBeGreaterThan(bear.mean)
+  })
+})
+
+describe('deriveScenarioParams', () => {
+  it('returns the static sweep unchanged under calm, flat context', () => {
+    const r = deriveScenarioParams({ turbulence: 'calm', apyTrendPct: 0 })
+    expect(r.map((s) => s.name)).toEqual(['bull', 'base', 'bear'])
+    expect(r[1].apyDriftPct).toBe(0)
+    expect(r[1].apyVolPct).toBe(1)
+  })
+
+  it('turbulent regime drags drift down and widens volatility', () => {
+    const calm = deriveScenarioParams({ turbulence: 'calm', apyTrendPct: 0 })
+    const turbulent = deriveScenarioParams({ turbulence: 'turbulent', apyTrendPct: 0 })
+    expect(turbulent[1].apyDriftPct).toBeLessThan(calm[1].apyDriftPct)
+    expect(turbulent[1].apyVolPct).toBeGreaterThan(calm[1].apyVolPct)
+  })
+
+  it('a positive APY trend lifts drift across every scenario', () => {
+    const flat = deriveScenarioParams({ turbulence: 'calm', apyTrendPct: 0 })
+    const rising = deriveScenarioParams({ turbulence: 'calm', apyTrendPct: 1.5 })
+    rising.forEach((s, i) => expect(s.apyDriftPct).toBeCloseTo(flat[i].apyDriftPct + 1.5, 2))
+  })
+
+  it('does not mutate the SCENARIOS constant', () => {
+    deriveScenarioParams({ turbulence: 'turbulent', apyTrendPct: 5 })
+    expect(SCENARIOS[1].apyDriftPct).toBe(0)
+    expect(SCENARIOS[1].apyVolPct).toBe(1)
   })
 })

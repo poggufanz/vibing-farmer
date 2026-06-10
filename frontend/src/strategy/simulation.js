@@ -99,3 +99,27 @@ export function runScenario(allocations, state, params, opts = {}) {
   }
   return { name: params.name, runs, ...distribution(outcomes) }
 }
+
+/** Turbulence regime → extra volatility (pct points) added to every scenario. */
+const TURB_VOL_BOOST = { calm: 0, elevated: 1.0, turbulent: 2.5 }
+/** Turbulence regime → drift drag (pct points) subtracted from every scenario. */
+const TURB_DRIFT_DRAG = { calm: 0, elevated: -1.0, turbulent: -3.0 }
+
+/**
+ * Enrich the static scenario sweep with live context. THIS is the differentiator —
+ * outcomes reflect the real regime and APY trend, not a fixed sweep. Returns NEW
+ * scenario params; never mutates SCENARIOS.
+ * @param {{turbulence?:'calm'|'elevated'|'turbulent', apyTrendPct?:number}} [context]
+ * @returns {Array<{name:string, apyDriftPct:number, apyVolPct:number, gasMultiplier:number, weight:number}>}
+ */
+export function deriveScenarioParams(context = {}) {
+  const turb = context.turbulence || 'calm'
+  const apyTrendPct = Number(context.apyTrendPct) || 0
+  const volBoost = TURB_VOL_BOOST[turb] || 0
+  const driftDrag = TURB_DRIFT_DRAG[turb] || 0
+  return SCENARIOS.map((s) => ({
+    ...s,
+    apyDriftPct: +(s.apyDriftPct + apyTrendPct + driftDrag).toFixed(2),
+    apyVolPct: +(s.apyVolPct + volBoost).toFixed(2),
+  }))
+}
