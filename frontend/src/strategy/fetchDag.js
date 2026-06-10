@@ -11,6 +11,11 @@
 // can't express that ordering; the layered runner can, and stays parallel where it
 // can (4 fetches at ~max(latency) instead of sum).
 
+import { fetchDeFiLlamaVaults } from '../defiLlama.js'
+import { reconcilePositionsFromChain } from '../positionsStore.js'
+import { fetchGasSnapshot } from './gasSnapshot.js'
+import { deriveSignals } from './mdp.js'
+
 /**
  * @typedef {Object} FetchNode
  * @property {string} id
@@ -72,4 +77,49 @@ export async function runFetchDag(nodes, base = {}, onEvent) {
   }
 
   return { results, timings, wallMs: now() - wallStart }
+}
+
+/**
+ * Build and run the concrete /strategy fetch DAG.
+ *
+ * Layer 0 (independent, concurrent): skill, pools, gas, positions, market.
+ * Layer 1 (derived): signals = deriveSignals(market, gas).
+ *
+ * loadVaultSkill and fetchMarketContext are injected (they live in venice.js) to
+ * keep this module free of a circular import back into the strategy axis.
+ *
+ * @param {Object} p
+ * @param {string} p.riskLevel
+ * @param {string|null} p.address                // connected wallet, or null pre-connect
+ * @param {boolean} p.useStaticVaults
+ * @param {boolean} p.marketContextEnabled
+ * @param {() => Promise<{content:string,source:string}>} p.loadVaultSkill
+ * @param {(riskLevel:string) => Promise<string|null>} p.fetchMarketContext
+ * @param {(ev:Object)=>void} [p.onEvent]
+ * @returns {Promise<{ skill:any, pools:any, gas:any, positions:any, marketContext:any, signals:any, timings:Object, wallMs:number }>}
+ */
+export async function runStrategyFetchDag({
+  riskLevel, address, useStaticVaults, marketContextEnabled,
+  loadVaultSkill, fetchMarketContext, onEvent,
+}) {
+  const nodes = [
+    { id: 'skill', deps: [], run: () => loadVaultSkill() },
+    { id: 'pools', deps: [], run: () => (useStaticVaults ? null : fetchDeFiLlamaVaults()) },
+    { id: 'gas', deps: [], run: () => fetchGasSnapshot() },
+    { id: 'positions', deps: [], run: () => (address ? reconcilePositionsFromChain(address) : null) },
+    { id: 'market', deps: [], run: () => (marketContextEnabled ? fetchMarketContext(riskLevel) : null) },
+    { id: 'signals', deps: ['market', 'gas'], run: (ctx) => deriveSignals(ctx.market, ctx.gas) },
+  ]
+
+  const { results, timings, wallMs } = await runFetchDag(nodes, {}, onEvent)
+  return {
+    skill: results.skill,
+    pools: results.pools,
+    gas: results.gas,
+    positions: results.positions,
+    marketContext: results.market,
+    signals: results.signals,
+    timings,
+    wallMs,
+  }
 }

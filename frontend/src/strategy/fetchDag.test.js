@@ -1,6 +1,18 @@
 // frontend/src/strategy/fetchDag.test.js
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { runFetchDag } from './fetchDag.js'
+
+vi.mock('../defiLlama.js', () => ({
+  fetchDeFiLlamaVaults: vi.fn(async () => [{ address: '0xV', apy: 5 }]),
+}))
+vi.mock('../positionsStore.js', () => ({
+  reconcilePositionsFromChain: vi.fn(async () => ({ '0xV': { balance: '1000000' } })),
+}))
+vi.mock('./gasSnapshot.js', () => ({
+  fetchGasSnapshot: vi.fn(async () => ({ gwei: 95, level: 'high' })),
+}))
+
+import { runStrategyFetchDag } from './fetchDag.js'
 
 const tick = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -55,5 +67,39 @@ describe('runFetchDag', () => {
     const nodes = [{ id: 'orphan', deps: ['missing'], run: async () => 'never' }]
     const { results } = await runFetchDag(nodes)
     expect(results.orphan).toBeNull()
+  })
+})
+
+describe('runStrategyFetchDag', () => {
+  const deps = {
+    loadVaultSkill: async () => ({ content: 'SKILL', source: 'default' }),
+    fetchMarketContext: async () => 'yields stable',
+  }
+
+  it('gathers all nodes and derives signals from market + gas', async () => {
+    const out = await runStrategyFetchDag({
+      riskLevel: 'medium', address: '0xUser',
+      useStaticVaults: false, marketContextEnabled: true,
+      ...deps,
+    })
+    expect(out.pools).toEqual([{ address: '0xV', apy: 5 }])
+    expect(out.gas.level).toBe('high')
+    expect(out.positions).toEqual({ '0xV': { balance: '1000000' } })
+    expect(out.marketContext).toBe('yields stable')
+    // signals = deriveSignals('yields stable', { level:'high' }) -> elevated + gas-spike
+    expect(out.signals.turbulence).toBe('elevated')
+    expect(out.signals.signals).toContain('gas-spike')
+    expect(typeof out.wallMs).toBe('number')
+  })
+
+  it('skips pools when static vaults are selected and skips positions with no address', async () => {
+    const out = await runStrategyFetchDag({
+      riskLevel: 'low', address: null,
+      useStaticVaults: true, marketContextEnabled: false,
+      ...deps,
+    })
+    expect(out.pools).toBeNull()
+    expect(out.positions).toBeNull()
+    expect(out.marketContext).toBeNull()
   })
 })
