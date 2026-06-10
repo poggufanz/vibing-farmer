@@ -59,3 +59,43 @@ export function simulatePath(allocations, state, params, rng, opts = {}) {
     blendedApy: +blendedApy.toFixed(2),
   }
 }
+
+/** Aggregate raw net-yield outcomes into distribution stats. */
+function distribution(values) {
+  const sorted = [...values].sort((a, b) => a - b)
+  const n = sorted.length || 1
+  const mean = sorted.reduce((s, x) => s + x, 0) / n
+  const variance = sorted.reduce((s, x) => s + (x - mean) ** 2, 0) / n
+  const pct = (p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(p * (sorted.length - 1))))]
+  const profit = sorted.filter((x) => x > 0).length
+  return {
+    mean: +mean.toFixed(2),
+    std: +Math.sqrt(variance).toFixed(2),
+    min: +(sorted[0] || 0).toFixed(2),
+    max: +(sorted[sorted.length - 1] || 0).toFixed(2),
+    p5: +(pct(0.05) || 0).toFixed(2),
+    p50: +(pct(0.5) || 0).toFixed(2),
+    p95: +(pct(0.95) || 0).toFixed(2),
+    probProfit: +(profit / n).toFixed(3),
+  }
+}
+
+/**
+ * Run N alternate futures for one scenario and aggregate the distribution.
+ * Each future derives its own seed so runs are independent yet fully reproducible.
+ * @param {Array} allocations
+ * @param {Object} state StrategyState
+ * @param {{name:string, apyDriftPct:number, apyVolPct:number, gasMultiplier:number}} params
+ * @param {{runs?:number, horizonDays?:number, entryGasUsdc?:number, seed?:number}} [opts]
+ * @returns {{name:string, runs:number, mean:number, std:number, min:number, max:number, p5:number, p50:number, p95:number, probProfit:number}}
+ */
+export function runScenario(allocations, state, params, opts = {}) {
+  const runs = opts.runs || DEFAULT_RUNS
+  const seed = opts.seed != null ? opts.seed : 1
+  const outcomes = []
+  for (let i = 0; i < runs; i++) {
+    const rng = makeRng((seed + i * 2654435761) >>> 0)
+    outcomes.push(simulatePath(allocations, state, params, rng, opts).netYieldUsdc)
+  }
+  return { name: params.name, runs, ...distribution(outcomes) }
+}
