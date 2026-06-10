@@ -84,10 +84,7 @@ export class WorkerAgent {
             amount: this.amount,
             permissionContext: this.permissionContext
           })
-      const gasMethod =
-        depositResult.status === 'onchain' ? 'user-signed'
-        : depositResult.status === 'simulated' ? 'simulated'
-        : 'relayer'
+      const gasMethod = depositResult.status === 'onchain' ? 'user-signed' : 'relayer'
 
       // Resolve approve from the real deposit tx (ApproveExecuted emitted in the same tx).
       this.memoryEntries.push(createEntry('approve', 'success', { txHash: depositResult.txHash, note: 'emitted on-chain in deposit tx' }))

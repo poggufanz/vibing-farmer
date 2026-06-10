@@ -309,7 +309,7 @@ const App = () => {
       .then((chain) => {
         if (!alive || !chain) return; // null = no RPC / all reads failed → keep cache
         // Merge, never replace: on-chain truth updates/adds vaults but can't wipe seeded
-        // positions whose deposits are simulated or not yet mined (chain reads them as 0).
+        // positions whose deposits are real but not yet mined (chain reads them as 0).
         // The persist effect writes the merged result, so an empty chain can't clobber cache.
         setAgentData((d) => ({ ...d, positions: mergePositions(d.positions, chain), lastUpdated: Date.now() }));
       })
@@ -330,7 +330,7 @@ const App = () => {
   // collapses into ONE reconcile. Listens + reads via the dedicated read-only provider
   // (getReadProvider) — never the wallet's BrowserProvider, which -32603s while a
   // wallet_* RPC is pending. applyChainPositions is authoritative (can lower on
-  // withdraw), unlike the raise-only connect-time merge that protects simulated seeds.
+  // withdraw), unlike the raise-only connect-time merge that protects unconfirmed seeds.
   useE(() => {
     if (!realAddress) return;
     const provider = getReadProvider();
@@ -998,7 +998,7 @@ const App = () => {
   const handleExecDone = async () => {
     setStage("done");
     // Allocation-based FALLBACK only — used when the chain read is unavailable (no RPC)
-    // or a vault reads 0 (simulated relay / deposit not yet mined). Stored in raw token
+    // or a vault reads 0 (deposit tx not yet mined). Stored in raw token
     // units (allocation USDC * 1e6); the display layer divides by 1e6.
     const seedPositions = {};
     (strategy?.agents || []).forEach((a) => {
@@ -1016,7 +1016,7 @@ const App = () => {
     });
     // SOURCE OF TRUTH: actual on-chain balanceOf -> convertToAssets (raw units).
     // If chain is available, use authoritative balances (can move up or down).
-    // If chain unavailable (simulated relay / not yet mined), ADD seed into existing
+    // If chain unavailable (RPC down / tx not yet mined), ADD seed into existing
     // positions — these are confirmed new deposits, so we sum, not take max.
     const chain = await reconcileWithRetry(realAddress);
     if (chain) {
@@ -1025,7 +1025,7 @@ const App = () => {
         setAgentData((d) => ({ ...d, positions: applyChainPositions(d.positions, finalPositions), lastUpdated: Date.now() }));
       }
     } else if (Object.keys(seedPositions).length > 0) {
-      // Simulated path: sum new allocations into existing positions
+      // Chain unavailable: sum new allocations into existing positions
       setAgentData((d) => {
         const positions = { ...(d.positions || {}) };
         for (const [addr, pos] of Object.entries(seedPositions)) {
@@ -1145,7 +1145,7 @@ const App = () => {
           map[a.id] = {
             status: "confirmed", activeStep: null,
             steps: { swap: "skipped", approve: "confirmed", deposit: "confirmed" },
-            hashes: cur?.hashes || {}, // never fakeHash() — empty if no real tx
+            hashes: cur?.hashes || {}, // no fabricated hash — empty if no real tx
             gasMethod: cur?.gasMethod || null,
             memory: cur?.memory?.length ? cur.memory : [{ status: "confirmed", title: "agent completed", meta: "position confirmed on-chain", t: nowT(), lesson: "vault deposit complete" }],
             metrics: cur?.metrics || { totalRuns: 1, successRate: 100, startedAt: Date.now(), completedAt: Date.now() },

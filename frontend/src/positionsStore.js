@@ -94,7 +94,7 @@ export async function reconcilePositionsFromChain(address) {
 // Merge position maps keyed by vault address (case-insensitive). Balances only ever
 // INCREASE via merge — withdraw handlers are the only path that lowers them. Idempotent:
 // re-running with the same seed (e.g. re-visiting "done") can't double or drop a balance,
-// and a worker's on-chain 0 (simulated/unmined deposit) can't wipe a seeded position.
+// and a worker's on-chain 0 (deposit not yet mined) can't wipe a seeded position.
 export function mergePositions(prev, incoming) {
   const merged = { ...(prev || {}) }
   for (const [addr, pos] of Object.entries(incoming || {})) {
