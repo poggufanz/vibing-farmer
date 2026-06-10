@@ -1100,6 +1100,17 @@ input, select, textarea {
   color: var(--text-faint);
 }
 
+.exec-live-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: -0.01em;
+}
+.exec-live-status .think-spin { margin-left: 0; }
+
 /* ---------- Execution (terminal-feel) ---------- */
 .exec-header {
   display: flex;
