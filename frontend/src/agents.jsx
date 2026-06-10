@@ -635,6 +635,7 @@ const agoLabel = (ts, now) => {
 const loopRowDetail = (r) => {
   const rules = (r.citedRules || []).join(', ');
   if (r.verdict === 'crash') return r.error || 'crashed · loop recovered';
+  if (r.verdict === 'gated') return `${r.gate || 'gate'} gate · ${r.reason || 'blocked before council'} · no AI credit spent`;
   if (r.verdict === 'discard') return `${r.reason || 'council declined'}${rules ? ` · ${rules}` : ''}`;
   if (r.verdict === 'keep') return `score ${r.score ?? '—'} · ${rules || '—'} · tx ${(r.txHash || '').slice(0, 10)}…`;
   return `observed market · ${r.turbulence || 'calm'} · no action needed`;
@@ -689,6 +690,7 @@ const LoopStatusPanel = ({ running, summary, rows, phase, nextTickAt, heartbeatM
       <div className="loop-chips">
         <span className="loop-chip keep">keep {summary.keep}</span>
         <span className="loop-chip discard">discard {summary.discard}</span>
+        <span className="loop-chip gated">gated {summary.gated || 0}</span>
         <span className="loop-chip crash">crash {summary.crash}</span>
         <span className="loop-chip idle">observe {summary.idle}</span>
       </div>

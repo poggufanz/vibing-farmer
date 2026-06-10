@@ -35,7 +35,7 @@ describe('cycleJournal', () => {
     saveCycle({ cycle: 2, phase: 'evaluate', verdict: 'discard' })
     saveCycle({ cycle: 3, phase: 'crash', verdict: 'crash', error: 'x' })
     const s = getJournalSummary()
-    expect(s).toEqual({ total: 3, keep: 1, discard: 1, crash: 1, idle: 0, lastCycle: 3 })
+    expect(s).toEqual({ total: 3, keep: 1, discard: 1, gated: 0, crash: 1, idle: 0, lastCycle: 3 })
   })
 
   it('never throws on corrupt storage', () => {
@@ -48,5 +48,26 @@ describe('cycleJournal', () => {
     saveCycle({ cycle: 1, phase: 'observe', verdict: 'idle' })
     clearCycles()
     expect(getCycles()).toEqual([])
+  })
+})
+
+describe('getJournalSummary gated count', () => {
+  beforeEach(() => {
+    const store = {}
+    vi.stubGlobal('localStorage', {
+      getItem: (k) => (k in store ? store[k] : null),
+      setItem: (k, v) => { store[k] = String(v) },
+      removeItem: (k) => { delete store[k] },
+    })
+  })
+
+  it('counts gated cycles', () => {
+    clearCycles()
+    saveCycle({ cycle: 1, verdict: 'gated', gate: 'turbulence' })
+    saveCycle({ cycle: 2, verdict: 'keep' })
+    saveCycle({ cycle: 3, verdict: 'gated', gate: 'gas' })
+    const s = getJournalSummary()
+    expect(s.gated).toBe(2)
+    expect(s.keep).toBe(1)
   })
 })

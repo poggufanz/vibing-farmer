@@ -52,6 +52,7 @@ export function getJournalSummary() {
     total: rows.length,
     keep: count('keep'),
     discard: count('discard'),
+    gated: count('gated'),
     crash: count('crash'),
     idle: count('idle'),
     lastCycle: rows.length ? rows[rows.length - 1].cycle : 0,

@@ -3287,6 +3287,7 @@ details.yv-collapse[open] > summary .yv-caret {
 .loop-chip.crash   { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
 .loop-chip.discard { color: var(--text-muted); }
 .loop-chip.idle    { color: var(--text-faint); }
+.loop-chip.gated   { color: var(--warn, #d6a338); border-color: color-mix(in srgb, var(--warn, #d6a338) 35%, transparent); }
 
 /* Cycle journal rows */
 .loop-rows {
@@ -3317,6 +3318,7 @@ details.yv-collapse[open] > summary .yv-caret {
 .loop-badge.crash   { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
 .loop-badge.discard { background: var(--bg-elev); color: var(--text-muted); }
 .loop-badge.idle    { background: var(--bg-elev); color: var(--text-faint); }
+.loop-badge.gated   { background: color-mix(in srgb, var(--warn, #d6a338) 14%, transparent); color: var(--warn, #d6a338); }
 .loop-row-detail {
   flex: 1;
   min-width: 0;
