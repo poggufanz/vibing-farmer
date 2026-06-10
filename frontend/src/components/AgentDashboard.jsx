@@ -170,6 +170,7 @@ function AlertCard({ alert, lang = 'en', onHarvest, onEmergencyWithdraw, onRevie
 export default function AgentDashboard({
   active, positions = {}, alerts = [], vaultMeta = {}, lastUpdated = null, userAddress, settings = {},
   withdrawEnabled = true, onHarvest, onEmergencyWithdraw, onReview, onDismiss, onWithdrawSuccess, onNewStrategy,
+  loopPanel = null, loopStatus = null,
 }) {
   const [now, setNow] = useState(Date.now())
   const [preview, setPreview] = useState(null)
@@ -221,20 +222,33 @@ export default function AgentDashboard({
         <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: 'var(--text)' }}>
           Autonomous Agent
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5, ...mono }}>
-          <span
-            className="yv-pulse"
-            style={{
-              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-              background: active ? 'var(--ok)' : 'var(--text-faint)',
-              animation: active ? 'yvpulse 1.6s ease-in-out infinite' : 'none',
-            }}
-          />
-          <span style={{ color: active ? 'var(--ok)' : 'var(--text-faint)' }}>
-            {active ? 'monitoring' : 'stopped'}
-          </span>
-          <span style={{ color: 'var(--text-faint)' }}>· co-pilot</span>
-        </span>
+        {(() => {
+          // One status line for the whole panel: loop state wins when the loop runs.
+          const loopOn = loopStatus?.running
+          const cycling = Boolean(loopOn && loopStatus.phase && loopStatus.phase !== 'sleep')
+          const on = loopOn || active
+          const statusText = !on ? 'stopped'
+            : cycling ? `evaluating · ${loopStatus.phase}`
+            : 'monitoring'
+          return (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, ...mono }}>
+              <span
+                className="yv-pulse"
+                style={{
+                  width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                  background: !on ? 'var(--text-faint)' : cycling ? 'var(--warn)' : 'var(--ok)',
+                  animation: on ? `yvpulse ${cycling ? '0.8s' : '1.6s'} ease-in-out infinite` : 'none',
+                }}
+              />
+              <span style={{ color: !on ? 'var(--text-faint)' : cycling ? 'var(--warn)' : 'var(--ok)' }}>
+                {statusText}
+              </span>
+              <span style={{ color: 'var(--text-faint)' }}>
+                {loopOn ? `· cycle ${String(loopStatus.cycle || 0).padStart(2, '0')}` : '· co-pilot'}
+              </span>
+            </span>
+          )
+        })()}
       </div>
 
       {/* ── TOTAL PORTFOLIO ────────────────────────────────────────────── */}
@@ -399,6 +413,13 @@ export default function AgentDashboard({
           ))
         )}
       </div>
+
+      {loopPanel && (
+        <div style={{ paddingTop: 20, borderTop: '1px solid var(--border)', marginTop: 20 }}>
+          <div style={sectionLabel}>Monitor Loop</div>
+          {loopPanel}
+        </div>
+      )}
 
       <AgentActionPreview preview={preview} onConfirm={confirmPreview} onCancel={() => setPreview(null)} />
       {withdrawVault && (

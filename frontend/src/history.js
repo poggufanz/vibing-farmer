@@ -95,6 +95,8 @@ export function saveStrategy({
   marketContextUsed,   // boolean
   blendedApy,          // weighted average APY
   strategyHash,        // bytes32 keccak256 of AI strategy + reasoning (on-chain attestation)
+  dagTimings,          // { skill, pools, gas, positions, market, signals } ms per fetch node
+  dagWallMs,           // total wall time of the parallel fetch DAG
 }) {
   addEntry(KEYS.strategies, {
     type: 'strategy',
@@ -108,6 +110,8 @@ export function saveStrategy({
     marketContextUsed,
     blendedApy,
     strategyHash,
+    dagTimings,
+    dagWallMs,
     timestamp: Date.now(),
   })
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeRisk, deriveTurbulence, buildStrategyState, RISK_RANK } from './mdp.js'
+import { normalizeRisk, deriveTurbulence, deriveSignals, buildStrategyState, RISK_RANK } from './mdp.js'
 
 describe('normalizeRisk', () => {
   it('maps the app-internal "med" to "medium"', () => {
@@ -151,5 +151,32 @@ describe('realizedReward (closes the RL loop from memory)', () => {
     expect(r.successRate).toBe(0.5)
     expect(r.avgSlippage).toBeCloseTo(0.21, 3)
     expect(r.totalGas).toBe(66000)
+  })
+})
+
+describe('deriveSignals (market context + on-chain gas)', () => {
+  it('returns calm with no signals when market is benign and gas normal', () => {
+    const r = deriveSignals('yields stable', { level: 'normal', gwei: 10 })
+    expect(r.turbulence).toBe('calm')
+    expect(r.signals).toEqual([])
+  })
+
+  it('adds a gas-spike signal and bumps calm -> elevated on high gas', () => {
+    const r = deriveSignals('yields stable', { level: 'high', gwei: 95 })
+    expect(r.turbulence).toBe('elevated')
+    expect(r.signals).toContain('gas-spike')
+  })
+
+  it('keeps turbulent from market context even when gas is high', () => {
+    const r = deriveSignals('exploit drained the pool', { level: 'high', gwei: 95 })
+    expect(r.turbulence).toBe('turbulent')
+    expect(r.signals).toContain('exploit')
+    expect(r.signals).toContain('gas-spike')
+  })
+
+  it('tolerates a null gas snapshot (chain read failed)', () => {
+    const r = deriveSignals('markets volatile', null)
+    expect(r.turbulence).toBe('elevated')
+    expect(r.signals).not.toContain('gas-spike')
   })
 })

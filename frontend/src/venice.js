@@ -2,6 +2,7 @@ import { VENICE_BASE_URL, VENICE_MODEL, VENICE_TIMEOUT_MS, DEEPSEEK_BASE_URL, DE
 import { loadVaultSkill } from './skillLoader.js'
 import { fetchMarketContext } from './marketSearch.js'
 import { fetchDeFiLlamaVaults } from './defiLlama.js'
+import { runStrategyFetchDag } from './strategy/fetchDag.js'
 import { saveStrategy, saveReasoning } from './history.js'
 import { loadSettings } from './settingsStore.js'
 import { hashStrategy } from './attestation.js'
@@ -77,22 +78,27 @@ function resolveProvider(veniceAuth, devApiKey) {
  * @param {string|null} params.veniceAuth - base64 SIWE header from signSiweForVenice()
  * @param {string|null} params.devApiKey - DeepSeek API key for dev mode
  */
-export async function generateStrategy({ amount, riskLevel, numVaults, veniceAuth, devApiKey, signal }) {
+export async function generateStrategy({ amount, riskLevel, numVaults, veniceAuth, devApiKey, signal, address = null }) {
   const settings = loadSettings()
   const useStaticVaults = settings.vaultDataSource === 'static'
   const marketContextEnabled = settings.marketContext !== false
 
-  // Load skill + market context + real vault data ALL IN PARALLEL (no added latency).
-  // Market context goes through the /api/search proxy — Tavily key stays server-side.
-  const [skill, marketContext, liveVaults] = await Promise.all([
-    loadVaultSkill(),
-    marketContextEnabled
-      ? fetchMarketContext(riskLevel).catch(() => null)
-      : Promise.resolve(null),
-    useStaticVaults
-      ? Promise.resolve(null)
-      : fetchDeFiLlamaVaults().catch(() => null),
-  ])
+  // EvoAgentX-style DAG: skill + market + pools + gas + positions fetch concurrently
+  // (one layer), then on-chain signals derive from market+gas. Replaces the old
+  // 3-way Promise.all — same parallelism for skill/market/pools, plus two new real
+  // nodes (gas, positions) and a real combined-signals node, with zero added latency.
+  const dag = await runStrategyFetchDag({
+    riskLevel,
+    address,
+    useStaticVaults,
+    marketContextEnabled,
+    loadVaultSkill,
+    fetchMarketContext,
+  })
+  const skill = dag.skill
+  const marketContext = dag.marketContext
+  const liveVaults = dag.pools
+  console.log(`[Venice] strategy DAG · wall ${Math.round(dag.wallMs)}ms · nodes ${JSON.stringify(dag.timings)}`)
 
   // Real DeFiLlama vaults when available, else the static VAULT_CATALOG
   const vaultData = (liveVaults && liveVaults.length > 0) ? liveVaults : VAULT_CATALOG
@@ -116,7 +122,7 @@ export async function generateStrategy({ amount, riskLevel, numVaults, veniceAut
   const provider = resolveProvider(veniceAuth, effectiveDevKey)
   if (!provider) {
     console.warn('[ai] No provider — using fallback strategy')
-    return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData }
+    return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData, dagTimings: dag.timings, dagWallMs: Math.round(dag.wallMs) }
   }
 
   const userPrompt = `User profile:
@@ -160,9 +166,15 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
     // REWARD: project a risk-adjusted score for the enforced allocation.
     const reward = scoreReward(parsed.selected_vaults, mdpFullState)
     // Compact state summary for the UI (full universe is too heavy to carry/attest).
+    // Prefer the DAG's combined on-chain signals (market context + live gas) over the
+    // market-text-only turbulence baked into mdpFullState. Falls back to the baseline
+    // when the signals node failed (null).
+    const combined = dag.signals || { turbulence: mdpFullState.market.turbulence, signals: mdpFullState.market.signals }
     const mdpState = {
-      turbulence: mdpFullState.market.turbulence,
-      signals: mdpFullState.market.signals,
+      turbulence: combined.turbulence,
+      signals: combined.signals,
+      gasGwei: dag.gas ? dag.gas.gwei : null,
+      gasLevel: dag.gas ? dag.gas.level : null,
       universeSize: mdpFullState.universe.length,
       riskCeiling: riskCeiling(mdpFullState),
       profileRisk: mdpFullState.profile.riskLevel,
@@ -185,6 +197,8 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
       marketContextUsed: marketContext !== null,
       blendedApy: parsed.selected_vaults.reduce((sum, v) => sum + ((v.expected_apy || 0) * (v.allocation || 0)), 0).toFixed(2),
       strategyHash,
+      dagTimings: dag.timings,
+      dagWallMs: Math.round(dag.wallMs),
     })
     parsed.selected_vaults.forEach(v => {
       if (v.reasoning) saveReasoning({
@@ -192,10 +206,10 @@ Select optimal vault(s) from the catalog above. APY and TVL data are real-time f
         reasoning: v.reasoning, expectedApy: v.expected_apy, amountUsdc: amount, riskLevel, modelUsed: provider.model,
       })
     })
-    return { ...parsed, generatedBy: provider.name, skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData, strategyHash, attestation: null, reward, mdpState }
+    return { ...parsed, generatedBy: provider.name, skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData, strategyHash, attestation: null, reward, mdpState, dagTimings: dag.timings, dagWallMs: Math.round(dag.wallMs) }
   } catch (err) {
     console.warn(`[ai] Strategy failed (${provider.name}), using fallback:`, err.message)
-    return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData }
+    return { ...buildFallbackForParams(amount, safeNumVaults), skillSource: skill.source, marketContextUsed: marketContext !== null, vaultDataSource, vaultsUsed: vaultData, dagTimings: dag.timings, dagWallMs: Math.round(dag.wallMs) }
   } finally {
     if (timeout) clearTimeout(timeout)
   }
@@ -262,7 +276,7 @@ Respond with JSON schema:
     return result
   } catch (err) {
     console.warn(`[ai] Skill gen failed (${provider.name}), using fallback:`, err.message)
-    return fallback
+    return { ...fallback, error: err.message }
   } finally {
     clearTimeout(timeout)
   }
