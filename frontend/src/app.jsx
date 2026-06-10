@@ -52,6 +52,7 @@ import VaultDetailPage from './components/VaultDetailPage.jsx';
 import TxDetailPage from './components/TxDetailPage.jsx';
 
 import { buildStrategyState, enforceActionSpace, scoreReward } from './strategy/mdp.js';
+import { evaluateGates } from './strategy/gates.js';
 import { createMonitorLoop } from './strategy/monitorLoop.js';
 import { councilVerdict } from './strategy/council.js';
 import { reflect } from './strategy/reflector.js';
@@ -468,6 +469,7 @@ const App = () => {
         positions: agentData.positions,
       }),
       runGates: (proposed, state) => enforceActionSpace(proposed, state),
+      gates: (state, idea) => evaluateGates(state, idea),
       simulate: (allocations, state) => scoreReward(allocations, state),
       council: (input) => councilVerdict(input, {
         weight: playbookWeight,
