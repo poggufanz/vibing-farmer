@@ -588,55 +588,119 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
 };
 
 // ── Autonomous monitor-loop status — NEVER-STOP loop + AI Council made visible ──
-// Pure presentational. Props: { running, cycle, summary, rows } where rows are
-// newest-first cycle records from cycleJournal.getCycles() (sliced by caller).
-const LoopStatusPanel = ({ running, cycle, summary, rows }) => {
-  const badge = (verdict) => ({
-    keep:    { bg: 'rgba(52,199,89,0.14)',  fg: '#34c759' },
-    discard: { bg: 'rgba(142,142,147,0.14)', fg: '#8e8e93' },
-    crash:   { bg: 'rgba(255,69,58,0.14)',  fg: '#ff453a' },
-    idle:    { bg: 'rgba(142,142,147,0.08)', fg: '#aeaeb2' },
-  }[verdict] || { bg: 'rgba(142,142,147,0.08)', fg: '#aeaeb2' })
+// Live panel: a 1s internal ticker drives the heartbeat countdown so the loop
+// reads as alive between cycles (default heartbeat is minutes apart). The
+// pipeline rail lights the phase reported by monitorLoop's onPhase hook.
+// Props: { running, cycle, summary, rows, phase, nextTickAt, heartbeatMs }
+// where rows are newest-first records from cycleJournal.getCycles().
+const LOOP_PHASES = ['observe', 'gate', 'simulate', 'council', 'execute', 'reflect'];
+
+const fmtCountdown = (ms) => {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
+const agoLabel = (ts, now) => {
+  if (!ts) return 'just now';
+  const s = Math.max(0, Math.floor((now - ts) / 1000));
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  return `${Math.floor(s / 3600)}h ago`;
+};
+
+const loopRowDetail = (r) => {
+  const rules = (r.citedRules || []).join(', ');
+  if (r.verdict === 'crash') return r.error || 'crashed · loop recovered';
+  if (r.verdict === 'discard') return `${r.reason || 'council declined'}${rules ? ` · ${rules}` : ''}`;
+  if (r.verdict === 'keep') return `score ${r.score ?? '—'} · ${rules || '—'} · tx ${(r.txHash || '').slice(0, 10)}…`;
+  return `observed market · ${r.turbulence || 'calm'} · no action needed`;
+};
+
+const LoopStatusPanel = ({ running, cycle, summary, rows, phase, nextTickAt, heartbeatMs }) => {
+  // Internal 1s clock — the countdown and relative timestamps tick even when
+  // the loop itself sleeps, which is what makes the panel feel alive.
+  const [now, setNow] = useSAg(() => Date.now());
+  useEAg(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const cycling = Boolean(phase && phase !== 'sleep');
+  const remaining = running && nextTickAt ? Math.max(0, nextTickAt - now) : null;
+  const pctElapsed = running && heartbeatMs && remaining != null
+    ? Math.min(100, Math.max(0, 100 - (remaining / heartbeatMs) * 100))
+    : 0;
+  const lastTs = rows && rows.length ? rows[0].ts : null;
+  const activeIdx = LOOP_PHASES.indexOf(phase);
+
   return (
-    <div className="loop-status card" style={{ marginTop: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 999, background: running ? '#34c759' : '#8e8e93', boxShadow: running ? '0 0 8px #34c759' : 'none' }} />
-          <strong>Autonomous Monitor Loop</strong>
-          <span style={{ fontFamily: 'monospace', fontSize: 11, opacity: 0.6 }}>{running ? 'NEVER STOP · running' : 'stopped'}</span>
+    <div className={`loop-status card enter ${running ? 'is-running' : 'is-stopped'}`}>
+      <div className="loop-head">
+        <div className="loop-title">
+          <span className={`loop-pulse ${!running ? 'off' : cycling ? 'cycling' : 'live'}`} />
+          <strong>Autonomous monitor loop</strong>
+          <span className="loop-state">
+            {!running ? 'stopped' : cycling ? `evaluating · ${phase}` : 'standing by · never stops'}
+          </span>
         </div>
-        <span style={{ fontFamily: 'monospace', fontSize: 12, opacity: 0.7 }}>cycle {cycle}</span>
+        <span className="loop-cycleno">cycle {String(cycle).padStart(2, '0')}</span>
       </div>
-      <div style={{ display: 'flex', gap: 14, fontFamily: 'monospace', fontSize: 11, marginBottom: 12, opacity: 0.8 }}>
-        <span>keep {summary.keep}</span>
-        <span>discard {summary.discard}</span>
-        <span>crash {summary.crash}</span>
-        <span>idle {summary.idle}</span>
+
+      {running && (
+        <div className="loop-vitals">
+          <span className={`loop-countdown ${cycling ? 'busy' : ''}`}>
+            {cycling ? 'cycle running now'
+              : remaining != null ? `next cycle in ${fmtCountdown(remaining)}`
+              : 'awaiting first heartbeat'}
+          </span>
+          <span className="loop-last">last activity {agoLabel(lastTs, now)}</span>
+        </div>
+      )}
+      {running && (
+        <div className={`loop-heartbeat-track ${cycling ? 'cycling' : ''}`}>
+          <div className="loop-heartbeat-fill" style={{ width: `${cycling ? 100 : pctElapsed}%` }} />
+        </div>
+      )}
+
+      <div className={`loop-rail ${!running ? 'off' : cycling ? 'cycling' : 'sleeping'}`}>
+        {LOOP_PHASES.map((p, i) => (
+          <React.Fragment key={p}>
+            {i > 0 && <span className="loop-rail-link" aria-hidden="true" />}
+            <span className={`loop-stage${phase === p ? ' active' : ''}${cycling && activeIdx > i ? ' done' : ''}`}>
+              {p}
+            </span>
+          </React.Fragment>
+        ))}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {(rows || []).map((r, i) => {
-          const b = badge(r.verdict)
-          const rules = (r.citedRules || []).join(', ')
-          return (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'monospace', fontSize: 11 }}>
-              <span style={{ width: 36, opacity: 0.5 }}>#{String(r.cycle).padStart(2, '0')}</span>
-              <span style={{ padding: '1px 8px', borderRadius: 6, background: b.bg, color: b.fg, minWidth: 64, textAlign: 'center' }}>{r.verdict}</span>
-              <span style={{ opacity: 0.7 }}>
-                {r.verdict === 'crash' ? r.error
-                  : r.verdict === 'discard' ? `${r.reason || '—'}${rules ? ` · ${rules}` : ''}`
-                  : r.verdict === 'keep' ? `score ${r.score ?? '—'} · ${rules || '—'} · tx ${(r.txHash || '').slice(0, 10)}…`
-                  : `observe · ${r.turbulence || 'calm'}`}
-              </span>
-            </div>
-          )
-        })}
+
+      <div className="loop-chips">
+        <span className="loop-chip keep">keep {summary.keep}</span>
+        <span className="loop-chip discard">discard {summary.discard}</span>
+        <span className="loop-chip crash">crash {summary.crash}</span>
+        <span className="loop-chip idle">observe {summary.idle}</span>
+      </div>
+
+      <div className="loop-rows">
+        {(rows || []).map((r, i) => (
+          <div className="loop-row" key={r.ts || i}>
+            <span className="loop-row-num">#{String(r.cycle).padStart(2, '0')}</span>
+            <span className={`loop-badge ${r.verdict}`}>{r.verdict === 'idle' ? 'observe' : r.verdict}</span>
+            <span className="loop-row-detail" title={loopRowDetail(r)}>{loopRowDetail(r)}</span>
+            <span className="loop-row-time">{agoLabel(r.ts, now)}</span>
+          </div>
+        ))}
         {(!rows || rows.length === 0) && (
-          <div style={{ opacity: 0.5, fontFamily: 'monospace', fontSize: 11 }}>no cycles yet — loop will tick on heartbeat</div>
+          <div className="loop-empty">
+            {running
+              ? `No cycles journaled yet. First heartbeat ${remaining != null ? `in ${fmtCountdown(remaining)}` : 'arriving shortly'} — the loop observes, gates, simulates, asks the council, then acts only on a keep verdict.`
+              : 'Loop is stopped. It starts automatically while the agent is enabled and positions are held.'}
+          </div>
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
 export {
   LoopStatusPanel,

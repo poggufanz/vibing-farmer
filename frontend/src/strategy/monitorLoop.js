@@ -15,15 +15,21 @@
  * @param {(cycle:Object) => void} deps.reflect                                         // ACE reflector
  * @param {{saveCycle:(row:Object)=>void}} deps.journal
  * @param {number} [deps.heartbeatMs]
+ * @param {(phase:string)=>void} [deps.onPhase]  // live pipeline progress for UI — never blocks the loop
  */
-export function createMonitorLoop({ getState, runGates, simulate, council, execute, reflect, journal, heartbeatMs = 60_000 }) {
+export function createMonitorLoop({ getState, runGates, simulate, council, execute, reflect, journal, heartbeatMs = 60_000, onPhase }) {
   let timer = null
   let cycle = 0
   let running = false
+  let nextTickAt = null
+
+  // Phase reporting is observability only — a throwing listener must not kill a cycle.
+  const phase = (p) => { try { onPhase?.(p) } catch { /* ignore */ } }
 
   async function runCycle(idea) {
     cycle += 1
     try {
+      phase('observe')
       const state = await getState()
 
       if (!idea) {
@@ -31,9 +37,12 @@ export function createMonitorLoop({ getState, runGates, simulate, council, execu
         return
       }
 
+      phase('gate')
       const { allocations, violations } = runGates(idea.proposed, state)
+      phase('simulate')
       const projectedReward = simulate(allocations, state)
       const currentReward = simulate(idea.currentAllocations || [], state)
+      phase('council')
       const v = await council({
         action: { kind: idea.kind, violations, apyGain: idea.apyGain },
         currentReward, projectedReward, state, estGasUsdc: idea.estGasUsdc,
@@ -46,7 +55,9 @@ export function createMonitorLoop({ getState, runGates, simulate, council, execu
 
       // keep → execute, then reflect on the real outcome (ACE).
       try {
+        phase('execute')
         const txHash = await execute(idea, allocations)
+        phase('reflect')
         reflect({ verdict: 'keep', citedRules: v.citedRules, outcome: 'success' })
         journal.saveCycle({ cycle, phase: 'execute', verdict: 'keep', score: projectedReward.riskAdjustedScore, confidence: v.confidence, citedRules: v.citedRules, txHash, turbulence: state.market.turbulence })
       } catch (execErr) {
@@ -56,6 +67,8 @@ export function createMonitorLoop({ getState, runGates, simulate, council, execu
     } catch (err) {
       // Crash recovery — autoresearch logs the crash and moves on. The loop lives.
       journal.saveCycle({ cycle, phase: 'crash', verdict: 'crash', error: err?.message || String(err) })
+    } finally {
+      phase('sleep')
     }
   }
 
@@ -63,15 +76,22 @@ export function createMonitorLoop({ getState, runGates, simulate, council, execu
     start() {
       if (running) return
       running = true
+      nextTickAt = Date.now() + heartbeatMs
       runCycle(null)
-      timer = setInterval(() => runCycle(null), heartbeatMs)
+      timer = setInterval(() => {
+        nextTickAt = Date.now() + heartbeatMs
+        runCycle(null)
+      }, heartbeatMs)
     },
     stop() {
       running = false
+      nextTickAt = null
       if (timer) { clearInterval(timer); timer = null }
     },
     submitIdea(idea) { return runCycle(idea) },
     getCycle() { return cycle },
     isRunning() { return running },
+    getNextTickAt() { return nextTickAt },
+    getHeartbeatMs() { return heartbeatMs },
   }
 }
