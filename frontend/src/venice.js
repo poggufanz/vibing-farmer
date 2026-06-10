@@ -283,7 +283,9 @@ function buildFallbackForParams(amount, numVaults) {
   }
 }
 
-function validateVeniceResponse(response, vaultData = VAULT_CATALOG) {
+const VALID_RISK_TIERS = new Set(['low', 'medium', 'high'])
+
+export function validateVeniceResponse(response, vaultData = VAULT_CATALOG) {
   const allowedAddresses = new Set(vaultData.map(v => v.address.toLowerCase()))
 
   if (!response.selected_vaults || !Array.isArray(response.selected_vaults)) {
@@ -296,6 +298,15 @@ function validateVeniceResponse(response, vaultData = VAULT_CATALOG) {
     }
     if (!v.reasoning || v.reasoning.length < 20) {
       throw new Error(`Vault ${i}: reasoning missing or too short`)
+    }
+    if (typeof v.expected_apy !== 'number' || v.expected_apy <= 0 || v.expected_apy > 100) {
+      throw new Error(`Vault ${i}: invalid expected_apy: ${v.expected_apy}`)
+    }
+    if (typeof v.allocation !== 'number' || v.allocation <= 0 || v.allocation > 1) {
+      throw new Error(`Vault ${i}: invalid allocation: ${v.allocation}`)
+    }
+    if (!VALID_RISK_TIERS.has(v.risk_tier)) {
+      throw new Error(`Vault ${i}: invalid risk_tier: ${v.risk_tier}`)
     }
   })
 
