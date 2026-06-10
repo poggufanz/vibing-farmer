@@ -1,7 +1,6 @@
 import { ethers } from 'ethers'
 import { ONE_SHOT_RELAYER_URL, AGENT_VAULT_DEPOSITOR_ADDRESS, SEPOLIA_CHAIN_ID } from './config.js'
-import { grantAgentPermissionOnChain, executeAgentDepositOnChain, batchCalls, executeWithdrawOnChain, executeHarvestOnChain } from './wallet.js'
-import { redeemCall, hasSession } from './strategy/session.js'
+import { grantAgentPermissionOnChain, executeAgentDepositOnChain } from './wallet.js'
 
 /**
  * Encode calldata for executeAgentDeposit.
@@ -170,19 +169,18 @@ export async function submitRelay({ to, calldata, permissionContext }) {
 export async function relayGrantPermission({ agentId, vault, maxAmount, expiresAt, permissionContext }) {
   const calldata = await encodeGrantAgentPermission(agentId, vault, maxAmount, expiresAt)
 
-  // 1) Session redemption — zero popup, redeemed from the user's smart account.
-  if (hasSession()) {
-    try {
-      const txHash = await redeemCall({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: calldata })
-      return { txHash, status: 'redeemed' }
-    } catch (e) {
-      console.warn('[relay] grant redeem failed, falling back:', e?.message)
-    }
-  }
+  // ERC-7710 session redemption is impossible for this call: MetaMask Flask only
+  // issues token-transfer permission types (we grant `erc20-token-periodic`), and
+  // its ERC20PeriodTransferEnforcer caveat rejects any execution that is not
+  // USDC.transfer() on the token itself — a call into AgentVaultDepositor always
+  // reverts at the DelegationManager. The 7715 grant stays as the user-facing
+  // permission boundary; on-chain scope is enforced by the contract's own storage
+  // (ADR in docs/spikes/architecture-erc7715-scoped-permissions-spike.md).
+  // Zero-popup path = EIP-5792 grant batch + contract session key (see orchestrator).
 
-  // 2) Keyless 1Shot relay (mainnet only) — unchanged.
+  // 1) Keyless 1Shot relay (mainnet only).
   if (!ONESHOT_SUPPORTED_CHAINS.has(String(SEPOLIA_CHAIN_ID))) {
-    // 3) On-chain user-signed (one popup) — last resort.
+    // 2) On-chain user-signed (one popup) — last resort.
     const txHash = await grantAgentPermissionOnChain(agentId, vault, maxAmount, expiresAt)
     return { txHash, status: 'onchain' }
   }
@@ -202,17 +200,12 @@ export async function relayGrantPermission({ agentId, vault, maxAmount, expiresA
 export async function relayDeposit({ agentId, user, vault, amount, permissionContext }) {
   const calldata = await encodeExecuteAgentDeposit(agentId, user, vault, amount)
 
-  // 1) Session redemption — zero popup, redeemed from the user's smart account.
-  if (hasSession()) {
-    try {
-      const txHash = await redeemCall({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: calldata })
-      return { txHash, status: 'redeemed' }
-    } catch (e) {
-      console.warn('[relay] deposit redeem failed, falling back:', e?.message)
-    }
-  }
+  // No 7710 redemption here — see relayGrantPermission for why it always reverts.
+  // Zero-popup deposits go through the managed relay: the server wallet was
+  // authorized as a contract session key in the grant batch, so _isAuthorized
+  // passes when it calls executeAgentDeposit.
 
-  // 2) Base Sepolia: managed proxy (real, gas-abstracted), then on-chain.
+  // 1) Base Sepolia: managed proxy (real, gas-abstracted), then on-chain.
   if (!ONESHOT_SUPPORTED_CHAINS.has(String(SEPOLIA_CHAIN_ID))) {
     const managed = await relayDepositManaged({ agentId, user, vault, amount })
     if (managed) return managed
@@ -220,8 +213,21 @@ export async function relayDeposit({ agentId, user, vault, amount, permissionCon
     return { txHash, status: 'onchain' }
   }
 
-  // 3) Keyless 1Shot relay (mainnet only).
+  // 2) Keyless 1Shot relay (mainnet only).
   return submitRelay({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, calldata, permissionContext })
+}
+
+/** Build a {to,data} authorizeSessionKey call for EIP-5792 batching.
+ *  Authorizes the 1Shot server wallet as a contract session key so the managed
+ *  relay can execute zero-popup deposits/harvests on the user's behalf. */
+export async function buildAuthorizeSessionKeyCall({ sessionKey, expiresAt }) {
+  const iface = new ethers.Interface([
+    'function authorizeSessionKey(address sessionKey, uint256 expiresAt)'
+  ])
+  return {
+    to: AGENT_VAULT_DEPOSITOR_ADDRESS,
+    data: iface.encodeFunctionData('authorizeSessionKey', [sessionKey, BigInt(expiresAt)]),
+  }
 }
 
 /** True when the current chain can't use the 1Shot relayer (→ broadcast on-chain instead). */
@@ -247,43 +253,46 @@ export async function buildDepositCall({ agentId, user, vault, amount }) {
 }
 
 // ─── Background Agent: harvest + emergency withdraw ───────────────────────────
-// These are self-contained: the background agent owns its own agentId namespace and
-// batches grant → setAgentCapabilities → action in ONE confirmation (EIP-5792).
-// Never touches the deposit/orchestrator permission flow. Sepolia → user-signed batch.
+// Zero-popup autonomous monitor loop. The 1Shot server wallet is pre-authorized
+// as a session key in AgentVaultDepositor (via setupBgAgentsWithSessionKey called
+// once at "Start Monitoring"). All subsequent harvest/withdraw calls go through
+// the managed relay → server wallet → contract (session key check passes).
+// No MetaMask popups after setup.
 
-const BG_IFACE = new ethers.Interface([
-  'function grantAgentPermission(bytes32 agentId, address vault, uint256 maxAmount, uint256 expiresAt)',
-  'function setAgentCapabilities(bytes32 agentId, bool allowWithdraw, bool allowHarvest)',
-  'function executeWithdraw(bytes32 agentId, address user, address vault, uint256 amount)',
-  'function executeHarvest(bytes32 agentId, address user, address vault, bool recompound)',
-])
-const BG_MAX = 1_000_000_000_000n // nominal grant cap (1M USDC units); withdraw/harvest never consume it
-const bgAgentId = (vault) => ethers.id('yv-bg-' + vault.toLowerCase())
-const depCall = (fn, args) => ({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: BG_IFACE.encodeFunctionData(fn, args) })
+export const bgAgentId = (vault) => ethers.id('yv-bg-' + vault.toLowerCase())
 
-async function ensureBgSetup(agentId, vault) {
-  // Grant + enable capabilities as one batch (this estimates fine — no deep nesting).
-  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 3600)
-  const setupHash = await batchCalls([
-    depCall('grantAgentPermission', [agentId, vault, BG_MAX, expiresAt]),
-    depCall('setAgentCapabilities', [agentId, true, true]),
-  ])
-  if (!setupHash) throw new Error('Wallet lacks EIP-5792 batch support · cannot arm agent')
-}
-
-/** Emergency withdraw `amount` (units) from `vault` back to `user`. Setup batch, then the action. */
-export async function relayWithdraw({ user, vault, amount }) {
-  const agentId = bgAgentId(vault)
-  await ensureBgSetup(agentId, vault)
-  // Action as a direct call with explicit gasLimit (MetaMask under-estimates it → OutOfGas)
-  const txHash = await executeWithdrawOnChain(agentId, user, vault, BigInt(amount))
-  return { txHash, status: 'onchain' }
-}
-
-/** Harvest rewards from `vault` for `user` (optionally recompound). Setup batch, then the action. */
+/**
+ * Harvest rewards from `vault` for `user` (optionally recompound).
+ * Zero-popup — uses managed relay, server wallet is pre-authorized session key.
+ */
 export async function relayHarvest({ user, vault, recompound = false }) {
   const agentId = bgAgentId(vault)
-  await ensureBgSetup(agentId, vault)
-  const txHash = await executeHarvestOnChain(agentId, user, vault, recompound)
-  return { txHash, status: 'onchain' }
+  const res = await fetch(RELAY_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'harvest', agentId, user, vault, recompound }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Relay harvest failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+/**
+ * Emergency withdraw `amount` (units) from `vault` back to `user`.
+ * Zero-popup — uses managed relay, server wallet is pre-authorized session key.
+ */
+export async function relayWithdraw({ user, vault, amount }) {
+  const agentId = bgAgentId(vault)
+  const res = await fetch(RELAY_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'withdraw', agentId, user, vault, amount: String(amount) }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Relay withdraw failed: ${res.status}`)
+  }
+  return res.json()
 }

@@ -352,3 +352,37 @@ Classify the threat level for a user with funds deposited in ${protocol}:
     clearTimeout(timeout)
   }
 }
+
+/**
+ * Council conflict resolution — TradingAgents synthesis fallback. Called ONLY
+ * when the 3 deterministic specialists are split. Returns the deciding signal.
+ * Mirrors classifyRisk: server proxy, JSON-only, timeout, safe fallback.
+ * @param {Array<{role:string, signal:string, confidence:number, concerns:string[]}>} verdicts
+ * @param {{turbulence:string}} market
+ * @returns {Promise<'DEPOSIT'|'HOLD'|'WITHDRAW'>}
+ */
+export async function resolveCouncilConflict(verdicts, market) {
+  const provider = resolveProvider(null, null)
+  const messages = [
+    { role: 'system', content: 'You are the synthesis agent of a DeFi AI Council. Three specialists disagree. Weigh them and respond ONLY with JSON: {"signal":"DEPOSIT|HOLD|WITHDRAW"}. Safety first: if risk is high, prefer HOLD or WITHDRAW.' },
+    {
+      role: 'user',
+      content: `Market regime: ${market?.turbulence || 'unknown'}.
+Specialist verdicts:
+${verdicts.map(v => `- ${v.role}: ${v.signal} (conf ${v.confidence}) concerns: ${(v.concerns || []).join('; ') || 'none'}`).join('\n')}
+
+Pick the final signal for whether to proceed with the proposed rebalance/harvest.`,
+    },
+  ]
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS)
+  try {
+    const content = await callChatCompletions(provider.url, provider.model, provider.headers, messages, provider.isVenice, controller.signal)
+    const sig = String(JSON.parse(content).signal || '').toUpperCase()
+    return ['DEPOSIT', 'HOLD', 'WITHDRAW'].includes(sig) ? sig : 'HOLD'
+  } catch {
+    return 'HOLD'   // safe default — conflict unresolved → discard
+  } finally {
+    clearTimeout(timeout)
+  }
+}

@@ -25,13 +25,28 @@ import { applyCors, rateLimit } from './_guard.js'
 
 const CHAIN_ID = 84532 // Base Sepolia
 
-// executeAgentDeposit signature — must match AgentVaultDepositor.sol exactly.
 // 1Shot NewSolidityStructParam shape: `type` is the BASE enum
 // (address/bool/bytes/int/string/uint/struct) — bit/byte width goes in `typeSize`,
 // and `index` (ordinal position) is REQUIRED. bytes32 → {type:'bytes',typeSize:32};
-// uint256 → {type:'uint',typeSize:256}. Wrong shape → ZodError → 502.
+// uint256 → {type:'uint',typeSize:256}; bool → {type:'bool'}. Wrong shape → ZodError → 502.
 const DEPOSIT_FN = 'executeAgentDeposit'
 const DEPOSIT_INPUTS = [
+  { name: 'agentId', type: 'bytes', typeSize: 32, index: 0 },
+  { name: 'user', type: 'address', index: 1 },
+  { name: 'vault', type: 'address', index: 2 },
+  { name: 'amount', type: 'uint', typeSize: 256, index: 3 },
+]
+
+const HARVEST_FN = 'executeHarvest'
+const HARVEST_INPUTS = [
+  { name: 'agentId', type: 'bytes', typeSize: 32, index: 0 },
+  { name: 'user', type: 'address', index: 1 },
+  { name: 'vault', type: 'address', index: 2 },
+  { name: 'recompound', type: 'bool', index: 3 },
+]
+
+const WITHDRAW_FN = 'executeWithdraw'
+const WITHDRAW_INPUTS = [
   { name: 'agentId', type: 'bytes', typeSize: 32, index: 0 },
   { name: 'user', type: 'address', index: 1 },
   { name: 'vault', type: 'address', index: 2 },
@@ -57,7 +72,7 @@ function depositorAddress() {
 // or warm serverless lambda. Re-resolved from the API on cold start.
 let _client = null
 let _serverWallet = null // { id, accountAddress }
-const _contractMethodIds = new Map() // depositorAddress(lowercase) → methodId
+const _contractMethodIds = new Map() // `${depositorAddress.toLowerCase()}:${fnName}` → methodId
 
 async function readBody(req) {
   if (req.body && typeof req.body === 'object') return req.body // pre-parsed (serverless)
@@ -97,30 +112,37 @@ async function resolveServerWallet(client, bizId) {
   return _serverWallet
 }
 
-/** Resolve (or auto-register) the executeAgentDeposit contract method bound to the server wallet. */
-async function resolveContractMethod(client, bizId, depositor, walletId) {
-  const cacheKey = depositor.toLowerCase()
+const FN_META = {
+  [DEPOSIT_FN]:  { inputs: DEPOSIT_INPUTS,  name: 'AgentVaultDepositor.executeAgentDeposit',  desc: 'Relayed agent deposit under on-chain scoped permission' },
+  [HARVEST_FN]:  { inputs: HARVEST_INPUTS,  name: 'AgentVaultDepositor.executeHarvest',        desc: 'Relayed harvest via server-wallet session key' },
+  [WITHDRAW_FN]: { inputs: WITHDRAW_INPUTS, name: 'AgentVaultDepositor.executeWithdraw',       desc: 'Relayed emergency withdraw via server-wallet session key' },
+}
+
+/** Resolve (or auto-register) a contract method bound to the server wallet. */
+async function resolveContractMethod(client, bizId, depositor, walletId, fnName = DEPOSIT_FN) {
+  const cacheKey = `${depositor.toLowerCase()}:${fnName}`
   const cached = _contractMethodIds.get(cacheKey)
   if (cached) return cached
   const list = await client.contractMethods.list(bizId, { chainId: CHAIN_ID })
   const methods = list?.response || list?.data || list || []
   const match = methods.find(m =>
-    m.functionName === DEPOSIT_FN &&
-    (m.contractAddress || '').toLowerCase() === cacheKey
+    m.functionName === fnName &&
+    (m.contractAddress || '').toLowerCase() === depositor.toLowerCase()
   )
   if (match) {
     _contractMethodIds.set(cacheKey, match.id)
     return match.id
   }
+  const meta = FN_META[fnName]
   const created = await client.contractMethods.create(bizId, {
     chainId: CHAIN_ID,
     contractAddress: depositor,
     walletId,
-    name: 'AgentVaultDepositor.executeAgentDeposit',
-    description: 'Relayed agent deposit under on-chain scoped permission',
-    functionName: DEPOSIT_FN,
+    name: meta.name,
+    description: meta.desc,
+    functionName: fnName,
     stateMutability: 'nonpayable',
-    inputs: DEPOSIT_INPUTS,
+    inputs: meta.inputs,
     outputs: [],
   })
   _contractMethodIds.set(cacheKey, created.id)
@@ -178,14 +200,51 @@ export default async function handler(req, res) {
       // arbitrary contract (register + execute) or poison the method cache.
       const depositor = depositorAddress()
       if (!ADDRESS_RE.test(depositor)) return bad(res, 'Depositor address not configured')
-      // Validate every boundary value before touching the chain.
       if (!BYTES32_RE.test(agentId || '')) return bad(res, 'Invalid agentId')
       if (!ADDRESS_RE.test(user || '')) return bad(res, 'Invalid user address')
       if (!ADDRESS_RE.test(vault || '')) return bad(res, 'Invalid vault address')
       if (!UINT_RE.test(String(amount ?? ''))) return bad(res, 'Invalid amount')
 
       const wallet = await resolveServerWallet(client, bizId)
-      const methodId = await resolveContractMethod(client, bizId, depositor, wallet.id)
+      const methodId = await resolveContractMethod(client, bizId, depositor, wallet.id, DEPOSIT_FN)
+      const tx = await client.contractMethods.execute(methodId, {
+        agentId, user, vault, amount: String(amount),
+      })
+      const result = await pollForHash(client, tx.id)
+      return res.end(JSON.stringify({ ...result, relayer: wallet.accountAddress }))
+    }
+
+    // harvest + withdraw — zero-popup autonomous monitor loop.
+    // The server wallet is pre-authorized as a session key in AgentVaultDepositor
+    // (via authorizeSessionKey called once at setup). No MetaMask needed.
+    if (action === 'harvest') {
+      const { agentId, user, vault, recompound } = body
+      const depositor = depositorAddress()
+      if (!ADDRESS_RE.test(depositor)) return bad(res, 'Depositor address not configured')
+      if (!BYTES32_RE.test(agentId || '')) return bad(res, 'Invalid agentId')
+      if (!ADDRESS_RE.test(user || '')) return bad(res, 'Invalid user address')
+      if (!ADDRESS_RE.test(vault || '')) return bad(res, 'Invalid vault address')
+
+      const wallet = await resolveServerWallet(client, bizId)
+      const methodId = await resolveContractMethod(client, bizId, depositor, wallet.id, HARVEST_FN)
+      const tx = await client.contractMethods.execute(methodId, {
+        agentId, user, vault, recompound: Boolean(recompound),
+      })
+      const result = await pollForHash(client, tx.id)
+      return res.end(JSON.stringify({ ...result, relayer: wallet.accountAddress }))
+    }
+
+    if (action === 'withdraw') {
+      const { agentId, user, vault, amount } = body
+      const depositor = depositorAddress()
+      if (!ADDRESS_RE.test(depositor)) return bad(res, 'Depositor address not configured')
+      if (!BYTES32_RE.test(agentId || '')) return bad(res, 'Invalid agentId')
+      if (!ADDRESS_RE.test(user || '')) return bad(res, 'Invalid user address')
+      if (!ADDRESS_RE.test(vault || '')) return bad(res, 'Invalid vault address')
+      if (!UINT_RE.test(String(amount ?? ''))) return bad(res, 'Invalid amount')
+
+      const wallet = await resolveServerWallet(client, bizId)
+      const methodId = await resolveContractMethod(client, bizId, depositor, wallet.id, WITHDRAW_FN)
       const tx = await client.contractMethods.execute(methodId, {
         agentId, user, vault, amount: String(amount),
       })

@@ -47,5 +47,5 @@ docs/superpowers/
 .playwright-mcp/
 .kiro/
 graphify-out/
-
+.claude/settings.json
 design/agentdashboard/

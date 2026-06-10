@@ -12,7 +12,7 @@ import {
 } from './screens.jsx';
 import { SkillReviewCard } from './skills.jsx';
 import {
-  StrategyCard, ExecuteCard, MemoryModal,
+  StrategyCard, ExecuteCard, MemoryModal, LoopStatusPanel,
   buildStrategy, makeInitialExecState,
 } from './agents.jsx';
 import {
@@ -50,6 +50,16 @@ import { clearUserSkill } from './skillLoader.js';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import VaultDetailPage from './components/VaultDetailPage.jsx';
 import TxDetailPage from './components/TxDetailPage.jsx';
+
+import { buildStrategyState, enforceActionSpace, scoreReward } from './strategy/mdp.js';
+import { createMonitorLoop } from './strategy/monitorLoop.js';
+import { councilVerdict } from './strategy/council.js';
+import { reflect } from './strategy/reflector.js';
+import { increment as playbookIncrement, weight as playbookWeight } from './strategy/playbook.js';
+import { saveCycle, getCycles, getJournalSummary } from './strategy/cycleJournal.js';
+import { relayHarvest, relayWithdraw, getRelayerAddress } from './relay.js';
+import { setupBgAgentsWithSessionKey } from './wallet.js';
+import { resolveCouncilConflict } from './venice.js';
 
 /* ---------- Background agent settings (localStorage: yv_agent_settings) ---------- */
 const AGENT_SETTINGS_DEFAULTS = { autoHarvest: false, harvestMinUsdc: 1.0, apyDropPct: 20, rebalanceThresholdPct: 1.5, emergencyFull: false, emergencyPct: 50, riskMonitoring: true, positionInterval: 5, apyInterval: 10, riskInterval: 15, rewardInterval: 5 };
@@ -200,6 +210,11 @@ const App = () => {
 
   // Real Web3 state
   const [realAddress, setRealAddress] = useS(null);
+  const loopRef = useR(null);
+  // Tracks which user addresses have had session key setup done (survives re-renders).
+  const sessionKeySetupRef = useR(new Set());
+  const [loopTick, setLoopTick] = useS(0);
+  const [loopPhase, setLoopPhase] = useS(null); // live pipeline phase from monitorLoop onPhase
   const [permContext, setPermContext] = useS(null);
   const [veniceAuth, setVeniceAuth] = useS(null);
   const [mmVersion, setMmVersion] = useS(null); // MetaMask flavor/version — Flask detection (once on mount)
@@ -364,6 +379,24 @@ const App = () => {
   useE(() => { updateAgentConfig({ thresholds: agentSettings }); }, [agentSettings]);
 
   const handleAgentEvent = (ev) => {
+    if (loopRef.current) {
+      if (ev.kind === 'harvest_ready') {
+        loopRef.current.submitIdea({ kind: 'harvest', vaultAddress: ev.vaultAddress, vaultName: ev.vaultName });
+      } else if (ev.kind === 'rebalance_proposal') {
+        const from = VAULT_CATALOG.find((v) => v.name === ev.fromVault);
+        const to = VAULT_CATALOG.find((v) => v.protocol === ev.toProtocol);
+        if (from && to) {
+          loopRef.current.submitIdea({
+            kind: 'rebalance',
+            fromVaultAddress: from.address,
+            apyGain: Number(ev.apyGain),
+            proposed: [{ address: to.address, allocation: 1, risk_tier: to.risk }],
+            currentAllocations: [{ address: from.address, allocation: 1, risk_tier: from.risk }],
+          });
+        }
+      }
+    }
+
     if (ev.kind === 'position') {
       setAgentData((d) => ({ ...d, lastUpdated: ev.timestamp, positions: mergePositions(d.positions, { [ev.vaultAddress]: { vaultName: ev.vaultName, balance: ev.balance, unclaimedRewards: ev.unclaimedRewards } }) }));
       return;
@@ -391,17 +424,80 @@ const App = () => {
     // strategy — otherwise a new deposit would stop the agent watching earlier vaults.
     let activeVaults = buildActiveVaults(agentData.positions, strategy);
     if (!activeVaults.length) activeVaults = strategy.agents.map((a) => ({ address: a.vault.addr, name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }));
+    // ── Session key setup (once per user, zero-popup autonomous loop) ──────────
+    // When autoHarvest is enabled, pre-authorize the 1Shot server wallet as a
+    // session key in AgentVaultDepositor. One EIP-5792 batch popup (grant bg
+    // permissions + authorizeSessionKey) — after this, all harvest/withdraw calls
+    // route through the managed relay with zero MetaMask prompts.
+    if (agentSettings.autoHarvest && !sessionKeySetupRef.current.has(realAddress)) {
+      sessionKeySetupRef.current.add(realAddress); // mark eagerly to prevent double-call
+      getRelayerAddress()
+        .then((serverWallet) => {
+          if (!serverWallet) throw new Error('Relayer wallet not configured');
+          return setupBgAgentsWithSessionKey(
+            activeVaults.map((v) => v.address),
+            serverWallet
+          );
+        })
+        .then(() => addLog({ event: 'OrchestratorPlanned', meta: 'session key · authorized — monitor loop now zero-popup' }))
+        .catch((err) => {
+          sessionKeySetupRef.current.delete(realAddress); // allow retry on next start
+          addLog({ event: 'AgentFailed', meta: `session key setup failed: ${err?.message}` });
+        });
+    }
+
     startBackgroundAgent({
       userAddress: realAddress,
       activeVaults,
       rpcUrl: import.meta.env.VITE_RPC_URL,
       // Tavily key no longer passed to client — risk scan routes through /api/search proxy.
       supportedProtocols: ['aave-v3', 'morpho-blue', 'spark', 'fluid'],
-      thresholds: agentSettings,
+      thresholds: { ...agentSettings, autoHarvest: false },
     });
     const unsub = onAgentEvent(handleAgentEvent);
     addLog({ event: 'OrchestratorPlanned', meta: 'background agent · monitoring started' });
-    return () => { unsub(); stopBackgroundAgent(); };
+
+    // ── Autonomous monitor loop — NEVER-STOP spine + TradingAgents council ──
+    const loop = createMonitorLoop({
+      getState: async () => buildStrategyState({
+        amountUsdc: Number(amount) || 0,
+        riskLevel: risk,
+        numVaults: strategy.agents.length,
+        vaultData: VAULT_CATALOG,
+        marketContext: marketLive,
+        positions: agentData.positions,
+      }),
+      runGates: (proposed, state) => enforceActionSpace(proposed, state),
+      simulate: (allocations, state) => scoreReward(allocations, state),
+      council: (input) => councilVerdict(input, {
+        weight: playbookWeight,
+        resolveConflict: resolveCouncilConflict,
+      }),
+      execute: async (idea) => {
+        // Respect autoHarvest setting — if disabled the loop observes/suggests only,
+        // no on-chain calls, no MetaMask popups. User opts in explicitly.
+        if (!agentSettings.autoHarvest) return null;
+        if (idea.kind === 'harvest') {
+          const { txHash } = await relayHarvest({ user: realAddress, vault: idea.vaultAddress, recompound: false });
+          saveTransaction({ txHash, vaultName: idea.vaultName, vaultAddress: idea.vaultAddress, amountUsdc: 0, workerLabel: 'MonitorLoop', network: 'sepolia' });
+          return txHash;
+        }
+        if (idea.kind === 'rebalance') {
+          const pos = agentData.positions[idea.fromVaultAddress];
+          const { txHash } = await relayWithdraw({ user: realAddress, vault: idea.fromVaultAddress, amount: pos?.balance || '0' });
+          return txHash;
+        }
+        throw new Error(`unknown idea kind: ${idea.kind}`);
+      },
+      reflect: (cycle) => reflect(cycle, { increment: playbookIncrement }),
+      journal: { saveCycle: (row) => { saveCycle(row); setLoopTick((t) => t + 1); } },
+      heartbeatMs: (agentSettings.apyInterval || 10) * 60 * 1000,
+      onPhase: (p) => setLoopPhase(p === 'sleep' ? null : p),
+    });
+    loopRef.current = loop;
+    loop.start();
+
+    return () => { unsub(); stopBackgroundAgent(); loop.stop(); loopRef.current = null; setLoopPhase(null); };
   }, [stage, agentEnabled, realAddress, strategy]);
 
   const dismissAlert = (id) => setAgentData((d) => ({ ...d, alerts: d.alerts.filter((a) => a.id !== id) }));
@@ -1057,7 +1153,24 @@ const App = () => {
           />
         );
       case "done":
-        return <SuccessCard strategy={strategy} onAgain={handleAgain} address={realAddress} />;
+        return (
+          <>
+            <SuccessCard strategy={strategy} onAgain={handleAgain} address={realAddress} />
+            {agentEnabled && (
+              // loopTick re-renders the parent on each journal write; no key remount
+              // so the panel's internal 1s countdown clock and CSS animations persist.
+              <LoopStatusPanel
+                running={loopRef.current?.isRunning() || false}
+                cycle={loopRef.current?.getCycle() || 0}
+                summary={getJournalSummary()}
+                rows={getCycles().slice(0, 8)}
+                phase={loopPhase}
+                nextTickAt={loopRef.current?.getNextTickAt() || null}
+                heartbeatMs={loopRef.current?.getHeartbeatMs() || (agentSettings.apyInterval || 10) * 60 * 1000}
+              />
+            )}
+          </>
+        );
       default:
         return null;
     }

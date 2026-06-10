@@ -27,8 +27,15 @@ contract AgentVaultDepositor is ReentrancyGuard {
 
     mapping(address => mapping(bytes32 => AgentPermission)) public agentPermissions;
 
+    /// @notice Session keys — pre-authorized addresses that may execute on behalf of a user.
+    ///         Value is expiry timestamp; 0 = not authorized. Designed for server-side relayers
+    ///         and off-chain automation (zero-popup autonomous loops).
+    mapping(address user => mapping(address sessionKey => uint256 expiresAt)) public sessionKeys;
+
     // Events
     event AgentStarted(bytes32 indexed agentId, address indexed user, address vault);
+    event SessionKeyAuthorized(address indexed user, address indexed sessionKey, uint256 expiresAt);
+    event SessionKeyRevoked(address indexed user, address indexed sessionKey);
     event SwapExecuted(bytes32 indexed agentId, address indexed user, uint256 amountIn, uint256 amountOut);
     event ApproveExecuted(bytes32 indexed agentId, address indexed user, address vault, uint256 amount);
     event DepositExecuted(bytes32 indexed agentId, address indexed user, address vault, uint256 amount, uint256 sharesReceived);
@@ -56,6 +63,29 @@ contract AgentVaultDepositor is ReentrancyGuard {
     error WithdrawNotPermitted();
     error HarvestNotPermitted();
     error UnauthorizedCaller();
+
+    // ─── Session Key Registry ──────────────────────────────────────────────────
+
+    /// @notice Authorize a session key to execute actions on behalf of msg.sender.
+    ///         Used by server-side relayers for zero-popup autonomous operation.
+    function authorizeSessionKey(address sessionKey, uint256 expiresAt) external {
+        if (expiresAt <= block.timestamp) revert InvalidExpiry();
+        sessionKeys[msg.sender][sessionKey] = expiresAt;
+        emit SessionKeyAuthorized(msg.sender, sessionKey, expiresAt);
+    }
+
+    /// @notice Revoke a session key immediately.
+    function revokeSessionKey(address sessionKey) external {
+        sessionKeys[msg.sender][sessionKey] = 0;
+        emit SessionKeyRevoked(msg.sender, sessionKey);
+    }
+
+    /// @dev Returns true if msg.sender is the user OR a valid (non-expired) session key for the user.
+    function _isAuthorized(address user) internal view returns (bool) {
+        if (msg.sender == user) return true;
+        uint256 exp = sessionKeys[user][msg.sender];
+        return exp != 0 && block.timestamp < exp;
+    }
 
     /// @notice Grant permission to an agent to deposit into a specific vault.
     ///         Withdraw/harvest are opt-in via setAgentCapabilities (default false).
@@ -126,7 +156,7 @@ contract AgentVaultDepositor is ReentrancyGuard {
         // permission. Every on-chain execution path is user-signed (EIP-7702
         // account / user EOA); without this, ANY address could trigger deposits,
         // burn a user's allowance, or grief the yield clock.
-        if (msg.sender != user) revert UnauthorizedCaller();
+        if (!_isAuthorized(user)) revert UnauthorizedCaller();
         if (!perm.active) revert PermissionNotActive();
         if (block.timestamp >= perm.expiresAt) revert PermissionExpired();
         if (perm.vault != vault) revert VaultMismatch();
@@ -157,7 +187,7 @@ contract AgentVaultDepositor is ReentrancyGuard {
         nonReentrant
     {
         AgentPermission storage perm = agentPermissions[user][agentId];
-        if (msg.sender != user) revert UnauthorizedCaller();
+        if (!_isAuthorized(user)) revert UnauthorizedCaller();
         if (!perm.active) revert PermissionNotActive();
         if (block.timestamp >= perm.expiresAt) revert PermissionExpired();
         if (!perm.allowWithdraw) revert WithdrawNotPermitted();
@@ -174,7 +204,7 @@ contract AgentVaultDepositor is ReentrancyGuard {
         nonReentrant
     {
         AgentPermission storage perm = agentPermissions[user][agentId];
-        if (msg.sender != user) revert UnauthorizedCaller();
+        if (!_isAuthorized(user)) revert UnauthorizedCaller();
         if (!perm.active) revert PermissionNotActive();
         if (block.timestamp >= perm.expiresAt) revert PermissionExpired();
         if (!perm.allowHarvest) revert HarvestNotPermitted();

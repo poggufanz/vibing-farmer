@@ -1,7 +1,6 @@
 import { relayGrantPermission, relayDeposit } from './relay.js'
 import { writeMemory, createEntry, buildLesson } from './memory.js'
 import { loadSkill } from './skills.js'
-import { hasSession } from './strategy/session.js'
 
 /**
  * Worker Agent — executes full Swap→Approve→Deposit for one vault.
@@ -39,8 +38,8 @@ export class WorkerAgent {
     try {
       this.emit('started', { agentId: this.agentId, vault: this.vault })
 
-      // Step 1: Grant on-chain permission (skipped when already batched or using session)
-      if (!this.batchedHash && !this.grantsBatched && !hasSession()) {
+      // Step 1: Grant on-chain permission (skipped when already batched by the orchestrator)
+      if (!this.batchedHash && !this.grantsBatched) {
         this.emit('step', { agentId: this.agentId, step: 'grant-permission', status: 'pending' })
         const expiresAt = Math.floor(Date.now() / 1000) + 3600
         const grantResult = await relayGrantPermission({
