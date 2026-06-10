@@ -387,6 +387,98 @@ const SCENARIO_META = {
   bear: { label: 'Bear', tone: 'var(--warn, #c87)' },
 };
 
+/* ============================================
+   AI Council deliberation panel (step 01)
+   Three Venice AI specialists deliberate in parallel on the proposed deposit;
+   each emits a compressed verdict citing role-scoped playbook rules. Synthesis
+   resolves them into keep/discard. (TradingAgents adaptation — see
+   planning/inspiration/TradingAgents.md)
+   ============================================ */
+const COUNCIL_ROLE_META = {
+  yield: { label: 'Yield Analyst', glyph: '📈' },
+  risk: { label: 'Risk Analyst', glyph: '⚠️' },
+  market: { label: 'Market Analyst', glyph: '🌊' },
+};
+const COUNCIL_SIGNAL_TONE = {
+  DEPOSIT: 'var(--ok)',
+  HOLD: 'var(--warn, #c87)',
+  WITHDRAW: 'var(--bad, #ff7479)',
+};
+const COUNCIL_RESOLVED_LABEL = {
+  veto: 'risk veto',
+  unanimous: 'unanimous',
+  weighted: 'weighted majority',
+  'ai-conflict': 'AI synthesis (split)',
+};
+
+const CouncilPanel = ({ council, onRetry }) => {
+  if (council === undefined) return null;
+  const loading = council === null;
+  const unavailable = !loading && council.verdict === 'unavailable';
+  const order = ['yield', 'risk', 'market'];
+  const specialists = (loading || unavailable) ? [] : [...(council.specialists || [])].sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role));
+  const keep = !loading && council.verdict === 'keep';
+  return (
+    <div className="council-panel">
+      <div className="council-head mono">
+        <span className="council-title">AI Council · three specialists deliberating</span>
+        {!loading && !unavailable && (
+          <span className={`council-verdict ${keep ? 'keep' : 'discard'}`}>
+            {keep ? 'proceed' : 'caution'} · {COUNCIL_RESOLVED_LABEL[council.resolvedBy] || council.resolvedBy}
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="council-loading mono">
+          <span className="think-spin" /> specialists analyzing yield · risk · market in parallel…
+        </div>
+      ) : unavailable ? (
+        <div className="council-loading mono">
+          Council unavailable — the AI provider didn’t respond.
+          {onRetry && <button type="button" className="btn btn-ghost council-retry" onClick={onRetry}>Retry deliberation</button>}
+        </div>
+      ) : (
+        <>
+          <div className="council-grid">
+            {specialists.map((s) => {
+              const meta = COUNCIL_ROLE_META[s.role] || { label: s.role, glyph: '•' };
+              return (
+                <div key={s.role} className="council-spec">
+                  <div className="council-spec-head mono">
+                    <span className="council-spec-role">{meta.glyph} {meta.label}</span>
+                    <span className="council-spec-signal" style={{ color: COUNCIL_SIGNAL_TONE[s.signal] || 'var(--text)' }}>
+                      {s.signal}
+                    </span>
+                  </div>
+                  <div className="council-spec-conf mono">
+                    <div className="council-conf-track"><div className="council-conf-fill" style={{ width: `${Math.round(s.confidence * 100)}%`, background: COUNCIL_SIGNAL_TONE[s.signal] || 'var(--text)' }} /></div>
+                    <span className="tnum">{Math.round(s.confidence * 100)}%</span>
+                    <span className="council-spec-src ai">AI</span>
+                  </div>
+                  {s.citedRules?.length > 0 && (
+                    <div className="council-rules">
+                      {s.citedRules.map((id) => <span key={id} className="council-rule-chip mono">{id}</span>)}
+                    </div>
+                  )}
+                  {s.concerns?.length > 0 && (
+                    <div className="council-concerns mono">⚠ {s.concerns.join(' · ')}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="council-foot mono">
+            {keep
+              ? `Council recommends proceeding (${Math.round(council.confidence * 100)}% confidence). Cited rules earn outcome feedback after deposit.`
+              : `Council advises caution${council.reason ? ` · ${council.reason}` : ''}. You can still proceed — the decision is yours.`}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 const SimulationPanel = ({ simulation }) => {
   if (!simulation || !simulation.scenarios?.length) return null;
   const { scenarios, expectedValue, probProfit, horizonDays, runs, context } = simulation;
@@ -431,7 +523,7 @@ const SimulationPanel = ({ simulation }) => {
   );
 };
 
-const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate, strategyHash, attestation, attesting, simulation }) => {
+const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate, strategyHash, attestation, attesting, simulation, council, onCouncilRetry }) => {
   const customSkill = skillSource === "user-local" || skillSource === "user-file";
   const shortHash = (h) => h ? `${h.slice(0, 10)}...` : "";
   return (
@@ -525,6 +617,8 @@ const StrategyCard = ({ strategy, skillSource, onProceed, onRegenerate, strategy
           )}
         </div>
       )}
+
+      <CouncilPanel council={council} onRetry={onCouncilRetry} />
 
       <SimulationPanel simulation={simulation} />
 

@@ -61,7 +61,9 @@ import { increment as playbookIncrement, weight as playbookWeight } from './stra
 import { saveCycle, getCycles, getJournalSummary } from './strategy/cycleJournal.js';
 import { relayHarvest, relayWithdraw, getRelayerAddress } from './relay.js';
 import { setupBgAgentsWithSessionKey } from './wallet.js';
-import { resolveCouncilConflict } from './venice.js';
+import { resolveCouncilConflict, councilSpecialistVerdict } from './venice.js';
+import { councilReview, buildCouncilInput } from './strategy/councilReview.js';
+import { councilOutcome } from './strategy/outcome.js';
 
 /* ---------- Background agent settings (localStorage: yv_agent_settings) ---------- */
 const AGENT_SETTINGS_DEFAULTS = { autoHarvest: false, harvestMinUsdc: 1.0, apyDropPct: 20, rebalanceThresholdPct: 1.5, emergencyFull: false, emergencyPct: 50, riskMonitoring: true, positionInterval: 5, apyInterval: 10, riskInterval: 15, rewardInterval: 5 };
@@ -164,6 +166,9 @@ const App = () => {
   const genAbortRef = useR(null);
   const slowTimerRef = useR(null);
   const [strategy, setStrategy] = useS(null);
+  const [council, setCouncil] = useS(undefined);   // undefined = no strategy yet, null = deliberating
+  const [councilRetry, setCouncilRetry] = useS(0);  // bump to re-run deliberation
+  const councilCitedRef = useR({ citedRules: [], verdict: null });
   const [rawStrategy, setRawStrategy] = useS(null); // raw Venice result (carries strategyHash) for on-chain attestation
   const [strategyAttestation, setStrategyAttestation] = useS(null);
   const [attesting, setAttesting] = useS(false);
@@ -532,6 +537,43 @@ const App = () => {
       },
     });
   }, [strategy, amount, risk]);
+
+  // AI Council deliberation for the proposed allocation. Async (3 parallel AI
+  // calls + possible synthesis call) so it runs as an effect, not a useMemo. Uses
+  // the SAME live signals as the simulation panel. AI-only: each specialist retries
+  // once; if the provider still fails, the council reports 'unavailable' and the
+  // panel offers a retry — no fabricated verdict.
+  useE(() => {
+    if (!strategy?.agents?.length) { setCouncil(undefined); return; }
+    let cancelled = false;
+    setCouncil(null); // → panel shows "deliberating"
+    const ctrl = new AbortController();
+    const state = buildStrategyState({
+      amountUsdc: Number(amount) || 0,
+      riskLevel: risk,
+      numVaults: strategy.agents.length,
+      vaultData: VAULT_CATALOG,
+      marketContext: marketLive,
+      positions: agentData.positions,
+      gas: latestGasRef.current,
+    });
+    const input = buildCouncilInput(strategy, state);
+    councilReview(input, {
+      specialist: councilSpecialistVerdict,
+      resolveConflict: resolveCouncilConflict,
+      weight: playbookWeight,
+      devApiKey: devApiKey || null,
+      signal: ctrl.signal,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setCouncil(result);
+        councilCitedRef.current = { citedRules: result.citedRules || [], verdict: result.verdict };
+        addLog({ event: 'OrchestratorPlanned', meta: `AI Council · ${result.verdict} · ${result.resolvedBy}${result.citedRules?.length ? ` · ${result.citedRules.join(', ')}` : ''}` });
+      })
+      .catch((e) => { if (!cancelled) { console.warn('[app] council failed:', e); setCouncil(undefined); } });
+    return () => { cancelled = true; ctrl.abort(); };
+  }, [strategy, amount, risk, councilRetry]);
 
   const handleHarvestNow = async (alert) => {
     try {
@@ -1042,6 +1084,14 @@ const App = () => {
   /* ----- DONE (step 06) ----- */
   const handleExecDone = async () => {
     setStage("done");
+    // ACE loop: credit/debit the rules the council cited at review time, based on
+    // how the deposit actually went. Closes review → deposit → reflect end-to-end.
+    const { citedRules, verdict } = councilCitedRef.current;
+    if (verdict === 'keep' && citedRules.length) {
+      const outcome = councilOutcome(execMap, strategy?.agents || []);
+      reflect({ verdict, citedRules, outcome }, { increment: playbookIncrement });
+      addLog({ event: 'OrchestratorPlanned', meta: `Council reflect · ${outcome} · ${citedRules.join(', ')}` });
+    }
     // Allocation-based FALLBACK only — used when the chain read is unavailable (no RPC)
     // or a vault reads 0 (deposit tx not yet mined). Stored in raw token
     // units (allocation USDC * 1e6); the display layer divides by 1e6.
@@ -1208,7 +1258,7 @@ const App = () => {
           return <InputScreen amount={amount} setAmount={setAmount} risk={risk} setRisk={setRisk} onSubmit={handleSubmitPreference} />;
         if (strategyPhase === "thinking")
           return <ThinkingCard phase={thinkingPhase} times={thinkTimes} />;
-        return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} strategyHash={rawStrategy?.strategyHash} attestation={strategyAttestation} attesting={attesting} simulation={simulation} />;
+        return <StrategyCard strategy={strategy} skillSource={skillSource} onProceed={handleAcceptStrategy} onRegenerate={handleRegenerate} strategyHash={rawStrategy?.strategyHash} attestation={strategyAttestation} attesting={attesting} simulation={simulation} council={council} onCouncilRetry={() => setCouncilRetry((n) => n + 1)} />;
       case "connect":
         return <ConnectCard phase={connectPhase} error={connectError} mmVersion={mmVersion} onConnect={handleConnect} onUpgrade={handleUpgrade} onDone={handleConnectDone} onCancel={() => { setConnectPhase("idle"); setStage("strategy"); }} />;
       case "skills":

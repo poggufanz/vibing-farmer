@@ -411,3 +411,53 @@ Pick the final signal for whether to proceed with the proposed rebalance/harvest
     clearTimeout(timeout)
   }
 }
+
+const VALID_SIGNALS = new Set(['DEPOSIT', 'HOLD', 'WITHDRAW'])
+
+/**
+ * Pure parser/validator for a council specialist's JSON verdict. Drops cited
+ * rules that aren't in the role's allowed set (anti-hallucination, mirrors
+ * validateVeniceResponse's address check). Throws on structural problems so the
+ * caller can fall back to the deterministic specialist.
+ * @param {object} raw parsed JSON from the model
+ * @param {'yield'|'risk'|'market'} role
+ * @param {string[]} allowedRuleIds rule ids this role may cite
+ * @returns {import('./strategy/councilReview.js').SpecialistVerdict}
+ */
+export function parseSpecialistVerdict(raw, role, allowedRuleIds = []) {
+  const signal = String(raw?.signal || '').toUpperCase()
+  if (!VALID_SIGNALS.has(signal)) throw new Error(`invalid signal: ${raw?.signal}`)
+  if (!raw?.reasoning || String(raw.reasoning).length < 1) throw new Error('reasoning missing')
+  const conf = Math.max(0, Math.min(1, +Number(raw.confidence).toFixed(3)))
+  const allowed = new Set(allowedRuleIds)
+  const citedRules = Array.isArray(raw.citedRules) ? raw.citedRules.filter((id) => allowed.has(id)) : []
+  const concerns = Array.isArray(raw.concerns) ? raw.concerns.map(String).slice(0, 4) : []
+  return { role, signal, confidence: Number.isFinite(conf) ? conf : 0, reasoning: String(raw.reasoning), citedRules, concerns, source: 'ai' }
+}
+
+/**
+ * Run ONE council specialist as a Venice AI call. Server-proxy by default (the
+ * wallet is not connected at wizard step 01). Returns null on any failure so the
+ * caller substitutes the deterministic fallback — the council never blocks.
+ * @param {{role:string, systemPrompt:string, userPrompt:string, allowedRuleIds:string[], devApiKey?:string|null, signal?:AbortSignal}} args
+ * @returns {Promise<import('./strategy/councilReview.js').SpecialistVerdict|null>}
+ */
+export async function councilSpecialistVerdict({ role, systemPrompt, userPrompt, allowedRuleIds, devApiKey = null, signal }) {
+  const provider = resolveProvider(null, devApiKey)
+  const controller = signal ? null : new AbortController()
+  const timeout = controller ? setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS) : null
+  const sig = signal || controller.signal
+  try {
+    const content = await callChatCompletions(
+      provider.url, provider.model, provider.headers,
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      provider.isVenice, sig
+    )
+    return parseSpecialistVerdict(JSON.parse(content), role, allowedRuleIds)
+  } catch (err) {
+    console.warn(`[council] ${role} specialist failed (${provider.name}):`, err.message)
+    return null
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
