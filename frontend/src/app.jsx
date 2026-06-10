@@ -980,6 +980,20 @@ const App = () => {
       });
   };
 
+  // Chain balances can lag 1-2 blocks after a deposit. Retry until at least one
+  // vault reports a non-zero balance, then trust the on-chain numbers.
+  async function reconcileWithRetry(address, maxAttempts = 3, delayMs = 3000) {
+    for (let i = 0; i < maxAttempts; i++) {
+      let result = null;
+      try { result = await reconcilePositionsFromChain(address); } catch { result = null; }
+      if (result && Object.values(result).some((p) => BigInt(p.balance || '0') > 0n)) {
+        return result;
+      }
+      if (i < maxAttempts - 1) await new Promise((r) => setTimeout(r, delayMs));
+    }
+    return null;
+  }
+
   /* ----- DONE (step 06) ----- */
   const handleExecDone = async () => {
     setStage("done");
@@ -1004,8 +1018,7 @@ const App = () => {
     // If chain is available, use authoritative balances (can move up or down).
     // If chain unavailable (simulated relay / not yet mined), ADD seed into existing
     // positions — these are confirmed new deposits, so we sum, not take max.
-    let chain = null;
-    try { chain = await reconcilePositionsFromChain(realAddress); } catch { /* keep seed */ }
+    const chain = await reconcileWithRetry(realAddress);
     if (chain) {
       const finalPositions = mergePositions(seedPositions, chain);
       if (Object.keys(finalPositions).length > 0) {
