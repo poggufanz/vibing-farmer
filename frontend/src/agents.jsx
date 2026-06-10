@@ -66,6 +66,7 @@ const buildStrategy = (amount, risk) => {
 /* ---------- Agent execution state model ---------- */
 const STEP_IDS = ["swap", "approve", "deposit"];
 const STEP_LABELS = { swap: "Swap", approve: "Approve", deposit: "Deposit" };
+const STEP_NOTE = { swap: "skipped · USDC→USDC needs no swap" };
 
 const makeInitialExecState = (agents) => {
   const map = {};
@@ -89,12 +90,14 @@ const GRAPH_COLOR = {
   idle:      "#3a3b33",
   running:   "#f0b54a",
   confirmed: "#6fe39a",
+  skipped:   "#6b7280",
   failed:    "#ff7479",
 };
 const GRAPH_COLOR_LIGHT = {
   idle:      "#b8b5aa",
   running:   "#b07a1a",
   confirmed: "#2d7a4a",
+  skipped:   "#6b7280",
   failed:    "#a83a3a",
 };
 const GROUP_BASE = { orchestrator: "#cfff3d", vault: "#6366f1" };
@@ -251,7 +254,7 @@ const AgentTiles = ({ strategy, execMap, onOpenMemory }) => {
     <div className="agent-tiles">
       {strategy.agents.map((a) => {
         const ex = execMap[a.id] || { status: "idle", steps: {}, memory: [] };
-        const doneSteps = STEP_IDS.filter((sid) => ex.steps?.[sid] === "confirmed").length;
+        const doneSteps = STEP_IDS.filter((sid) => ex.steps?.[sid] === "confirmed" || ex.steps?.[sid] === "skipped").length;
         return (
           <button
             key={a.id}
@@ -269,7 +272,7 @@ const AgentTiles = ({ strategy, execMap, onOpenMemory }) => {
             </div>
             <div className="agent-tile-steps">
               {STEP_IDS.map((sid) => (
-                <span key={sid} className={`agent-step-pip ${ex.steps?.[sid] || "idle"}`} title={STEP_LABELS[sid]}>
+                <span key={sid} className={`agent-step-pip ${ex.steps?.[sid] || "idle"}`} title={ex.steps?.[sid] === "skipped" ? (STEP_NOTE[sid] || STEP_LABELS[sid]) : STEP_LABELS[sid]}>
                   {STEP_LABELS[sid].slice(0, 1).toLowerCase()}
                 </span>
               ))}
@@ -521,10 +524,11 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
   const totalSteps = strategy.agents.length * STEP_IDS.length;
   const doneSteps = strategy.agents.reduce((acc, a) => {
     const ex = execMap[a.id] || { steps: {} };
-    return acc + STEP_IDS.filter((sid) => ex.steps?.[sid] === "confirmed").length;
+    return acc + STEP_IDS.filter((sid) => ex.steps?.[sid] === "confirmed" || ex.steps?.[sid] === "skipped").length;
   }, 0);
   const pct = totalSteps ? (doneSteps / totalSteps) * 100 : 0;
   const allDone = doneSteps === totalSteps;
+  const runningCount = strategy.agents.filter((a) => (execMap[a.id] || {}).status === "running").length;
 
   // Auto-advance to "done" only when execution finishes while viewing — NOT when the user
   // navigates back to an already-completed run via the step rail (would bounce to done).
@@ -534,6 +538,16 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
       const t = setTimeout(onDone, 900);
       return () => clearTimeout(t);
     }
+  }, [allDone]);
+
+  // Real on-chain txs take time (relayer submit + block confirmation) — surface an
+  // elapsed-time counter so the user knows the run is progressing, not stuck.
+  const [elapsedMs, setElapsedMs] = useSAg(0);
+  useEAg(() => {
+    if (allDone) return;
+    const startedAt = Date.now();
+    const t = setInterval(() => setElapsedMs(Date.now() - startedAt), 1000);
+    return () => clearInterval(t);
   }, [allDone]);
 
   return (
@@ -554,6 +568,15 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
             Each worker executes the skills you approved: <span className="mono">swap → approve → deposit</span>.
             Click an agent node on the graph or a card below to open its memory panel.
           </p>
+          {!allDone && (
+            <div className="exec-live-status mono">
+              <span className="think-spin" />
+              <span>
+                {runningCount > 0 ? `${runningCount} agent${runningCount > 1 ? "s" : ""} confirming on-chain` : "waiting for relayer"}
+                {" · "}{fmtCountdown(elapsedMs)} elapsed
+              </span>
+            </div>
+          )}
         </div>
         <div className="exec-progress">
           <span className="label">progress</span>

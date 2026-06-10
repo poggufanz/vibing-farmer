@@ -349,7 +349,7 @@ export default function HomePage({
                   trending.map((v, i) => {
                     const pp = ppMeta(v.stats?.change7d)
                     return (
-                      <React.Fragment key={v.name}>
+                      <React.Fragment key={v.poolId || `${v.name}-${i}`}>
                         {i > 0 && <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>·</span>}
                         <button onClick={() => handleOpenVault(v)}
                           style={{ ...linkBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'baseline', gap: 5, fontSize: 12 }}>
@@ -442,7 +442,7 @@ export default function HomePage({
                     const pp1d = ppMeta(stats?.change1d ?? prevDelta)
                     const riskColor = v.risk === 'low' ? 'var(--ok)' : v.risk === 'medium' ? '#f59e0b' : '#f97316'
                     return (
-                      <div key={v.name} style={{
+                      <div key={v.poolId || `${v.name}-${i}`} style={{
                         display: 'grid', gridTemplateColumns: GRID_COLS,
                         alignItems: 'center', gap: 8,
                         padding: '11px 18px',

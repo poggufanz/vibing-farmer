@@ -6,7 +6,6 @@ import { Icon } from './components.jsx';
 import { loadSettings, t } from './settingsStore.js';
 
 const shortAddr = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "";
-const fakeHash = () => "0x" + Array.from({ length: 64 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
 
 const RISK_OPTIONS = [
   { id: "low", label: "Low", sub: "1 agent · single vault" },
@@ -548,6 +547,6 @@ const SuccessCard = ({ strategy, onAgain, address }) => {
 
 export {
   InputScreen, ThinkingCard, ConnectCard,
-  PermissionCard, SuccessCard, shortAddr, fakeHash,
+  PermissionCard, SuccessCard, shortAddr,
   THINK_STEPS, MmDialog,
 };

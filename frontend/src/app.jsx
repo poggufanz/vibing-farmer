@@ -8,7 +8,7 @@ import { isDevMode } from './devFlag.js';
 import { Icon, Sidebar, TopBar, StepRail, STEPS } from './components.jsx';
 import {
   InputScreen, ThinkingCard, ConnectCard,
-  PermissionCard, SuccessCard, shortAddr, fakeHash,
+  PermissionCard, SuccessCard, shortAddr,
 } from './screens.jsx';
 import { SkillReviewCard } from './skills.jsx';
 import {
@@ -309,7 +309,7 @@ const App = () => {
       .then((chain) => {
         if (!alive || !chain) return; // null = no RPC / all reads failed → keep cache
         // Merge, never replace: on-chain truth updates/adds vaults but can't wipe seeded
-        // positions whose deposits are simulated or not yet mined (chain reads them as 0).
+        // positions whose deposits are real but not yet mined (chain reads them as 0).
         // The persist effect writes the merged result, so an empty chain can't clobber cache.
         setAgentData((d) => ({ ...d, positions: mergePositions(d.positions, chain), lastUpdated: Date.now() }));
       })
@@ -330,7 +330,7 @@ const App = () => {
   // collapses into ONE reconcile. Listens + reads via the dedicated read-only provider
   // (getReadProvider) — never the wallet's BrowserProvider, which -32603s while a
   // wallet_* RPC is pending. applyChainPositions is authoritative (can lower on
-  // withdraw), unlike the raise-only connect-time merge that protects simulated seeds.
+  // withdraw), unlike the raise-only connect-time merge that protects unconfirmed seeds.
   useE(() => {
     if (!realAddress) return;
     const provider = getReadProvider();
@@ -868,7 +868,9 @@ const App = () => {
         if (evName === "step") {
           const stepName = WORKER_STEP_MAP[data.step];
           if (!stepName) return; // skip 'grant-permission' internal step
-          const stepStatus = data.status === "done" ? "confirmed" : "running";
+          const stepStatus = data.status === "done" ? "confirmed"
+            : data.status === "skipped" ? "skipped"
+            : "running";
           setExecMap((prev) => {
             const cur = prev[dId] || prev[agentId] || {};
             return {
@@ -876,21 +878,37 @@ const App = () => {
               [dId]: {
                 ...cur,
                 activeStep: stepName,
+                gasMethod: data.gasMethod || cur.gasMethod || null,
                 steps: { ...(cur.steps || {}), [stepName]: stepStatus },
                 hashes: data.txHash ? { ...(cur.hashes || {}), [stepName]: data.txHash } : (cur.hashes || {}),
                 memory: [...(cur.memory || []), {
                   status: stepStatus,
                   title: `${stepName} ${data.status === "done" ? "confirmed" : "executing"}`,
-                  meta: data.txHash ? `tx ${shortAddr(data.txHash)}` : "via 1Shot relayer",
+                  meta: data.txHash
+                    ? `tx ${shortAddr(data.txHash)}${data.gasMethod === "user-signed" ? " · ⚠ user-signed" : ""}`
+                    : "via 1Shot relayer",
                   hash: data.txHash || null,
                   t: nowT(),
                 }],
               },
             };
           });
+          if (data.status === "skipped" && stepName === "swap") {
+            addLog({ event: "SwapExecuted", agent: dId, meta: data.reason || "skipped · no swap required" });
+          }
           if (data.status === "done") {
             const evMap = { swap: "SwapExecuted", approve: "ApproveExecuted", deposit: "DepositExecuted" };
-            if (evMap[stepName]) addLog({ event: evMap[stepName], agent: dId, meta: data.txHash ? `tx ${shortAddr(data.txHash)}` : "[simulated]" });
+            if (stepName === "deposit") {
+              const gasLabel = data.gasMethod === "relayer" ? "gas paid by relayer"
+                : data.gasMethod === "user-signed" ? "⚠ gas paid by user · relay not configured"
+                : "";
+              addLog({
+                event: "DepositExecuted", agent: dId,
+                meta: `${data.txHash ? `tx ${shortAddr(data.txHash)}` : "no tx hash"}${gasLabel ? " · " + gasLabel : ""}`,
+              });
+            } else if (evMap[stepName]) {
+              addLog({ event: evMap[stepName], agent: dId, meta: data.txHash ? `tx ${shortAddr(data.txHash)}` : "no tx hash" });
+            }
           }
         }
 
@@ -906,7 +924,7 @@ const App = () => {
                 memory: [...(cur.memory || []), {
                   status: "confirmed",
                   title: "agent completed",
-                  meta: data.simulated ? "deposit confirmed [simulated relay]" : `tx ${shortAddr(data.txHash)}`,
+                  meta: `tx ${shortAddr(data.txHash)}`,
                   hash: data.txHash,
                   lesson: `vault deposit complete · strategy executed`,
                   t: nowT(),
@@ -915,7 +933,7 @@ const App = () => {
               },
             };
           });
-          addLog({ event: "AgentCompleted", agent: dId, meta: data.simulated ? "[simulated]" : `tx ${shortAddr(data.txHash)}` });
+          addLog({ event: "AgentCompleted", agent: dId, meta: data.txHash ? `tx ${shortAddr(data.txHash)}` : "completed · no tx hash" });
           const ag = strategy?.agents?.find((a) => a.id === dId);
           if (ag && data.txHash) saveTransaction({
             txHash: data.txHash, vaultName: ag.vault.name, vaultAddress: ag.vault.addr,
@@ -962,11 +980,25 @@ const App = () => {
       });
   };
 
+  // Chain balances can lag 1-2 blocks after a deposit. Retry until at least one
+  // vault reports a non-zero balance, then trust the on-chain numbers.
+  async function reconcileWithRetry(address, maxAttempts = 3, delayMs = 3000) {
+    for (let i = 0; i < maxAttempts; i++) {
+      let result = null;
+      try { result = await reconcilePositionsFromChain(address); } catch { result = null; }
+      if (result && Object.values(result).some((p) => BigInt(p.balance || '0') > 0n)) {
+        return result;
+      }
+      if (i < maxAttempts - 1) await new Promise((r) => setTimeout(r, delayMs));
+    }
+    return null;
+  }
+
   /* ----- DONE (step 06) ----- */
   const handleExecDone = async () => {
     setStage("done");
     // Allocation-based FALLBACK only — used when the chain read is unavailable (no RPC)
-    // or a vault reads 0 (simulated relay / deposit not yet mined). Stored in raw token
+    // or a vault reads 0 (deposit tx not yet mined). Stored in raw token
     // units (allocation USDC * 1e6); the display layer divides by 1e6.
     const seedPositions = {};
     (strategy?.agents || []).forEach((a) => {
@@ -984,17 +1016,16 @@ const App = () => {
     });
     // SOURCE OF TRUTH: actual on-chain balanceOf -> convertToAssets (raw units).
     // If chain is available, use authoritative balances (can move up or down).
-    // If chain unavailable (simulated relay / not yet mined), ADD seed into existing
+    // If chain unavailable (RPC down / tx not yet mined), ADD seed into existing
     // positions — these are confirmed new deposits, so we sum, not take max.
-    let chain = null;
-    try { chain = await reconcilePositionsFromChain(realAddress); } catch { /* keep seed */ }
+    const chain = await reconcileWithRetry(realAddress);
     if (chain) {
       const finalPositions = mergePositions(seedPositions, chain);
       if (Object.keys(finalPositions).length > 0) {
         setAgentData((d) => ({ ...d, positions: applyChainPositions(d.positions, finalPositions), lastUpdated: Date.now() }));
       }
     } else if (Object.keys(seedPositions).length > 0) {
-      // Simulated path: sum new allocations into existing positions
+      // Chain unavailable: sum new allocations into existing positions
       setAgentData((d) => {
         const positions = { ...(d.positions || {}) };
         for (const [addr, pos] of Object.entries(seedPositions)) {
@@ -1102,17 +1133,26 @@ const App = () => {
     }
     if (id === "done") {
       setStage("done"); setConnectPhase("upgraded"); setPermActive(true);
-      const map = {};
-      ensured.agents.forEach((a) => {
-        map[a.id] = {
-          status: "confirmed", activeStep: null,
-          steps: { swap: "confirmed", approve: "confirmed", deposit: "confirmed" },
-          hashes: { swap: fakeHash(), approve: fakeHash(), deposit: fakeHash() },
-          memory: [{ status: "confirmed", title: "agent completed", meta: "all steps confirmed", t: nowT(), lesson: "vault deposit complete" }],
-          metrics: { totalRuns: 1, successRate: 100, startedAt: Date.now(), completedAt: Date.now() },
-        };
+      // Preserve real execution state. Navigating back to "done" must NOT fabricate
+      // tx hashes — only fill a confirmed shell (no hashes) for agents the user
+      // genuinely reached but whose live exec map was lost (e.g. after reload).
+      setExecMap((prev) => {
+        const map = { ...(prev || {}) };
+        ensured.agents.forEach((a) => {
+          const cur = map[a.id];
+          const alreadyReal = cur && cur.hashes && cur.hashes.deposit;
+          if (alreadyReal) return; // keep real, event-sourced state untouched
+          map[a.id] = {
+            status: "confirmed", activeStep: null,
+            steps: { swap: "skipped", approve: "confirmed", deposit: "confirmed" },
+            hashes: cur?.hashes || {}, // no fabricated hash — empty if no real tx
+            gasMethod: cur?.gasMethod || null,
+            memory: cur?.memory?.length ? cur.memory : [{ status: "confirmed", title: "agent completed", meta: "position confirmed on-chain", t: nowT(), lesson: "vault deposit complete" }],
+            metrics: cur?.metrics || { totalRuns: 1, successRate: 100, startedAt: Date.now(), completedAt: Date.now() },
+          };
+        });
+        return map;
       });
-      setExecMap(map);
     }
   };
 
