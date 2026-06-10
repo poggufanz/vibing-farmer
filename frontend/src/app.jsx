@@ -63,6 +63,7 @@ import { relayHarvest, relayWithdraw, getRelayerAddress } from './relay.js';
 import { setupBgAgentsWithSessionKey } from './wallet.js';
 import { resolveCouncilConflict, councilSpecialistVerdict } from './venice.js';
 import { councilReview, buildCouncilInput } from './strategy/councilReview.js';
+import { councilOutcome } from './strategy/outcome.js';
 
 /* ---------- Background agent settings (localStorage: yv_agent_settings) ---------- */
 const AGENT_SETTINGS_DEFAULTS = { autoHarvest: false, harvestMinUsdc: 1.0, apyDropPct: 20, rebalanceThresholdPct: 1.5, emergencyFull: false, emergencyPct: 50, riskMonitoring: true, positionInterval: 5, apyInterval: 10, riskInterval: 15, rewardInterval: 5 };
@@ -1083,6 +1084,14 @@ const App = () => {
   /* ----- DONE (step 06) ----- */
   const handleExecDone = async () => {
     setStage("done");
+    // ACE loop: credit/debit the rules the council cited at review time, based on
+    // how the deposit actually went. Closes review → deposit → reflect end-to-end.
+    const { citedRules, verdict } = councilCitedRef.current;
+    if (verdict === 'keep' && citedRules.length) {
+      const outcome = councilOutcome(execMap, strategy?.agents || []);
+      reflect({ verdict, citedRules, outcome }, { increment: playbookIncrement });
+      addLog({ event: 'OrchestratorPlanned', meta: `Council reflect · ${outcome} · ${citedRules.join(', ')}` });
+    }
     // Allocation-based FALLBACK only — used when the chain read is unavailable (no RPC)
     // or a vault reads 0 (deposit tx not yet mined). Stored in raw token
     // units (allocation USDC * 1e6); the display layer divides by 1e6.
