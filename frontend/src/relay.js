@@ -1,7 +1,6 @@
 import { ethers } from 'ethers'
 import { ONE_SHOT_RELAYER_URL, AGENT_VAULT_DEPOSITOR_ADDRESS, SEPOLIA_CHAIN_ID } from './config.js'
 import { grantAgentPermissionOnChain, executeAgentDepositOnChain } from './wallet.js'
-import { redeemCall, hasSession } from './strategy/session.js'
 
 /**
  * Encode calldata for executeAgentDeposit.
@@ -170,19 +169,18 @@ export async function submitRelay({ to, calldata, permissionContext }) {
 export async function relayGrantPermission({ agentId, vault, maxAmount, expiresAt, permissionContext }) {
   const calldata = await encodeGrantAgentPermission(agentId, vault, maxAmount, expiresAt)
 
-  // 1) Session redemption — zero popup, redeemed from the user's smart account.
-  if (hasSession()) {
-    try {
-      const txHash = await redeemCall({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: calldata })
-      return { txHash, status: 'redeemed' }
-    } catch (e) {
-      console.warn('[relay] grant redeem failed, falling back:', e?.message)
-    }
-  }
+  // ERC-7710 session redemption is impossible for this call: MetaMask Flask only
+  // issues token-transfer permission types (we grant `erc20-token-periodic`), and
+  // its ERC20PeriodTransferEnforcer caveat rejects any execution that is not
+  // USDC.transfer() on the token itself — a call into AgentVaultDepositor always
+  // reverts at the DelegationManager. The 7715 grant stays as the user-facing
+  // permission boundary; on-chain scope is enforced by the contract's own storage
+  // (ADR in docs/spikes/architecture-erc7715-scoped-permissions-spike.md).
+  // Zero-popup path = EIP-5792 grant batch + contract session key (see orchestrator).
 
-  // 2) Keyless 1Shot relay (mainnet only) — unchanged.
+  // 1) Keyless 1Shot relay (mainnet only).
   if (!ONESHOT_SUPPORTED_CHAINS.has(String(SEPOLIA_CHAIN_ID))) {
-    // 3) On-chain user-signed (one popup) — last resort.
+    // 2) On-chain user-signed (one popup) — last resort.
     const txHash = await grantAgentPermissionOnChain(agentId, vault, maxAmount, expiresAt)
     return { txHash, status: 'onchain' }
   }
@@ -202,17 +200,12 @@ export async function relayGrantPermission({ agentId, vault, maxAmount, expiresA
 export async function relayDeposit({ agentId, user, vault, amount, permissionContext }) {
   const calldata = await encodeExecuteAgentDeposit(agentId, user, vault, amount)
 
-  // 1) Session redemption — zero popup, redeemed from the user's smart account.
-  if (hasSession()) {
-    try {
-      const txHash = await redeemCall({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: calldata })
-      return { txHash, status: 'redeemed' }
-    } catch (e) {
-      console.warn('[relay] deposit redeem failed, falling back:', e?.message)
-    }
-  }
+  // No 7710 redemption here — see relayGrantPermission for why it always reverts.
+  // Zero-popup deposits go through the managed relay: the server wallet was
+  // authorized as a contract session key in the grant batch, so _isAuthorized
+  // passes when it calls executeAgentDeposit.
 
-  // 2) Base Sepolia: managed proxy (real, gas-abstracted), then on-chain.
+  // 1) Base Sepolia: managed proxy (real, gas-abstracted), then on-chain.
   if (!ONESHOT_SUPPORTED_CHAINS.has(String(SEPOLIA_CHAIN_ID))) {
     const managed = await relayDepositManaged({ agentId, user, vault, amount })
     if (managed) return managed
@@ -220,8 +213,21 @@ export async function relayDeposit({ agentId, user, vault, amount, permissionCon
     return { txHash, status: 'onchain' }
   }
 
-  // 3) Keyless 1Shot relay (mainnet only).
+  // 2) Keyless 1Shot relay (mainnet only).
   return submitRelay({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, calldata, permissionContext })
+}
+
+/** Build a {to,data} authorizeSessionKey call for EIP-5792 batching.
+ *  Authorizes the 1Shot server wallet as a contract session key so the managed
+ *  relay can execute zero-popup deposits/harvests on the user's behalf. */
+export async function buildAuthorizeSessionKeyCall({ sessionKey, expiresAt }) {
+  const iface = new ethers.Interface([
+    'function authorizeSessionKey(address sessionKey, uint256 expiresAt)'
+  ])
+  return {
+    to: AGENT_VAULT_DEPOSITOR_ADDRESS,
+    data: iface.encodeFunctionData('authorizeSessionKey', [sessionKey, BigInt(expiresAt)]),
+  }
 }
 
 /** True when the current chain can't use the 1Shot relayer (→ broadcast on-chain instead). */

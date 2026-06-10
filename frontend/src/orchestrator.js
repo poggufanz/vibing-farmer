@@ -2,8 +2,7 @@ import { WorkerAgent, makeAgentId } from './worker.js'
 import { generateAgentSkills } from './venice.js'
 import { saveSkill } from './skills.js'
 import { batchCalls } from './wallet.js'
-import { isUnsupportedByOneShot, useManagedRelay, buildGrantCall, buildDepositCall } from './relay.js'
-import { hasSession } from './strategy/session.js'
+import { isUnsupportedByOneShot, useManagedRelay, buildGrantCall, buildDepositCall, buildAuthorizeSessionKeyCall, getRelayerAddress } from './relay.js'
 
 /**
  * Orchestrator Agent — receives Venice plan, dispatches Worker Agents in parallel.
@@ -70,9 +69,7 @@ export class OrchestratorAgent {
     //   No managed relay: batch GRANTS + DEPOSITS together (1 popup, user pays gas)
     let batchedHash = null   // set → workers skip both grant AND deposit (legacy full-batch)
     let grantsBatched = false // set → workers skip grant only, still relay deposit via 1Shot
-    // When an ERC-7710 session is active, every grant + deposit is redeemed
-    // per-worker with zero popup — so skip the EIP-5792 pre-batch entirely.
-    if (isUnsupportedByOneShot() && !hasSession()) {
+    if (isUnsupportedByOneShot()) {
       const expiresAt = Math.floor(Date.now() / 1000) + 3600
       const grantCalls = []
       const depositCalls = []
@@ -82,6 +79,13 @@ export class OrchestratorAgent {
       }
       if (useManagedRelay()) {
         // Batch grants only — 1 popup for all permissions, relay handles deposits.
+        // Also authorize the 1Shot server wallet as a contract session key in the
+        // SAME batch, so executeAgentDeposit from the managed relay passes
+        // _isAuthorized (zero further popups). Skipped if proxy unconfigured.
+        const relayer = await getRelayerAddress()
+        if (relayer) {
+          grantCalls.push(await buildAuthorizeSessionKeyCall({ sessionKey: relayer, expiresAt: Math.floor(Date.now() / 1000) + 86400 }))
+        }
         // Only mark batched if EIP-5792 actually ran (null = wallet lacks it →
         // workers fall back to per-agent grant so permission is never silently skipped).
         const h = await batchCalls(grantCalls)

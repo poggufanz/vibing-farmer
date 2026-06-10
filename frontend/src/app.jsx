@@ -214,6 +214,7 @@ const App = () => {
   // Tracks which user addresses have had session key setup done (survives re-renders).
   const sessionKeySetupRef = useR(new Set());
   const [loopTick, setLoopTick] = useS(0);
+  const [loopPhase, setLoopPhase] = useS(null); // live pipeline phase from monitorLoop onPhase
   const [permContext, setPermContext] = useS(null);
   const [veniceAuth, setVeniceAuth] = useS(null);
   const [mmVersion, setMmVersion] = useS(null); // MetaMask flavor/version — Flask detection (once on mount)
@@ -491,11 +492,12 @@ const App = () => {
       reflect: (cycle) => reflect(cycle, { increment: playbookIncrement }),
       journal: { saveCycle: (row) => { saveCycle(row); setLoopTick((t) => t + 1); } },
       heartbeatMs: (agentSettings.apyInterval || 10) * 60 * 1000,
+      onPhase: (p) => setLoopPhase(p === 'sleep' ? null : p),
     });
     loopRef.current = loop;
     loop.start();
 
-    return () => { unsub(); stopBackgroundAgent(); loop.stop(); loopRef.current = null; };
+    return () => { unsub(); stopBackgroundAgent(); loop.stop(); loopRef.current = null; setLoopPhase(null); };
   }, [stage, agentEnabled, realAddress, strategy]);
 
   const dismissAlert = (id) => setAgentData((d) => ({ ...d, alerts: d.alerts.filter((a) => a.id !== id) }));
@@ -1155,12 +1157,16 @@ const App = () => {
           <>
             <SuccessCard strategy={strategy} onAgain={handleAgain} address={realAddress} />
             {agentEnabled && (
+              // loopTick re-renders the parent on each journal write; no key remount
+              // so the panel's internal 1s countdown clock and CSS animations persist.
               <LoopStatusPanel
-                key={loopTick}
                 running={loopRef.current?.isRunning() || false}
                 cycle={loopRef.current?.getCycle() || 0}
                 summary={getJournalSummary()}
                 rows={getCycles().slice(0, 8)}
+                phase={loopPhase}
+                nextTickAt={loopRef.current?.getNextTickAt() || null}
+                heartbeatMs={loopRef.current?.getHeartbeatMs() || (agentSettings.apyInterval || 10) * 60 * 1000}
               />
             )}
           </>
