@@ -2437,6 +2437,7 @@ input, select, textarea {
 .agent-step-pip.running { color: var(--warn); border-color: var(--warn); background: color-mix(in oklch, var(--warn) 12%, transparent); }
 .agent-step-pip.confirmed { color: var(--ok); border-color: var(--ok); background: color-mix(in oklch, var(--ok) 12%, transparent); }
 .agent-step-pip.failed { color: var(--danger); border-color: var(--danger); }
+.agent-step-pip.skipped { opacity: 0.45; }
 
 .agent-tile-progress {
   margin-left: auto;

@@ -27,7 +27,7 @@ export function buildSkill(agentId, vault, amountUSDC) {
     agentId,
     vaultAddress: vault,
     skills: {
-      swap: { maxSlippage: 0.5, dexPreference: 'mock', maxRetries: 2, timeoutSeconds: 30 },
+      swap: { required: false, maxSlippage: 0.5, dexPreference: 'mock', maxRetries: 2, timeoutSeconds: 30 },
       deposit: { maxAmount: maxAmountUnits, vaultAddress: vault, expiresAt }
     },
     generatedBy: 'venice-ai',

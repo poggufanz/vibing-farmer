@@ -53,17 +53,25 @@ export class WorkerAgent {
         this.emit('step', { agentId: this.agentId, step: 'grant-permission', status: 'done', txHash: grantResult.txHash })
       }
 
-      // Step 2: Swap (mocked — emit event only)
+      // Step 2: Swap — for our USDC→USDC MockVault there is no token conversion.
+      // Honest: mark skipped. (On-chain, executeAgentDeposit still emits a 1:1
+      // SwapExecuted event atomically with the deposit; no separate swap tx exists.)
+      const swapNeeded = false // tokenIn === tokenOut for MockVault
       this.emit('step', { agentId: this.agentId, step: 'swap', status: 'pending' })
-      await sleep(300) // simulate swap latency
-      this.memoryEntries.push(createEntry('swap', 'success', { amountIn: this.amount.toString(), amountOut: this.amount.toString() }))
-      this.emit('step', { agentId: this.agentId, step: 'swap', status: 'done' })
+      if (swapNeeded) {
+        // Reserved for real tokenIn !== tokenOut routing (Uniswap V3) — not used by MockVault.
+        this.memoryEntries.push(createEntry('swap', 'success', { amountIn: this.amount.toString(), amountOut: this.amount.toString() }))
+        this.emit('step', { agentId: this.agentId, step: 'swap', status: 'done' })
+      } else {
+        this.memoryEntries.push(createEntry('swap', 'skipped', { reason: 'USDC→USDC: no swap required' }))
+        this.emit('step', { agentId: this.agentId, step: 'swap', status: 'skipped', reason: 'USDC→USDC: no swap required' })
+      }
 
-      // Step 3: Approve (mocked for MockVault — no real ERC20 approve)
+      // Step 3: Approve — no real ERC20 approve exists (MockVault is pure-accounting;
+      // executeAgentDeposit never calls transferFrom). The ApproveExecuted event is
+      // emitted on-chain ATOMICALLY inside the deposit tx, so we resolve this step
+      // from the real deposit tx hash AFTER the deposit returns (below).
       this.emit('step', { agentId: this.agentId, step: 'approve', status: 'pending' })
-      await sleep(200)
-      this.memoryEntries.push(createEntry('approve', 'success', {}))
-      this.emit('step', { agentId: this.agentId, step: 'approve', status: 'done' })
 
       // Step 4: Deposit — batched (already on-chain) or via relay
       this.emit('step', { agentId: this.agentId, step: 'deposit', status: 'pending' })
@@ -76,9 +84,21 @@ export class WorkerAgent {
             amount: this.amount,
             permissionContext: this.permissionContext
           })
+      const gasMethod =
+        depositResult.status === 'onchain' ? 'user-signed'
+        : depositResult.status === 'simulated' ? 'simulated'
+        : 'relayer'
+
+      // Resolve approve from the real deposit tx (ApproveExecuted emitted in the same tx).
+      this.memoryEntries.push(createEntry('approve', 'success', { txHash: depositResult.txHash, note: 'emitted on-chain in deposit tx' }))
+      this.emit('step', { agentId: this.agentId, step: 'approve', status: 'done', txHash: depositResult.txHash })
+
       const lesson = buildLesson(this.vault, { shares: this.amount.toString() })
-      this.memoryEntries.push(createEntry('deposit', 'success', { txHash: depositResult.txHash }, lesson))
-      this.emit('step', { agentId: this.agentId, step: 'deposit', status: 'done', txHash: depositResult.txHash })
+      this.memoryEntries.push(createEntry('deposit', 'success', { txHash: depositResult.txHash, gasMethod }, lesson))
+      this.emit('step', {
+        agentId: this.agentId, step: 'deposit', status: 'done',
+        txHash: depositResult.txHash, gasMethod, relayer: depositResult.relayer || null
+      })
 
       // Write memory
       writeMemory(this.agentId, this.sessionId, this.vault, this.memoryEntries)
@@ -86,7 +106,8 @@ export class WorkerAgent {
         agentId: this.agentId,
         vault: this.vault,
         txHash: depositResult.txHash,
-        simulated: depositResult.status === 'simulated'
+        gasMethod,
+        relayer: depositResult.relayer || null
       })
 
       return { success: true, txHash: depositResult.txHash }
@@ -103,10 +124,6 @@ export class WorkerAgent {
   emit(eventName, data) {
     this.onEvent(eventName, { ...data, agentId: this.agentId })
   }
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 /**

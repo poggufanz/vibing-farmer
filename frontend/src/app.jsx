@@ -8,7 +8,7 @@ import { isDevMode } from './devFlag.js';
 import { Icon, Sidebar, TopBar, StepRail, STEPS } from './components.jsx';
 import {
   InputScreen, ThinkingCard, ConnectCard,
-  PermissionCard, SuccessCard, shortAddr, fakeHash,
+  PermissionCard, SuccessCard, shortAddr,
 } from './screens.jsx';
 import { SkillReviewCard } from './skills.jsx';
 import {
@@ -868,7 +868,9 @@ const App = () => {
         if (evName === "step") {
           const stepName = WORKER_STEP_MAP[data.step];
           if (!stepName) return; // skip 'grant-permission' internal step
-          const stepStatus = data.status === "done" ? "confirmed" : "running";
+          const stepStatus = data.status === "done" ? "confirmed"
+            : data.status === "skipped" ? "skipped"
+            : "running";
           setExecMap((prev) => {
             const cur = prev[dId] || prev[agentId] || {};
             return {
@@ -876,21 +878,37 @@ const App = () => {
               [dId]: {
                 ...cur,
                 activeStep: stepName,
+                gasMethod: data.gasMethod || cur.gasMethod || null,
                 steps: { ...(cur.steps || {}), [stepName]: stepStatus },
                 hashes: data.txHash ? { ...(cur.hashes || {}), [stepName]: data.txHash } : (cur.hashes || {}),
                 memory: [...(cur.memory || []), {
                   status: stepStatus,
                   title: `${stepName} ${data.status === "done" ? "confirmed" : "executing"}`,
-                  meta: data.txHash ? `tx ${shortAddr(data.txHash)}` : "via 1Shot relayer",
+                  meta: data.txHash
+                    ? `tx ${shortAddr(data.txHash)}${data.gasMethod === "user-signed" ? " · ⚠ user-signed" : ""}`
+                    : "via 1Shot relayer",
                   hash: data.txHash || null,
                   t: nowT(),
                 }],
               },
             };
           });
+          if (data.status === "skipped" && stepName === "swap") {
+            addLog({ event: "SwapExecuted", agent: dId, meta: data.reason || "skipped · no swap required" });
+          }
           if (data.status === "done") {
             const evMap = { swap: "SwapExecuted", approve: "ApproveExecuted", deposit: "DepositExecuted" };
-            if (evMap[stepName]) addLog({ event: evMap[stepName], agent: dId, meta: data.txHash ? `tx ${shortAddr(data.txHash)}` : "[simulated]" });
+            if (stepName === "deposit") {
+              const gasLabel = data.gasMethod === "relayer" ? "gas paid by relayer"
+                : data.gasMethod === "user-signed" ? "⚠ gas paid by user · relay not configured"
+                : "";
+              addLog({
+                event: "DepositExecuted", agent: dId,
+                meta: `${data.txHash ? `tx ${shortAddr(data.txHash)}` : "no tx hash"}${gasLabel ? " · " + gasLabel : ""}`,
+              });
+            } else if (evMap[stepName]) {
+              addLog({ event: evMap[stepName], agent: dId, meta: data.txHash ? `tx ${shortAddr(data.txHash)}` : "no tx hash" });
+            }
           }
         }
 
@@ -906,7 +924,7 @@ const App = () => {
                 memory: [...(cur.memory || []), {
                   status: "confirmed",
                   title: "agent completed",
-                  meta: data.simulated ? "deposit confirmed [simulated relay]" : `tx ${shortAddr(data.txHash)}`,
+                  meta: `tx ${shortAddr(data.txHash)}`,
                   hash: data.txHash,
                   lesson: `vault deposit complete · strategy executed`,
                   t: nowT(),
@@ -915,7 +933,7 @@ const App = () => {
               },
             };
           });
-          addLog({ event: "AgentCompleted", agent: dId, meta: data.simulated ? "[simulated]" : `tx ${shortAddr(data.txHash)}` });
+          addLog({ event: "AgentCompleted", agent: dId, meta: data.txHash ? `tx ${shortAddr(data.txHash)}` : "completed · no tx hash" });
           const ag = strategy?.agents?.find((a) => a.id === dId);
           if (ag && data.txHash) saveTransaction({
             txHash: data.txHash, vaultName: ag.vault.name, vaultAddress: ag.vault.addr,
@@ -1102,17 +1120,26 @@ const App = () => {
     }
     if (id === "done") {
       setStage("done"); setConnectPhase("upgraded"); setPermActive(true);
-      const map = {};
-      ensured.agents.forEach((a) => {
-        map[a.id] = {
-          status: "confirmed", activeStep: null,
-          steps: { swap: "confirmed", approve: "confirmed", deposit: "confirmed" },
-          hashes: { swap: fakeHash(), approve: fakeHash(), deposit: fakeHash() },
-          memory: [{ status: "confirmed", title: "agent completed", meta: "all steps confirmed", t: nowT(), lesson: "vault deposit complete" }],
-          metrics: { totalRuns: 1, successRate: 100, startedAt: Date.now(), completedAt: Date.now() },
-        };
+      // Preserve real execution state. Navigating back to "done" must NOT fabricate
+      // tx hashes — only fill a confirmed shell (no hashes) for agents the user
+      // genuinely reached but whose live exec map was lost (e.g. after reload).
+      setExecMap((prev) => {
+        const map = { ...(prev || {}) };
+        ensured.agents.forEach((a) => {
+          const cur = map[a.id];
+          const alreadyReal = cur && cur.hashes && cur.hashes.deposit;
+          if (alreadyReal) return; // keep real, event-sourced state untouched
+          map[a.id] = {
+            status: "confirmed", activeStep: null,
+            steps: { swap: "skipped", approve: "confirmed", deposit: "confirmed" },
+            hashes: cur?.hashes || {}, // never fakeHash() — empty if no real tx
+            gasMethod: cur?.gasMethod || null,
+            memory: cur?.memory?.length ? cur.memory : [{ status: "confirmed", title: "agent completed", meta: "position confirmed on-chain", t: nowT(), lesson: "vault deposit complete" }],
+            metrics: cur?.metrics || { totalRuns: 1, successRate: 100, startedAt: Date.now(), completedAt: Date.now() },
+          };
+        });
+        return map;
       });
-      setExecMap(map);
     }
   };
 

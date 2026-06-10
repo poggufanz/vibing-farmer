@@ -66,6 +66,7 @@ const buildStrategy = (amount, risk) => {
 /* ---------- Agent execution state model ---------- */
 const STEP_IDS = ["swap", "approve", "deposit"];
 const STEP_LABELS = { swap: "Swap", approve: "Approve", deposit: "Deposit" };
+const STEP_NOTE = { swap: "skipped · USDC→USDC needs no swap" };
 
 const makeInitialExecState = (agents) => {
   const map = {};
@@ -89,12 +90,14 @@ const GRAPH_COLOR = {
   idle:      "#3a3b33",
   running:   "#f0b54a",
   confirmed: "#6fe39a",
+  skipped:   "#6b7280",
   failed:    "#ff7479",
 };
 const GRAPH_COLOR_LIGHT = {
   idle:      "#b8b5aa",
   running:   "#b07a1a",
   confirmed: "#2d7a4a",
+  skipped:   "#6b7280",
   failed:    "#a83a3a",
 };
 const GROUP_BASE = { orchestrator: "#cfff3d", vault: "#6366f1" };
@@ -269,7 +272,7 @@ const AgentTiles = ({ strategy, execMap, onOpenMemory }) => {
             </div>
             <div className="agent-tile-steps">
               {STEP_IDS.map((sid) => (
-                <span key={sid} className={`agent-step-pip ${ex.steps?.[sid] || "idle"}`} title={STEP_LABELS[sid]}>
+                <span key={sid} className={`agent-step-pip ${ex.steps?.[sid] || "idle"}`} title={ex.steps?.[sid] === "skipped" ? (STEP_NOTE[sid] || STEP_LABELS[sid]) : STEP_LABELS[sid]}>
                   {STEP_LABELS[sid].slice(0, 1).toLowerCase()}
                 </span>
               ))}

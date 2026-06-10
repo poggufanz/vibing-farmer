@@ -217,7 +217,7 @@ export async function generateAgentSkills({ agentId, vault, amount, veniceAuth, 
     agentId,
     vaultAddress: vault,
     skills: {
-      swap: { maxSlippage: 0.5, dexPreference: 'mock', maxRetries: 2, timeoutSeconds: 30 },
+      swap: { required: false, maxSlippage: 0.5, dexPreference: 'mock', maxRetries: 2, timeoutSeconds: 30 },
       deposit: { maxAmount: String(Math.floor(amount * 1e6)), vaultAddress: vault, expiresAt }
     },
     generatedBy: 'fallback',
@@ -246,7 +246,7 @@ Respond with JSON schema:
   "agentId": "${agentId}",
   "vaultAddress": "${vault}",
   "skills": {
-    "swap": { "maxSlippage": 0.5, "dexPreference": "uniswap-v3", "maxRetries": 2, "timeoutSeconds": 30 },
+    "swap": { "required": false, "maxSlippage": 0.5, "dexPreference": "uniswap-v3", "maxRetries": 2, "timeoutSeconds": 30 },
     "deposit": { "maxAmount": "${Math.floor(amount * 1e6)}", "vaultAddress": "${vault}", "expiresAt": ${expiresAt} }
   },
   "generatedBy": "${provider.name}",
