@@ -1,6 +1,14 @@
 import { relayGrantPermission, relayDeposit } from './relay.js'
 import { writeMemory, createEntry, buildLesson } from './memory.js'
 import { loadSkill } from './skills.js'
+import { generateWorkerKey, newSalt, deriveSecret, sealKey, openKey, zeroize } from './strategy/keyVault.js'
+import { createKeyStore } from './strategy/keyStore.js'
+import { createGasSnapshotProvider } from './strategy/gasFeeProvider.js'
+import { createSubmitGate } from './strategy/submitGate.js'
+import { getReadProvider } from './readProvider.js'
+
+// Rough upper bound for executeAgentDeposit gas cost; refined once Phase 5 wires real estimateGas.
+const EST_DEPOSIT_GAS = 150_000n
 
 /**
  * Worker Agent — executes full Swap→Approve→Deposit for one vault.
@@ -16,8 +24,17 @@ export class WorkerAgent {
    * @param {string} config.permissionContext - from ERC-7715
    * @param {string} config.sessionId
    * @param {function} config.onEvent - (eventName, data) => void
+   * @param {string} [config.sessionPassphrase] - session passphrase for the per-worker key vault.
+   *   When omitted, key-setup and signing-site steps are honestly marked 'skipped'.
+   * @param {bigint} [config.expectedBenefitWei] - per-step yield estimate for the economic gate.
+   * @param {object} [config.keyStore] - injectable keyStore (defaults to createKeyStore())
+   * @param {object} [config.submitGate] - injectable submitGate (defaults to createSubmitGate())
+   * @param {object} [config.gasSnapshot] - injectable gas snapshot provider
    */
-  constructor({ agentId, user, vault, amount, permissionContext, sessionId, onEvent, batchedHash, grantsBatched }) {
+  constructor({
+    agentId, user, vault, amount, permissionContext, sessionId, onEvent, batchedHash, grantsBatched,
+    sessionPassphrase, expectedBenefitWei, keyStore, submitGate, gasSnapshot,
+  }) {
     this.agentId = agentId
     this.user = user
     this.vault = vault
@@ -28,15 +45,26 @@ export class WorkerAgent {
     this.batchedHash = batchedHash || null   // full batch: skip grant + deposit
     this.grantsBatched = grantsBatched || false // hybrid: skip grant only, relay deposit
     this.memoryEntries = []
+
+    // Ops-security wiring (Phase 2): per-worker ephemeral key + pre-submit circuit breaker.
+    this.sessionPassphrase = sessionPassphrase || null
+    this.expectedBenefitWei = expectedBenefitWei ?? null
+    this.keyStore = keyStore || createKeyStore()
+    this.submitGate = submitGate || createSubmitGate()
+    this.gasSnapshot = gasSnapshot || createGasSnapshotProvider({ provider: getReadProvider() })
+    this.keyAddress = null
   }
 
   /**
    * Execute full agent flow.
-   * @returns {Promise<{success: boolean, txHash?: string, error?: string, shares?: bigint}>}
+   * @returns {Promise<{success: boolean, txHash?: string, error?: string, shares?: bigint, status?: string, step?: string, reason?: string}>}
    */
   async execute() {
     try {
       this.emit('started', { agentId: this.agentId, vault: this.vault })
+
+      // Step 0: per-worker ephemeral key — generated + sealed at plan time (keyVault + keyStore).
+      await this.setupKey()
 
       // Step 1: Grant on-chain permission (skipped when already batched by the orchestrator)
       if (!this.batchedHash && !this.grantsBatched) {
@@ -72,6 +100,24 @@ export class WorkerAgent {
       // emitted on-chain ATOMICALLY inside the deposit tx, so we resolve this step
       // from the real deposit tx hash AFTER the deposit returns (below).
       this.emit('step', { agentId: this.agentId, step: 'approve', status: 'pending' })
+
+      // Step 3.5: Pre-submit circuit breaker — gas freshness + economic + rate-anomaly gate.
+      // Soft check; the hard stop is AgentVaultDepositor.pause() on-chain.
+      const gateResult = await this.checkSubmitGate()
+      if (!gateResult.ok) {
+        this.memoryEntries.push(createEntry('deposit', 'skipped', { reason: gateResult.reason }))
+        this.emit('step', { agentId: this.agentId, step: 'deposit', status: 'skipped', reason: gateResult.reason })
+        writeMemory(this.agentId, this.sessionId, this.vault, this.memoryEntries)
+        this.emit('failed', {
+          agentId: this.agentId, vault: this.vault,
+          error: `submit-gate blocked deposit: ${gateResult.reason} (safe to retry)`,
+          skipped: true, reason: gateResult.reason,
+        })
+        return { success: false, status: 'skipped', step: 'deposit', reason: gateResult.reason }
+      }
+
+      // Step 3.6: Open the ephemeral key at the EIP-712 sign site — and only here.
+      await this.signAtSubmitSite()
 
       // Step 4: Deposit — batched (already on-chain) or via relay
       this.emit('step', { agentId: this.agentId, step: 'deposit', status: 'pending' })
@@ -116,6 +162,72 @@ export class WorkerAgent {
       this.emit('failed', { agentId: this.agentId, vault: this.vault, error: err.message })
       return { success: false, error: err.message }
     }
+  }
+
+  /**
+   * Generate + seal a fresh ephemeral worker key (keyVault) and persist the
+   * sealed blob (keyStore). One key per worker, never a master key.
+   * Without a session passphrase there is nothing to derive the at-rest
+   * secret from, so this is honestly marked 'skipped' rather than faked.
+   */
+  async setupKey() {
+    this.emit('step', { agentId: this.agentId, step: 'key-setup', status: 'pending' })
+
+    if (!this.sessionPassphrase) {
+      this.memoryEntries.push(createEntry('key-setup', 'skipped', { reason: 'no session passphrase configured' }))
+      this.emit('step', { agentId: this.agentId, step: 'key-setup', status: 'skipped', reason: 'no session passphrase configured' })
+      return
+    }
+
+    const { privateKey, address } = await generateWorkerKey()
+    const salt = await newSalt()
+    const secret = await deriveSecret(this.sessionPassphrase, salt)
+    const sealed = await sealKey(privateKey, secret)
+    await this.keyStore.put(address, { sealed, salt })
+    zeroize(secret)
+    // TODO(phase5): authorize `address` on-chain via AgentRegistry.authorizeSessionKey(...)
+    // so the relayer-broadcast EIP-712 deposit signed by this key is accepted.
+
+    this.keyAddress = address
+    this.memoryEntries.push(createEntry('key-setup', 'success', { address }))
+    this.emit('step', { agentId: this.agentId, step: 'key-setup', status: 'done', address })
+  }
+
+  /**
+   * Refresh the gas snapshot and run the pre-submit circuit breaker.
+   * @returns {Promise<{ok: boolean, reason: string}>}
+   */
+  async checkSubmitGate() {
+    this.emit('step', { agentId: this.agentId, step: 'submit-gate', status: 'pending' })
+    const snap = await this.gasSnapshot.refresh()
+    const result = this.submitGate.check({
+      owner: this.user,
+      gasSnapshotAt: snap?.at ?? null,
+      estGasCostWei: snap?.maxFeePerGas != null ? snap.maxFeePerGas * EST_DEPOSIT_GAS : null,
+      expectedBenefitWei: this.expectedBenefitWei,
+    })
+    this.emit('step', { agentId: this.agentId, step: 'submit-gate', status: result.ok ? 'done' : 'skipped', reason: result.reason })
+    return result
+  }
+
+  /**
+   * Open the sealed ephemeral key at the EIP-712 sign site — and only here.
+   * No-op if setupKey() was skipped (no session passphrase).
+   */
+  async signAtSubmitSite() {
+    if (!this.keyAddress) return
+
+    this.emit('step', { agentId: this.agentId, step: 'sign', status: 'pending' })
+    const { sealed, salt } = await this.keyStore.get(this.keyAddress)
+    const secret = await deriveSecret(this.sessionPassphrase, salt)
+    const pk = await openKey(sealed, secret)
+    // TODO(phase5): const sig = await signDeposit(pk, digest) — sign the AgentDeposit
+    // EIP-712 digest with `pk`, then pass `sig` into the relayer submission.
+    zeroize(secret)
+    void pk // immutable hex string — cannot be zeroized; drop reference immediately
+
+    this.memoryEntries.push(createEntry('sign', 'done', { note: 'TODO(phase5): signDeposit not yet wired' }))
+    this.emit('step', { agentId: this.agentId, step: 'sign', status: 'done', note: 'TODO(phase5): signDeposit' })
   }
 
   emit(eventName, data) {
