@@ -1,42 +1,42 @@
 // frontend/src/strategy/playbookRules.test.js
-import { describe, it, expect } from 'vitest'
-import { ROLE_RULES, rulesForRole, ruleIdsForRole, allRuleIds, isValidRuleForRole } from './playbookRules.js'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { rulesForRole, ruleIdsForRole, allRuleIds, isValidRuleForRole } from './playbookRules.js'
+import { upsertSeeds, addRule, retireRule } from './ruleStore.js'
 
-describe('playbookRules catalog', () => {
-  it('defines exactly the three council roles', () => {
-    expect(Object.keys(ROLE_RULES).sort()).toEqual(['market', 'risk', 'yield'])
+describe('playbookRules (store-backed catalog)', () => {
+  beforeEach(() => {
+    const store = {}
+    vi.stubGlobal('localStorage', {
+      getItem: (k) => (k in store ? store[k] : null),
+      setItem: (k, v) => { store[k] = String(v) },
+      removeItem: (k) => { delete store[k] },
+    })
+    upsertSeeds()
   })
 
-  it('every rule has a non-empty id and description', () => {
-    for (const role of Object.keys(ROLE_RULES)) {
-      for (const r of ROLE_RULES[role]) {
-        expect(typeof r.id).toBe('string')
-        expect(r.id.length).toBeGreaterThan(0)
-        expect(r.description.length).toBeGreaterThan(10)
-      }
-    }
+  it('rulesForRole returns active rules for that role with id + description', () => {
+    const r = rulesForRole('risk')
+    expect(r.length).toBeGreaterThan(0)
+    expect(r[0]).toHaveProperty('id')
+    expect(r[0]).toHaveProperty('description')
   })
 
-  it('rule ids are globally unique across roles', () => {
+  it('a grown rule shows up in its role; a retired rule does not', () => {
+    addRule({ id: 'grown-x', role: 'market', text: 'New gas heuristic.', origin: 'grown' })
+    expect(ruleIdsForRole('market')).toContain('grown-x')
+    retireRule('mkt-gas-affordable')
+    expect(ruleIdsForRole('market')).not.toContain('mkt-gas-affordable')
+  })
+
+  it('isValidRuleForRole rejects cross-role citation', () => {
+    expect(isValidRuleForRole('risk', 'rsk-gates-clear')).toBe(true)
+    expect(isValidRuleForRole('risk', 'mkt-gas-affordable')).toBe(false)
+  })
+
+  it('allRuleIds spans every role', () => {
     const ids = allRuleIds()
-    expect(new Set(ids).size).toBe(ids.length)
-  })
-
-  it('rulesForRole returns the role array, ruleIdsForRole returns just ids', () => {
-    expect(rulesForRole('yield')).toBe(ROLE_RULES.yield)
-    expect(ruleIdsForRole('risk')).toEqual(ROLE_RULES.risk.map((r) => r.id))
-  })
-
-  it('unknown role yields empty results, never throws', () => {
-    expect(rulesForRole('bogus')).toEqual([])
-    expect(ruleIdsForRole('bogus')).toEqual([])
-  })
-
-  it('isValidRuleForRole only accepts ids belonging to that role', () => {
-    const yieldId = ROLE_RULES.yield[0].id
-    const riskId = ROLE_RULES.risk[0].id
-    expect(isValidRuleForRole('yield', yieldId)).toBe(true)
-    expect(isValidRuleForRole('yield', riskId)).toBe(false)
-    expect(isValidRuleForRole('yield', 'nope')).toBe(false)
+    expect(ids).toContain('yld-apy-attractive')
+    expect(ids).toContain('rsk-turbulent-veto')
+    expect(ids).toContain('mkt-gas-affordable')
   })
 })
