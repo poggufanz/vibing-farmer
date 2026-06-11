@@ -59,6 +59,7 @@ import { councilVerdict } from './strategy/council.js';
 import { reflect } from './strategy/reflector.js';
 import { increment as playbookIncrement, weight as playbookWeight } from './strategy/playbook.js';
 import { saveCycle, getCycles, getJournalSummary } from './strategy/cycleJournal.js';
+import { recordDecision, getDecisions, getDecisionSummary } from './strategy/decisionLog.js';
 import { relayHarvest, relayWithdraw, getRelayerAddress } from './relay.js';
 import { setupBgAgentsWithSessionKey } from './wallet.js';
 import { resolveCouncilConflict, councilSpecialistVerdict } from './venice.js';
@@ -501,6 +502,7 @@ const App = () => {
       },
       reflect: (cycle) => reflect(cycle, { increment: playbookIncrement }),
       journal: { saveCycle: (row) => { saveCycle(row); setLoopTick((t) => t + 1); } },
+      recordDecision: (ctx) => { recordDecision(ctx); setLoopTick((t) => t + 1); },
       heartbeatMs: (agentSettings.apyInterval || 10) * 60 * 1000,
       onPhase: (p) => setLoopPhase(p === 'sleep' ? null : p),
     });
