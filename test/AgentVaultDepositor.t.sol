@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {AgentRegistry} from "../contracts/AgentRegistry.sol";
 import {AgentVaultDepositor} from "../contracts/AgentVaultDepositor.sol";
 import {MockVault} from "../contracts/MockVault.sol";
-import {MockERC20} from "./mocks/MockERC20.sol";
+import {MockERC20, FeeOnTransferERC20} from "./mocks/MockERC20.sol";
 
 contract AgentVaultDepositorTest is Test {
     AgentRegistry reg;
@@ -116,5 +116,32 @@ contract AgentVaultDepositorTest is Test {
     function test_workerBalanceAlwaysZero() public {
         dep.executeAgentDeposit(50e6, 50e6, _execId(0), _sign(workerPk, 50e6, 50e6, _execId(0)));
         assertEq(token.balanceOf(worker), 0);
+    }
+
+    // NOTE: ERC-4626 does not support fee-on-transfer assets end-to-end — the dep→vault
+    // leg also loses the fee, so the mock vault is slightly under-collateralized here.
+    // This test ONLY proves the depositor's balance-delta + minAmount guard; it is not a
+    // claim that FoT tokens are supported as vault assets.
+    function test_feeOnTransfer_minAmountProtectsUser() public {
+        FeeOnTransferERC20 fee = new FeeOnTransferERC20("Fee USDC", "fUSDC", 6);
+        MockVault feeVault = new MockVault("Vault fUSDC", address(fee), 500);
+        uint256 w2Pk = 0xCAFE;
+        address w2 = vm.addr(w2Pk);
+        fee.mint(owner, 1_000e6);
+        vm.prank(owner);
+        fee.approve(address(dep), type(uint256).max);
+        vm.prank(owner);
+        reg.authorizeSessionKey(w2, address(feeVault), address(fee), 100e6, 1 days, uint40(block.timestamp + 1 days));
+
+        // received = 50e6 - 1% = 49.5e6. minAmount 50e6 must revert.
+        bytes memory sig1 = _sign(w2Pk, 50e6, 50e6, keccak256("fee"));
+        vm.expectRevert(abi.encodeWithSelector(AgentVaultDepositor.InsufficientReceived.selector, 49.5e6, 50e6));
+        dep.executeAgentDeposit(50e6, 50e6, keccak256("fee"), sig1);
+
+        // with realistic minAmount it succeeds and credits the true delta
+        uint256 shares = dep.executeAgentDeposit(50e6, 49e6, keccak256("fee2"), _sign(w2Pk, 50e6, 49e6, keccak256("fee2")));
+        assertGt(shares, 0);
+        AgentRegistry.AgentScope memory s = reg.scopeOf(w2);
+        assertEq(s.spentInPeriod, 49.5e6);
     }
 }
