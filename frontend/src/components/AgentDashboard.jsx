@@ -170,7 +170,7 @@ function AlertCard({ alert, lang = 'en', onHarvest, onEmergencyWithdraw, onRevie
 export default function AgentDashboard({
   active, positions = {}, alerts = [], vaultMeta = {}, lastUpdated = null, userAddress, settings = {},
   withdrawEnabled = true, onHarvest, onEmergencyWithdraw, onReview, onDismiss, onWithdrawSuccess, onNewStrategy,
-  loopPanel = null, loopStatus = null,
+  loopPanel = null, loopStatus = null, decisionPanel = null,
 }) {
   const [now, setNow] = useState(Date.now())
   const [preview, setPreview] = useState(null)
@@ -418,6 +418,13 @@ export default function AgentDashboard({
         <div style={{ paddingTop: 20, borderTop: '1px solid var(--border)', marginTop: 20 }}>
           <div style={sectionLabel}>Monitor Loop</div>
           {loopPanel}
+        </div>
+      )}
+
+      {decisionPanel && (
+        <div style={{ paddingTop: 20, borderTop: '1px solid var(--border)', marginTop: 20 }}>
+          <div style={sectionLabel}>Decision Log</div>
+          {decisionPanel}
         </div>
       )}
 

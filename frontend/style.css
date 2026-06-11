@@ -3431,3 +3431,48 @@ details.yv-collapse[open] > summary .yv-caret {
   .council-spec { border-right: none; border-bottom: 1px solid var(--border); }
   .council-spec:last-child { border-bottom: none; }
 }
+
+/* ── Decision log panel (ACC verdicts) ──────────────────────────── */
+.decision-log { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.decision-agents { display: flex; gap: 0.5rem; }
+.decision-agent {
+  flex: 1; display: flex; flex-direction: column; gap: 0.15rem;
+  padding: 0.4rem 0.5rem; border: 1px solid var(--border);
+  border-radius: var(--radius-md); background: var(--bg-elev);
+}
+.decision-agent-role { font-size: 0.7rem; text-transform: uppercase; opacity: 0.6; letter-spacing: 0.04em; }
+.decision-agent-tally { font-size: 0.85rem; display: flex; gap: 0.25rem; align-items: baseline; }
+.decision-agent-tally .keep { color: var(--ok); }
+.decision-agent-tally .gated { color: var(--warn); }
+.decision-agent-tally .discard { color: var(--danger); }
+
+.decision-rows { display: flex; flex-direction: column; gap: 0.3rem; }
+.decision-row { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.decision-row-head {
+  width: 100%; display: grid;
+  grid-template-columns: auto auto 1fr auto auto auto;
+  gap: 0.5rem; align-items: center;
+  padding: 0.4rem 0.6rem; background: none; border: none; cursor: pointer;
+  color: inherit; text-align: left; font: inherit;
+}
+.decision-row-head:hover { background: var(--bg-elev); }
+.decision-badge { font-size: 0.7rem; padding: 0.05rem 0.4rem; border-radius: 0.3rem; text-transform: uppercase; }
+.decision-badge.keep { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.decision-badge.discard { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.decision-row-by { font-size: 0.7rem; opacity: 0.55; }
+.decision-row-time { font-size: 0.7rem; opacity: 0.55; }
+
+.decision-verdicts {
+  display: flex; flex-direction: column; gap: 0.2rem;
+  padding: 0.35rem 0.6rem 0.55rem; border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.decision-verdict { display: grid; grid-template-columns: 4rem 3rem 1fr; gap: 0.5rem; align-items: baseline; font-size: 0.8rem; }
+.decision-verdict-role { text-transform: uppercase; font-size: 0.7rem; opacity: 0.7; }
+.decision-verdict.keep .decision-verdict-role { color: var(--ok); }
+.decision-verdict.gated .decision-verdict-role { color: var(--warn); }
+.decision-verdict.discard .decision-verdict-role { color: var(--danger); }
+.decision-verdict-summary { opacity: 0.85; }
+
+.decision-empty { font-size: 0.8rem; opacity: 0.6; padding: 0.6rem; }

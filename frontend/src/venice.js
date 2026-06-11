@@ -461,3 +461,27 @@ export async function councilSpecialistVerdict({ role, systemPrompt, userPrompt,
     if (timeout) clearTimeout(timeout)
   }
 }
+
+/**
+ * Generic Venice JSON call — system + user prompt in, parsed JSON object out.
+ * Used by the ACE Curator to propose new playbook rules. Throws on any
+ * failure so callers can fall back / no-op (mirrors the contract `proposeRule` expects).
+ * @param {{system:string, user:string, devApiKey?:string|null, signal?:AbortSignal}} args
+ * @returns {Promise<object>}
+ */
+export async function askVeniceJson({ system, user, devApiKey = null, signal }) {
+  const provider = resolveProvider(null, devApiKey)
+  const controller = signal ? null : new AbortController()
+  const timeout = controller ? setTimeout(() => controller.abort(), VENICE_TIMEOUT_MS) : null
+  const sig = signal || controller.signal
+  try {
+    const content = await callChatCompletions(
+      provider.url, provider.model, provider.headers,
+      [{ role: 'system', content: system }, { role: 'user', content: user }],
+      provider.isVenice, sig
+    )
+    return JSON.parse(content)
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}

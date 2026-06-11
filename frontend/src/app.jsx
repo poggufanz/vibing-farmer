@@ -12,7 +12,7 @@ import {
 } from './screens.jsx';
 import { SkillReviewCard } from './skills.jsx';
 import {
-  StrategyCard, ExecuteCard, MemoryModal, LoopStatusPanel,
+  StrategyCard, ExecuteCard, MemoryModal, LoopStatusPanel, DecisionLogPanel,
   buildStrategy, makeInitialExecState,
 } from './agents.jsx';
 import {
@@ -59,11 +59,14 @@ import { councilVerdict } from './strategy/council.js';
 import { reflect } from './strategy/reflector.js';
 import { increment as playbookIncrement, weight as playbookWeight } from './strategy/playbook.js';
 import { saveCycle, getCycles, getJournalSummary } from './strategy/cycleJournal.js';
+import { recordDecision, getDecisions, getDecisionSummary } from './strategy/decisionLog.js';
 import { relayHarvest, relayWithdraw, getRelayerAddress } from './relay.js';
 import { setupBgAgentsWithSessionKey } from './wallet.js';
-import { resolveCouncilConflict, councilSpecialistVerdict } from './venice.js';
+import { resolveCouncilConflict, councilSpecialistVerdict, askVeniceJson } from './venice.js';
 import { councilReview, buildCouncilInput } from './strategy/councilReview.js';
 import { councilOutcome } from './strategy/outcome.js';
+import { proposeRule } from './strategy/curator.js';
+import { upsertSeeds, getRules, addRule, replaceAll } from './strategy/ruleStore.js';
 
 /* ---------- Background agent settings (localStorage: yv_agent_settings) ---------- */
 const AGENT_SETTINGS_DEFAULTS = { autoHarvest: false, harvestMinUsdc: 1.0, apyDropPct: 20, rebalanceThresholdPct: 1.5, emergencyFull: false, emergencyPct: 50, riskMonitoring: true, positionInterval: 5, apyInterval: 10, riskInterval: 15, rewardInterval: 5 };
@@ -428,6 +431,7 @@ const App = () => {
   // Start after deposit (positions exist), stop on disable / disconnect / leaving 'done'
   useE(() => {
     if (stage !== 'done' || !agentEnabled || !realAddress || !strategy?.agents?.length) return;
+    upsertSeeds(); // ACE: install seed rules + fold any legacy counters once
     // Monitor EVERY held position (accumulated across deposits), not just the latest
     // strategy — otherwise a new deposit would stop the agent watching earlier vaults.
     let activeVaults = buildActiveVaults(agentData.positions, strategy);
@@ -500,7 +504,20 @@ const App = () => {
         throw new Error(`unknown idea kind: ${idea.kind}`);
       },
       reflect: (cycle) => reflect(cycle, { increment: playbookIncrement }),
+      curate: (ctx) => {
+        // One Venice call → {role, text} delta. Fire-and-forget; proposeRule swallows failures.
+        const ask = async (c) => {
+          try {
+            const sys = 'You are the Curator of a DeFi yield-farming AI Council playbook. Given a notable cycle outcome, propose ONE concise, generalizable rule for the named role that would have prevented the failure or resolved the disagreement. Output JSON ONLY: {"role":"yield|risk|market","text":"..."}.';
+            const user = `Role: ${c.role}\nOutcome: ${c.outcome}\nResolved by: ${c.resolvedBy || 'n/a'}\nReason: ${c.reason || 'n/a'}\nRegime: ${c.turbulence || 'n/a'}\nCited rules: ${(c.citedRules || []).join(', ') || 'none'}\n\nPropose one new rule as JSON.`;
+            const out = await askVeniceJson({ system: sys, user, devApiKey: devApiKey || null });
+            return out && out.role && out.text ? { role: out.role, text: String(out.text) } : null;
+          } catch { return null; }
+        };
+        proposeRule(ctx, { ask, store: { getRules, addRule, replaceAll } });
+      },
       journal: { saveCycle: (row) => { saveCycle(row); setLoopTick((t) => t + 1); } },
+      recordDecision: (ctx) => { recordDecision(ctx); setLoopTick((t) => t + 1); },
       heartbeatMs: (agentSettings.apyInterval || 10) * 60 * 1000,
       onPhase: (p) => setLoopPhase(p === 'sleep' ? null : p),
     });
@@ -1405,6 +1422,12 @@ const App = () => {
                       phase={loopPhase}
                       nextTickAt={loopRef.current?.getNextTickAt() || null}
                       heartbeatMs={loopRef.current?.getHeartbeatMs() || (agentSettings.apyInterval || 10) * 60 * 1000}
+                    />
+                  )}
+                  decisionPanel={agentEnabled && (
+                    <DecisionLogPanel
+                      rows={getDecisions().slice(0, 8)}
+                      summary={getDecisionSummary()}
                     />
                   )}
                 />
