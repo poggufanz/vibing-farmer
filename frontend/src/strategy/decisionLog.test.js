@@ -101,3 +101,67 @@ describe('buildDecisionRecord', () => {
     expect(r.turbulence).toBe('unknown')
   })
 })
+
+import { recordDecision, getDecisions, clearDecisions, getDecisionSummary } from './decisionLog.js'
+
+describe('decisionLog store', () => {
+  beforeEach(() => {
+    const store = {}
+    vi.stubGlobal('localStorage', {
+      getItem: (k) => (k in store ? store[k] : null),
+      setItem: (k, v) => { store[k] = String(v) },
+      removeItem: (k) => { delete store[k] },
+    })
+  })
+
+  const ctxFor = (cycle, signal) => ({
+    cycle, idea: { kind: 'rebalance', vaultName: 'V' }, state: { market: { turbulence: 'calm' } },
+    verdict: {
+      verdict: signal === 'DEPOSIT' ? 'keep' : 'discard', resolvedBy: 'unanimous', reason: null, citedRules: [],
+      specialists: [
+        { role: 'yield',  signal, confidence: 0.7, citedRules: [], concerns: [] },
+        { role: 'risk',   signal, confidence: 0.7, citedRules: [], concerns: [] },
+        { role: 'market', signal, confidence: 0.7, citedRules: [], concerns: [] },
+      ],
+    },
+  })
+
+  it('records a decision and reads it back newest-first', () => {
+    recordDecision(ctxFor(1, 'DEPOSIT'))
+    recordDecision(ctxFor(2, 'HOLD'))
+    const rows = getDecisions()
+    expect(rows).toHaveLength(2)
+    expect(rows[0].cycle).toBe(2)
+    expect(rows[0].finalDecision).toBe('discard')
+    expect(rows[1].cycle).toBe(1)
+  })
+
+  it('caps at 100 rows, pruning oldest', () => {
+    for (let i = 1; i <= 130; i++) recordDecision(ctxFor(i, 'DEPOSIT'))
+    const rows = getDecisions()
+    expect(rows).toHaveLength(100)
+    expect(rows[0].cycle).toBe(130)
+    expect(rows[99].cycle).toBe(31)
+  })
+
+  it('never throws on corrupt storage', () => {
+    localStorage.setItem('yv_decision_log', 'not json')
+    expect(getDecisions()).toEqual([])
+    expect(() => recordDecision(ctxFor(1, 'DEPOSIT'))).not.toThrow()
+  })
+
+  it('clearDecisions empties the store', () => {
+    recordDecision(ctxFor(1, 'DEPOSIT'))
+    clearDecisions()
+    expect(getDecisions()).toEqual([])
+  })
+
+  it('summary tallies signals per agent role', () => {
+    recordDecision(ctxFor(1, 'DEPOSIT'))
+    recordDecision(ctxFor(2, 'HOLD'))
+    const s = getDecisionSummary()
+    expect(s.total).toBe(2)
+    expect(s.byAgent.yield).toMatchObject({ DEPOSIT: 1, HOLD: 1 })
+    expect(s.byAgent.risk).toMatchObject({ DEPOSIT: 1, HOLD: 1 })
+  })
+})

@@ -59,3 +59,57 @@ export function buildDecisionRecord({ cycle, idea, state, verdict }) {
     citedRules: verdict?.citedRules || [],
   }
 }
+
+const KEY = 'yv_decision_log'
+const MAX_ROWS = 100
+const ROLES = ['yield', 'risk', 'market']
+
+function read() {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+
+function write(rows) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(rows.slice(-MAX_ROWS)))
+  } catch (err) {
+    console.warn('[DecisionLog] write failed:', err.message)
+  }
+}
+
+/** Build + persist a decision record. Never throws. */
+export function recordDecision(ctx) {
+  try {
+    const rows = read()
+    rows.push(buildDecisionRecord(ctx))
+    write(rows)
+  } catch (err) {
+    console.warn('[DecisionLog] recordDecision failed:', err.message)
+  }
+}
+
+/** @returns newest-first array of decision records. */
+export function getDecisions() {
+  return read().reverse()
+}
+
+export function clearDecisions() {
+  try { localStorage.removeItem(KEY) } catch { /* ignore */ }
+}
+
+/** Per-agent signal tallies + total — seed for future calibration. */
+export function getDecisionSummary() {
+  const rows = read()
+  const byAgent = {}
+  for (const role of ROLES) byAgent[role] = { DEPOSIT: 0, HOLD: 0, WITHDRAW: 0 }
+  for (const row of rows) {
+    for (const v of row.verdicts || []) {
+      if (byAgent[v.role] && v.signal in byAgent[v.role]) byAgent[v.role][v.signal] += 1
+    }
+  }
+  return { total: rows.length, byAgent }
+}
