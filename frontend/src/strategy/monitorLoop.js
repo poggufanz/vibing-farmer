@@ -16,10 +16,11 @@
  * @param {(cycle:Object) => void} deps.reflect                                         // ACE reflector
  * @param {{saveCycle:(row:Object)=>void}} deps.journal
  * @param {(ctx:Object)=>void} [deps.recordDecision]                                    // ACC decision log — keep/discard only
+ * @param {(ctx:Object)=>void} [deps.curate]   // ACE Curator — grow on failure / ai-conflict only
  * @param {number} [deps.heartbeatMs]
  * @param {(phase:string)=>void} [deps.onPhase]  // live pipeline progress for UI — never blocks the loop
  */
-export function createMonitorLoop({ getState, runGates, gates = () => ({ passed: true }), simulate, council, execute, reflect, journal, recordDecision = () => {}, heartbeatMs = 60_000, onPhase }) {
+export function createMonitorLoop({ getState, runGates, gates = () => ({ passed: true }), simulate, council, execute, reflect, journal, recordDecision = () => {}, curate = () => {}, heartbeatMs = 60_000, onPhase }) {
   let timer = null
   let cycle = 0
   let running = false
@@ -30,6 +31,9 @@ export function createMonitorLoop({ getState, runGates, gates = () => ({ passed:
 
   // Decision capture is observability — a throwing recorder must not kill a cycle.
   const record = (ctx) => { try { recordDecision(ctx) } catch { /* ignore */ } }
+
+  // Curation is fire-and-forget learning — a throwing/slow curator must never kill a cycle.
+  const grow = (ctx) => { try { curate(ctx) } catch { /* ignore */ } }
 
   async function runCycle(idea) {
     cycle += 1
@@ -75,9 +79,11 @@ export function createMonitorLoop({ getState, runGates, gates = () => ({ passed:
         phase('reflect')
         reflect({ verdict: 'keep', citedRules: v.citedRules, outcome: 'success' })
         journal.saveCycle({ cycle, phase: 'execute', verdict: 'keep', score: projectedReward.riskAdjustedScore, confidence: v.confidence, citedRules: v.citedRules, txHash, turbulence: state.market.turbulence })
+        if (v.resolvedBy === 'ai-conflict') grow({ role: v.citedRules[0]?.split('-')[0] || 'yield', outcome: 'success', resolvedBy: v.resolvedBy, citedRules: v.citedRules, reason: v.reason, turbulence: state.market.turbulence })
       } catch (execErr) {
         reflect({ verdict: 'keep', citedRules: v.citedRules, outcome: 'failure' })
         journal.saveCycle({ cycle, phase: 'crash', verdict: 'crash', error: execErr?.message || String(execErr), citedRules: v.citedRules })
+        grow({ role: v.citedRules[0]?.split('-')[0] || 'yield', outcome: 'failure', resolvedBy: v.resolvedBy, citedRules: v.citedRules, reason: execErr?.message || String(execErr), turbulence: state.market.turbulence })
       }
     } catch (err) {
       // Crash recovery — autoresearch logs the crash and moves on. The loop lives.

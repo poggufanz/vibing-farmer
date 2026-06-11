@@ -179,3 +179,40 @@ describe('createMonitorLoop recordDecision', () => {
     expect(saved[0]).toMatchObject({ verdict: 'keep' }) // journal still wrote → loop survived
   })
 })
+
+describe('createMonitorLoop curate (ACE grow)', () => {
+  it('curates on a failed execution (harmful outcome)', async () => {
+    const curate = vi.fn()
+    const { deps } = makeDeps({ curate, execute: vi.fn(async () => { throw new Error('reverted') }) })
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea({ kind: 'rebalance', proposed: [], currentAllocations: [] })
+    expect(curate).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failure', reason: 'reverted' }))
+  })
+
+  it('curates when the council resolved by ai-conflict', async () => {
+    const curate = vi.fn()
+    const { deps } = makeDeps({
+      curate,
+      council: vi.fn(async () => ({ verdict: 'keep', reason: null, confidence: 0.6, citedRules: ['yield-uplift'], specialists: [], resolvedBy: 'ai-conflict' })),
+    })
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea({ kind: 'rebalance', proposed: [], currentAllocations: [] })
+    expect(curate).toHaveBeenCalledWith(expect.objectContaining({ resolvedBy: 'ai-conflict' }))
+  })
+
+  it('does NOT curate on a clean unanimous keep', async () => {
+    const curate = vi.fn()
+    const { deps } = makeDeps({ curate })
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea({ kind: 'rebalance', proposed: [], currentAllocations: [] })
+    expect(curate).not.toHaveBeenCalled()
+  })
+
+  it('a throwing curate never stops the loop', async () => {
+    const curate = vi.fn(() => { throw new Error('venice down') })
+    const { saved, deps } = makeDeps({ curate, council: vi.fn(async () => ({ verdict: 'keep', confidence: 0.6, citedRules: ['yield-uplift'], specialists: [], resolvedBy: 'ai-conflict' })) })
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea({ kind: 'rebalance', proposed: [], currentAllocations: [] })
+    expect(saved[0]).toMatchObject({ verdict: 'keep' }) // journal still wrote → loop survived
+  })
+})
