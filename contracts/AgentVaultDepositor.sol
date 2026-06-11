@@ -2,221 +2,98 @@
 pragma solidity ^0.8.24;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-
-interface IVault {
-    function deposit(uint256 assets, address receiver) external returns (uint256);
-    function withdrawAssets(uint256 assets, address receiver, address owner) external returns (uint256);
-    function claimRewards(address user) external returns (uint256);
-}
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {AgentRegistry} from "./AgentRegistry.sol";
 
 /// @title AgentVaultDepositor
-/// @notice Executes per-agent scoped vault deposits, withdrawals, and harvests.
-///         Each agent has its own permission: vault, maxAmount, expiry, and
-///         opt-in withdraw/harvest capabilities (default false).
-///         CEI pattern + ReentrancyGuard on every execute* entry point.
-contract AgentVaultDepositor is ReentrancyGuard {
-    struct AgentPermission {
-        address vault;
-        uint256 maxAmount;
-        uint256 usedAmount;
-        uint256 expiresAt;
-        bool active;
-        bool allowWithdraw; // agent may withdraw on user's behalf
-        bool allowHarvest;  // agent may claim/recompound rewards
-    }
+/// @notice Executes scoped vault deposits. Holds NO scope. Authorization is an EIP-712
+///         signature by the worker key — NOT msg.sender — so the 1Shot relayer (or any
+///         submitter) can broadcast the call gas-abstracted. The signer is recovered and
+///         its scope read from AgentRegistry. Jalur B: pulls funds from the scope owner
+///         via transferFrom, verifies the balance delta, spends the period cap, deposits
+///         ERC-4626 shares straight to the owner.
+contract AgentVaultDepositor is ReentrancyGuard, Pausable, EIP712 {
+    using SafeERC20 for IERC20;
 
-    mapping(address => mapping(bytes32 => AgentPermission)) public agentPermissions;
+    AgentRegistry public immutable registry;
+    address public immutable guardian;
+    mapping(address token => uint256) public reserves;
+    mapping(bytes32 => bool) public executed;
 
-    /// @notice Session keys — pre-authorized addresses that may execute on behalf of a user.
-    ///         Value is expiry timestamp; 0 = not authorized. Designed for server-side relayers
-    ///         and off-chain automation (zero-popup autonomous loops).
-    mapping(address user => mapping(address sessionKey => uint256 expiresAt)) public sessionKeys;
+    // EIP-712 typed data: the worker key signs this; recovered signer == the agent.
+    bytes32 public constant DEPOSIT_TYPEHASH =
+        keccak256("AgentDeposit(uint256 amount,uint256 minAmount,bytes32 execId)");
 
-    // Events
-    event AgentStarted(bytes32 indexed agentId, address indexed user, address vault);
-    event SessionKeyAuthorized(address indexed user, address indexed sessionKey, uint256 expiresAt);
-    event SessionKeyRevoked(address indexed user, address indexed sessionKey);
-    event SwapExecuted(bytes32 indexed agentId, address indexed user, uint256 amountIn, uint256 amountOut);
-    event ApproveExecuted(bytes32 indexed agentId, address indexed user, address vault, uint256 amount);
-    event DepositExecuted(bytes32 indexed agentId, address indexed user, address vault, uint256 amount, uint256 sharesReceived);
-    event AgentCompleted(bytes32 indexed agentId, address indexed user, address vault, uint256 sharesReceived);
-    event AgentFailed(bytes32 indexed agentId, address indexed user, string reason);
-    event WithdrawExecuted(address indexed user, address vault, uint256 amount, uint256 shares);
-    event HarvestExecuted(address indexed user, address vault, uint256 rewards);
-    event HarvestRecompounded(address indexed user, address vault, uint256 rewards);
-    event StrategyAttested(
-        address indexed user,
-        bytes32 strategyHash,
-        uint256 timestamp,
-        string vaultProtocol,
-        uint256 allocatedAmount
+    event AgentDepositExecuted(
+        address indexed agent, address indexed owner, address indexed vault,
+        address token, uint256 assetsIn, uint256 sharesOut, bytes32 execId
     );
 
-    // Custom errors
-    error PermissionNotActive();
-    error PermissionExpired();
-    error VaultMismatch();
-    error AmountExceedsPermission();
-    error InvalidVault();
-    error InvalidAmount();
-    error InvalidExpiry();
-    error WithdrawNotPermitted();
-    error HarvestNotPermitted();
-    error UnauthorizedCaller();
+    error ScopeInactive();
+    error InsufficientReceived(uint256 received, uint256 minAmount);
+    error AlreadyExecuted(bytes32 execId);
+    error ZeroShares();
+    error NotGuardian();
 
-    // ─── Session Key Registry ──────────────────────────────────────────────────
-
-    /// @notice Authorize a session key to execute actions on behalf of msg.sender.
-    ///         Used by server-side relayers for zero-popup autonomous operation.
-    function authorizeSessionKey(address sessionKey, uint256 expiresAt) external {
-        if (expiresAt <= block.timestamp) revert InvalidExpiry();
-        sessionKeys[msg.sender][sessionKey] = expiresAt;
-        emit SessionKeyAuthorized(msg.sender, sessionKey, expiresAt);
+    constructor(address registry_, address guardian_) EIP712("VibingFarmer", "1") {
+        registry = AgentRegistry(registry_);
+        guardian = guardian_;
     }
 
-    /// @notice Revoke a session key immediately.
-    function revokeSessionKey(address sessionKey) external {
-        sessionKeys[msg.sender][sessionKey] = 0;
-        emit SessionKeyRevoked(msg.sender, sessionKey);
+    function pause() external { if (msg.sender != guardian) revert NotGuardian(); _pause(); }
+    function unpause() external { if (msg.sender != guardian) revert NotGuardian(); _unpause(); }
+
+    /// @notice EIP-712 digest a worker key must sign. Exposed for tests + the frontend so
+    ///         on-chain and off-chain hash the SAME bytes (no divergence).
+    function hashDeposit(uint256 amount, uint256 minAmount, bytes32 execId) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(DEPOSIT_TYPEHASH, amount, minAmount, execId)));
     }
 
-    /// @dev Returns true if msg.sender is the user OR a valid (non-expired) session key for the user.
-    function _isAuthorized(address user) internal view returns (bool) {
-        if (msg.sender == user) return true;
-        uint256 exp = sessionKeys[user][msg.sender];
-        return exp != 0 && block.timestamp < exp;
-    }
-
-    /// @notice Grant permission to an agent to deposit into a specific vault.
-    ///         Withdraw/harvest are opt-in via setAgentCapabilities (default false).
-    function grantAgentPermission(
-        bytes32 agentId,
-        address vault,
-        uint256 maxAmount,
-        uint256 expiresAt
-    ) external {
-        if (vault == address(0)) revert InvalidVault();
-        if (maxAmount == 0) revert InvalidAmount();
-        if (expiresAt <= block.timestamp) revert InvalidExpiry();
-
-        agentPermissions[msg.sender][agentId] = AgentPermission({
-            vault: vault,
-            maxAmount: maxAmount,
-            usedAmount: 0,
-            expiresAt: expiresAt,
-            active: true,
-            allowWithdraw: false,
-            allowHarvest: false
-        });
-    }
-
-    /// @notice Opt an agent into withdraw and/or harvest capabilities.
-    ///         Only the permission owner (msg.sender) can set them.
-    function setAgentCapabilities(bytes32 agentId, bool allowWithdraw, bool allowHarvest) external {
-        AgentPermission storage perm = agentPermissions[msg.sender][agentId];
-        if (!perm.active) revert PermissionNotActive();
-        perm.allowWithdraw = allowWithdraw;
-        perm.allowHarvest = allowHarvest;
-    }
-
-    /// @notice Revoke an agent's permission immediately.
-    function revokeAgentPermission(bytes32 agentId) external {
-        agentPermissions[msg.sender][agentId].active = false;
-    }
-
-    /// @notice Attest an AI-generated strategy on-chain. Pure event emission — no
-    ///         state change, no storage cost. Creates a tamper-proof, auditable
-    ///         record of the strategy hash + reasoning (ERC-8004 aligned).
-    function attestStrategy(
-        bytes32 strategyHash,
-        string calldata vaultProtocol,
-        uint256 allocatedAmount
-    ) external {
-        emit StrategyAttested(
-            msg.sender,
-            strategyHash,
-            block.timestamp,
-            vaultProtocol,
-            allocatedAmount
-        );
-    }
-
-    /// @notice Execute a full Swap→Approve→Deposit flow for one agent.
-    ///         CEI pattern: all checks before state update before external calls.
-    function executeAgentDeposit(
-        bytes32 agentId,
-        address user,
-        address vault,
-        uint256 amount
-    ) external nonReentrant {
-        AgentPermission storage perm = agentPermissions[user][agentId];
-
-        // CHECKS — revert immediately on any violation
-        // Caller authorization: only the permission owner may drive their own
-        // permission. Every on-chain execution path is user-signed (EIP-7702
-        // account / user EOA); without this, ANY address could trigger deposits,
-        // burn a user's allowance, or grief the yield clock.
-        if (!_isAuthorized(user)) revert UnauthorizedCaller();
-        if (!perm.active) revert PermissionNotActive();
-        if (block.timestamp >= perm.expiresAt) revert PermissionExpired();
-        if (perm.vault != vault) revert VaultMismatch();
-        if (perm.usedAmount + amount > perm.maxAmount) revert AmountExceedsPermission();
-
-        // EFFECTS — update state before external calls
-        perm.usedAmount += amount;
-
-        // INTERACTIONS — emit events + call vault
-        emit AgentStarted(agentId, user, vault);
-        emit SwapExecuted(agentId, user, amount, amount); // 1:1 mock swap
-        emit ApproveExecuted(agentId, user, vault, amount);
-
-        // Deposit to vault — try/catch so AgentFailed can be emitted on vault failure
-        try IVault(vault).deposit(amount, user) returns (uint256 sharesReceived) {
-            emit DepositExecuted(agentId, user, vault, amount, sharesReceived);
-            emit AgentCompleted(agentId, user, vault, sharesReceived);
-        } catch {
-            perm.usedAmount -= amount; // undo — vault deposit did not happen
-            emit AgentFailed(agentId, user, "Vault deposit failed");
-        }
-    }
-
-    /// @notice Emergency withdraw — agent pulls assets from vault back to user.
-    ///         Requires allowWithdraw. CEI + nonReentrant.
-    function executeWithdraw(bytes32 agentId, address user, address vault, uint256 amount)
+    /// @param amount    tokens to pull from the scope owner (declared by the signer)
+    /// @param minAmount floor on the *received* delta (fee-on-transfer / slippage guard)
+    /// @param execId    deterministic per (owner,vault,planId,step) — replay-safe
+    /// @param sig       EIP-712 signature over (amount,minAmount,execId) by the worker key.
+    ///                  The recovered signer IS the agent; msg.sender is irrelevant.
+    function executeAgentDeposit(uint256 amount, uint256 minAmount, bytes32 execId, bytes calldata sig)
         external
         nonReentrant
+        whenNotPaused
+        returns (uint256 shares)
     {
-        AgentPermission storage perm = agentPermissions[user][agentId];
-        if (!_isAuthorized(user)) revert UnauthorizedCaller();
-        if (!perm.active) revert PermissionNotActive();
-        if (block.timestamp >= perm.expiresAt) revert PermissionExpired();
-        if (!perm.allowWithdraw) revert WithdrawNotPermitted();
-        if (perm.vault != vault) revert VaultMismatch();
+        // 0. recover the agent from the signature — this is the authorization, not msg.sender
+        address agent = ECDSA.recover(hashDeposit(amount, minAmount, execId), sig);
+        AgentRegistry.AgentScope memory s = registry.scopeOf(agent);
 
-        uint256 shares = IVault(vault).withdrawAssets(amount, user, user);
-        emit WithdrawExecuted(user, vault, amount, shares);
-    }
+        // 1. scope active
+        if (s.owner == address(0) || s.revoked || block.timestamp >= s.expiry) revert ScopeInactive();
+        // 2. idempotency — set BEFORE any external call. Also the signature replay guard:
+        //    one execId burns one signed authorization.
+        if (executed[execId]) revert AlreadyExecuted(execId);
+        executed[execId] = true;
 
-    /// @notice Harvest — agent claims rewards and optionally recompounds them
-    ///         back into the vault. Requires allowHarvest. CEI + nonReentrant.
-    function executeHarvest(bytes32 agentId, address user, address vault, bool recompound)
-        external
-        nonReentrant
-    {
-        AgentPermission storage perm = agentPermissions[user][agentId];
-        if (!_isAuthorized(user)) revert UnauthorizedCaller();
-        if (!perm.active) revert PermissionNotActive();
-        if (block.timestamp >= perm.expiresAt) revert PermissionExpired();
-        if (!perm.allowHarvest) revert HarvestNotPermitted();
-        if (perm.vault != vault) revert VaultMismatch();
+        IERC20 token = IERC20(s.token);
+        // 3. pull funds (Jalur B). balance-delta below is the real, fee-safe amount.
+        uint256 balBefore = token.balanceOf(address(this));
+        token.safeTransferFrom(s.owner, address(this), amount);
+        uint256 received = token.balanceOf(address(this)) - balBefore;
+        if (received < minAmount || received == 0) revert InsufficientReceived(received, minAmount);
 
-        uint256 rewards = IVault(vault).claimRewards(user);
+        // 4. charge the period cap against the recovered agent (reverts CapExceeded if over)
+        registry.rollAndSpend(agent, received);
 
-        if (recompound && rewards > 0) {
-            IVault(vault).deposit(rewards, user); // pure-accounting recompound
-            emit HarvestRecompounded(user, vault, rewards);
-        } else {
-            emit HarvestExecuted(user, vault, rewards);
-        }
+        // 5. CEI: account reserve before vault interaction
+        reserves[s.token] += received;
+        token.forceApprove(s.vault, received);
+        shares = IERC4626(s.vault).deposit(received, s.owner); // shares → owner directly
+        if (shares == 0) revert ZeroShares();
+        reserves[s.token] -= received;
+        token.forceApprove(s.vault, 0);
+
+        emit AgentDepositExecuted(agent, s.owner, s.vault, s.token, received, shares, execId);
     }
 }

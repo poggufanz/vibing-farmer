@@ -3,179 +3,109 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {MockVault} from "../contracts/MockVault.sol";
+import {MockERC20} from "./mocks/MockERC20.sol";
 
+/// @notice ERC-4626 compliance checks for the real-custody MockVault (Phase 1).
 contract MockVaultTest is Test {
+    MockERC20 token;
     MockVault vaultA;
     MockVault vaultB;
     address user = address(0xBEEF);
 
     function setUp() public {
-        vaultA = new MockVault("MockVault USDC-A", address(0x1111), 480); // 4.8% APY
-        vaultB = new MockVault("MockVault USDC-B", address(0x2222), 610); // 6.1% APY
+        token = new MockERC20("USD Coin", "USDC", 6);
+        vaultA = new MockVault("Vault USDC-A", address(token), 480); // 4.8% APY
+        vaultB = new MockVault("Vault USDC-B", address(token), 610); // 6.1% APY
+
+        token.mint(user, 1_000e6);
+        vm.prank(user);
+        token.approve(address(vaultA), type(uint256).max);
+        vm.prank(user);
+        token.approve(address(vaultB), type(uint256).max);
     }
 
-    function test_name_set_correctly() public view {
-        assertEq(vaultA.name(), "MockVault USDC-A");
-        assertEq(vaultB.name(), "MockVault USDC-B");
+    function test_name_and_symbol() public view {
+        assertEq(vaultA.name(), "Vault USDC-A");
+        assertEq(vaultA.symbol(), "vUSDC");
     }
 
     function test_asset_set_correctly() public view {
-        assertEq(vaultA.asset(), address(0x1111));
-        assertEq(vaultB.asset(), address(0x2222));
+        assertEq(vaultA.asset(), address(token));
     }
-
-    function test_deposit_returns_shares_one_to_one() public {
-        uint256 amount = 100e6; // 100 USDC (6 decimals)
-        uint256 sharesReceived = vaultA.deposit(amount, user);
-
-        assertEq(sharesReceived, amount);
-    }
-
-    function test_deposit_updates_balance() public {
-        uint256 amount = 100e6;
-        vaultA.deposit(amount, user);
-
-        assertEq(vaultA.balanceOf(user), amount);
-    }
-
-    function test_deposit_updates_total_assets() public {
-        uint256 amount = 100e6;
-        vaultA.deposit(amount, user);
-
-        assertEq(vaultA.totalAssets(), amount);
-    }
-
-    function test_multiple_deposits_accumulate() public {
-        vaultA.deposit(100e6, user);
-        vaultA.deposit(50e6, user);
-
-        assertEq(vaultA.balanceOf(user), 150e6);
-        assertEq(vaultA.totalAssets(), 150e6);
-    }
-
-    function test_deposit_to_different_receivers() public {
-        address user2 = address(0xDEAD);
-        vaultA.deposit(100e6, user);
-        vaultA.deposit(200e6, user2);
-
-        assertEq(vaultA.balanceOf(user), 100e6);
-        assertEq(vaultA.balanceOf(user2), 200e6);
-        assertEq(vaultA.totalAssets(), 300e6);
-    }
-
-    function test_deposit_emits_event() public {
-        uint256 amount = 50e6;
-        vm.expectEmit(true, true, false, true);
-        emit MockVault.Deposit(address(this), user, amount, amount);
-        vaultA.deposit(amount, user);
-    }
-
-    function test_deposit_reverts_on_zero_assets() public {
-        vm.expectRevert("Zero assets");
-        vaultA.deposit(0, user);
-    }
-
-    function test_vaults_are_independent() public {
-        vaultA.deposit(100e6, user);
-        vaultB.deposit(200e6, user);
-
-        assertEq(vaultA.balanceOf(user), 100e6);
-        assertEq(vaultB.balanceOf(user), 200e6);
-        assertEq(vaultA.totalAssets(), 100e6);
-        assertEq(vaultB.totalAssets(), 200e6);
-    }
-
-    // ─── Yield Simulation ─────────────────────────────────────────────────────
 
     function test_apy_set_correctly() public view {
         assertEq(vaultA.apyBps(), 480);
         assertEq(vaultB.apyBps(), 610);
     }
 
-    function test_convertToAssets_one_to_one() public view {
-        assertEq(vaultA.convertToAssets(123e6), 123e6);
+    function test_deposit_pulls_real_tokens_and_mints_shares() public {
+        vm.prank(user);
+        uint256 shares = vaultA.deposit(100e6, user);
+
+        assertEq(shares, 100e6); // empty vault: 1:1
+        assertEq(vaultA.balanceOf(user), shares);
+        assertEq(vaultA.totalAssets(), 100e6);
+        assertEq(token.balanceOf(address(vaultA)), 100e6);
+        assertEq(token.balanceOf(user), 900e6);
     }
 
-    function test_getUnclaimedRewards_zero_before_deposit() public view {
-        assertEq(vaultA.getUnclaimedRewards(user), 0);
-    }
-
-    function test_getUnclaimedRewards_zero_at_deposit_time() public {
-        vaultA.deposit(1000e6, user);
-        assertEq(vaultA.getUnclaimedRewards(user), 0); // no time elapsed
-    }
-
-    function test_getUnclaimedRewards_accrues_full_year() public {
-        vaultA.deposit(1000e6, user); // 1000 USDC @ 4.8%
-        vm.warp(block.timestamp + 365 days);
-        // 1000e6 * 480 / 10000 = 48e6
-        assertEq(vaultA.getUnclaimedRewards(user), 48e6);
-    }
-
-    function test_getUnclaimedRewards_accrues_partial() public {
-        vaultA.deposit(1000e6, user);
-        vm.warp(block.timestamp + 73 days); // 1/5 year
-        assertEq(vaultA.getUnclaimedRewards(user), 9_600_000); // 48e6 / 5
-    }
-
-    function test_claimRewards_returns_and_resets_accrual() public {
-        vaultA.deposit(1000e6, user);
-        vm.warp(block.timestamp + 365 days);
-
-        uint256 rewards = vaultA.claimRewards(user);
-        assertEq(rewards, 48e6);
-        assertEq(vaultA.getUnclaimedRewards(user), 0); // accrual reset
-    }
-
-    function test_claimRewards_emits_event() public {
-        vaultA.deposit(1000e6, user);
-        vm.warp(block.timestamp + 365 days);
-
-        vm.expectEmit(true, false, false, true);
-        emit MockVault.RewardsClaimed(user, 48e6);
-        vaultA.claimRewards(user);
-    }
-
-    function test_claimRewards_reverts_when_no_rewards() public {
-        vm.expectRevert("No rewards");
-        vaultA.claimRewards(user);
-    }
-
-    // ─── Withdrawal ───────────────────────────────────────────────────────────
-
-    function test_withdrawAssets_reduces_shares() public {
+    function test_multiple_deposits_accumulate() public {
+        vm.startPrank(user);
         vaultA.deposit(100e6, user);
-        uint256 shares = vaultA.withdrawAssets(40e6, user, user);
+        vaultA.deposit(50e6, user);
+        vm.stopPrank();
 
-        assertEq(shares, 40e6);
+        assertEq(vaultA.balanceOf(user), 150e6);
+        assertEq(vaultA.totalAssets(), 150e6);
+    }
+
+    function test_deposit_to_different_receiver() public {
+        address receiver = address(0xDEAD);
+        vm.prank(user);
+        vaultA.deposit(100e6, receiver);
+
+        assertEq(vaultA.balanceOf(receiver), 100e6);
+        assertEq(vaultA.balanceOf(user), 0);
+        assertEq(token.balanceOf(user), 900e6); // user paid
+    }
+
+    function test_vaults_are_independent() public {
+        vm.startPrank(user);
+        vaultA.deposit(100e6, user);
+        vaultB.deposit(200e6, user);
+        vm.stopPrank();
+
+        assertEq(vaultA.totalAssets(), 100e6);
+        assertEq(vaultB.totalAssets(), 200e6);
+    }
+
+    function test_withdraw_burns_shares_and_returns_tokens() public {
+        vm.startPrank(user);
+        vaultA.deposit(100e6, user);
+        vaultA.withdraw(40e6, user, user);
+        vm.stopPrank();
+
         assertEq(vaultA.balanceOf(user), 60e6);
         assertEq(vaultA.totalAssets(), 60e6);
+        assertEq(token.balanceOf(user), 940e6);
     }
 
-    function test_withdrawAssets_full_balance() public {
-        vaultA.deposit(100e6, user);
-        vaultA.withdrawAssets(100e6, user, user);
+    function test_redeem_full_balance() public {
+        vm.startPrank(user);
+        uint256 shares = vaultA.deposit(100e6, user);
+        vaultA.redeem(shares, user, user);
+        vm.stopPrank();
+
         assertEq(vaultA.balanceOf(user), 0);
+        assertEq(vaultA.totalAssets(), 0);
+        assertEq(token.balanceOf(user), 1_000e6);
     }
 
-    function test_withdrawAssets_reverts_insufficient() public {
+    function test_withdraw_reverts_insufficient_shares() public {
+        vm.startPrank(user);
         vaultA.deposit(10e6, user);
-        vm.expectRevert("Insufficient shares");
-        vaultA.withdrawAssets(20e6, user, user);
-    }
-
-    function test_withdrawAssets_preserves_accrued_yield() public {
-        vaultA.deposit(1000e6, user);
-        vm.warp(block.timestamp + 365 days); // 48e6 accrued
-        vaultA.withdrawAssets(1000e6, user, user); // burn all shares
-        // accrued yield folded into unclaimedRewards, not lost
-        assertEq(vaultA.getUnclaimedRewards(user), 48e6);
-    }
-
-    function test_withdrawAssets_emits_event() public {
-        vaultA.deposit(100e6, user);
-        vm.expectEmit(true, true, true, true);
-        emit MockVault.Withdraw(address(this), user, user, 40e6, 40e6);
-        vaultA.withdrawAssets(40e6, user, user);
+        vm.expectRevert();
+        vaultA.withdraw(20e6, user, user);
+        vm.stopPrank();
     }
 }

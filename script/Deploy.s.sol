@@ -4,11 +4,17 @@ pragma solidity ^0.8.24;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {MockVault} from "../contracts/MockVault.sol";
+import {AgentRegistry} from "../contracts/AgentRegistry.sol";
 import {AgentVaultDepositor} from "../contracts/AgentVaultDepositor.sol";
 
+// NOTE: placeholder wiring — Task 6 rewrites this script for the real-custody
+// AgentRegistry/AgentVaultDepositor pair (single MockVault over USDC_BASE_SEPOLIA,
+// deployments/base-sepolia.json artifact). This patch only restores compilation
+// after Task 3's constructor change.
 contract Deploy is Script {
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(deployerKey);
         vm.startBroadcast(deployerKey);
 
         // apyBps: conservative vault A = 480 (4.8%), balanced vault B = 610 (6.1%)
@@ -17,7 +23,10 @@ contract Deploy is Script {
         // apyBps: C = 940 (9.4%, Pendle-like structured), D = 520 (5.2%, Fluid-like hybrid)
         MockVault vaultC = new MockVault("MockVault USDC-C", address(0), 940);
         MockVault vaultD = new MockVault("MockVault USDC-D", address(0), 520);
-        AgentVaultDepositor depositor = new AgentVaultDepositor();
+
+        AgentRegistry registry = new AgentRegistry();
+        AgentVaultDepositor depositor = new AgentVaultDepositor(address(registry), deployer);
+        registry.setDepositor(address(depositor));
 
         vm.stopBroadcast();
 
