@@ -194,3 +194,30 @@ EIP-7702 + ERC-7715 + per-agent permissions are cryptographic primitives that so
 - **ERC-7710 (via 1Shot):** Permissioned gas abstraction. Relayers cannot act outside the permitted scope.
 
 Combining all three with parallel agent dispatch offers a genuine technical solution to DeFi UX and agent trust issues, validated by real-world market observations.
+
+---
+
+## Why not pure ERC-7715
+
+ERC-7715 / the Delegation Framework's `erc20-token-periodic` enforcer (audited by Consensys Diligence on `ERC20PeriodTransferEnforcer.sol`) releases **only** `IERC20.transfer(address,uint256)` calldata — exactly 68 bytes, execution target must equal the token address in `terms`, selector must be `0xa9059cbb`. `approve()`, `deposit()`, or any other function can never pass it. A worker therefore cannot redeem a 7715 permission to call `AgentVaultDepositor.executeAgentDeposit`.
+
+**Our path (Jalur B + EIP-712 auth):** the user signs once — (a) a bounded `IERC20.approve(depositor, totalCap)` and (b) `AgentRegistry.authorizeSessionKey` registering each worker key's scope. Each deposit is an EIP-712 message signed by the **worker key** (not the user); the depositor `ecrecover`s the signer and looks up its scope. Because authorization is the signature, **any** address may submit the tx — the 1Shot relayer broadcasts it gas-abstracted, or the user's own RPC does if the relayer is down. The depositor pulls funds with `transferFrom(owner, …)`, bounded by the registry. `msg.sender` is irrelevant to authorization. There is no FunctionCall delegation and no MetaMask redemption framework on this leg — the worker key signs an EIP-712 typed message and that is all.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Worker as Worker key (off-chain)
+    participant Relayer as 1Shot relayer (any submitter)
+    participant Dep as AgentVaultDepositor
+    participant Reg as AgentRegistry
+    participant Vault as ERC-4626 Vault
+    User->>Dep: approve(depositor, totalCap)  (one-time)
+    User->>Reg: authorizeSessionKey(agent, vault, token, cap, period, expiry)
+    Worker->>Worker: sign EIP-712 AgentDeposit(amount,minAmount,execId)
+    Worker->>Relayer: hand signed payload
+    Relayer->>Dep: executeAgentDeposit(amount, minAmount, execId, sig)
+    Dep->>Dep: agent = ecrecover(sig)
+    Dep->>Reg: rollAndSpend(agent, received)
+    Dep->>Vault: deposit(received, owner)
+    Vault-->>User: shares
+```
