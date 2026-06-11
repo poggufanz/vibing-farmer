@@ -865,8 +865,70 @@ const LoopStatusPanel = ({ running, summary, rows, phase, nextTickAt, heartbeatM
   );
 };
 
+const SIGNAL_CLASS = { DEPOSIT: 'keep', HOLD: 'gated', WITHDRAW: 'discard' };
+
+const DecisionLogPanel = ({ rows, summary }) => {
+  const [now, setNow] = useSAg(() => Date.now());
+  const [open, setOpen] = useSAg(() => null);
+  useEAg(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const byAgent = summary?.byAgent || {};
+  return (
+    <div className="decision-log">
+      <div className="decision-agents">
+        {['yield', 'risk', 'market'].map((role) => {
+          const t = byAgent[role] || { DEPOSIT: 0, HOLD: 0, WITHDRAW: 0 };
+          return (
+            <div className="decision-agent" key={role}>
+              <span className="decision-agent-role mono">{role}</span>
+              <span className="decision-agent-tally mono">
+                <span className="keep">{t.DEPOSIT}</span>·
+                <span className="gated">{t.HOLD}</span>·
+                <span className="discard">{t.WITHDRAW}</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="decision-rows">
+        {(rows || []).map((r) => (
+          <div className={`decision-row ${open === r.id ? 'open' : ''}`} key={r.id}>
+            <button className="decision-row-head" onClick={() => setOpen(open === r.id ? null : r.id)}>
+              <span className="decision-row-num mono">#{String(r.cycle).padStart(2, '0')}</span>
+              <span className={`decision-badge ${r.finalDecision === 'keep' ? 'keep' : 'discard'}`}>{r.finalDecision}</span>
+              <span className="decision-row-maj mono">{r.majoritySignal} ×{r.majorityCount}</span>
+              <span className="decision-row-conf tnum mono">{Math.round((r.avgConfidence || 0) * 100)}%</span>
+              <span className="decision-row-by mono">{r.resolvedBy}</span>
+              <span className="decision-row-time">{agoLabel(r.ts, now)}</span>
+            </button>
+            {open === r.id && (
+              <div className="decision-verdicts">
+                {(r.verdicts || []).map((v) => (
+                  <div className={`decision-verdict ${SIGNAL_CLASS[v.signal] || ''}`} key={v.role}>
+                    <span className="decision-verdict-role mono">{v.role}</span>
+                    <span className="decision-verdict-conf tnum mono">{Math.round((v.confidence || 0) * 100)}%</span>
+                    <span className="decision-verdict-summary">{v.summary}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+        {(!rows || rows.length === 0) && (
+          <div className="decision-empty">No council decisions yet. Each keep or discard verdict from the autonomous loop is logged here with all three specialist opinions.</div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export {
   LoopStatusPanel,
+  DecisionLogPanel,
   AgentGraph, AgentTiles, MemoryModal, StrategyCard, ExecuteCard,
   buildStrategy, makeInitialExecState, AGENT_PROTOCOLS, STEP_IDS, STEP_LABELS,
 };

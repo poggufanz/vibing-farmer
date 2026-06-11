@@ -12,7 +12,7 @@ import {
 } from './screens.jsx';
 import { SkillReviewCard } from './skills.jsx';
 import {
-  StrategyCard, ExecuteCard, MemoryModal, LoopStatusPanel,
+  StrategyCard, ExecuteCard, MemoryModal, LoopStatusPanel, DecisionLogPanel,
   buildStrategy, makeInitialExecState,
 } from './agents.jsx';
 import {
@@ -1407,6 +1407,12 @@ const App = () => {
                       phase={loopPhase}
                       nextTickAt={loopRef.current?.getNextTickAt() || null}
                       heartbeatMs={loopRef.current?.getHeartbeatMs() || (agentSettings.apyInterval || 10) * 60 * 1000}
+                    />
+                  )}
+                  decisionPanel={agentEnabled && (
+                    <DecisionLogPanel
+                      rows={getDecisions().slice(0, 8)}
+                      summary={getDecisionSummary()}
                     />
                   )}
                 />
