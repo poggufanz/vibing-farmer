@@ -128,3 +128,54 @@ describe('createMonitorLoop', () => {
     expect(deps.council).toHaveBeenCalledOnce()
   })
 })
+
+describe('createMonitorLoop recordDecision', () => {
+  it('records a decision on keep (council deliberated)', async () => {
+    const recordDecision = vi.fn()
+    const { deps } = makeDeps({ recordDecision })
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea({ kind: 'rebalance', proposed: [], currentAllocations: [] })
+    expect(recordDecision).toHaveBeenCalledOnce()
+    expect(recordDecision).toHaveBeenCalledWith(
+      expect.objectContaining({ cycle: 1, verdict: expect.objectContaining({ verdict: 'keep' }) }),
+    )
+  })
+
+  it('records a decision on discard', async () => {
+    const recordDecision = vi.fn()
+    const { deps } = makeDeps({
+      recordDecision,
+      council: vi.fn(async () => ({ verdict: 'discard', reason: 'Risk Analyst', confidence: 0.9, citedRules: [], specialists: [], resolvedBy: 'veto' })),
+    })
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea({ kind: 'rebalance', proposed: [], currentAllocations: [] })
+    expect(recordDecision).toHaveBeenCalledOnce()
+    expect(recordDecision).toHaveBeenCalledWith(
+      expect.objectContaining({ verdict: expect.objectContaining({ verdict: 'discard' }) }),
+    )
+  })
+
+  it('does NOT record on idle (no council ran)', async () => {
+    const recordDecision = vi.fn()
+    const { deps } = makeDeps({ recordDecision })
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea(null)
+    expect(recordDecision).not.toHaveBeenCalled()
+  })
+
+  it('does NOT record on a gated cycle', async () => {
+    const recordDecision = vi.fn()
+    const { deps } = makeDeps({ recordDecision, gates: () => ({ passed: false, blockedBy: 'gas', reason: 'gas too high' }) })
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea({ kind: 'rebalance', proposed: [], currentAllocations: [] })
+    expect(recordDecision).not.toHaveBeenCalled()
+  })
+
+  it('a throwing recordDecision never breaks the cycle', async () => {
+    const recordDecision = vi.fn(() => { throw new Error('storage full') })
+    const { saved, deps } = makeDeps({ recordDecision })
+    const loop = createMonitorLoop(deps)
+    await loop.submitIdea({ kind: 'rebalance', proposed: [], currentAllocations: [] })
+    expect(saved[0]).toMatchObject({ verdict: 'keep' }) // journal still wrote → loop survived
+  })
+})

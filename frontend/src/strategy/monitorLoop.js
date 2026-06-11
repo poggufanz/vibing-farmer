@@ -15,10 +15,11 @@
  * @param {(idea:Object, allocations:Array) => Promise<string>} deps.execute            // → txHash
  * @param {(cycle:Object) => void} deps.reflect                                         // ACE reflector
  * @param {{saveCycle:(row:Object)=>void}} deps.journal
+ * @param {(ctx:Object)=>void} [deps.recordDecision]                                    // ACC decision log — keep/discard only
  * @param {number} [deps.heartbeatMs]
  * @param {(phase:string)=>void} [deps.onPhase]  // live pipeline progress for UI — never blocks the loop
  */
-export function createMonitorLoop({ getState, runGates, gates = () => ({ passed: true }), simulate, council, execute, reflect, journal, heartbeatMs = 60_000, onPhase }) {
+export function createMonitorLoop({ getState, runGates, gates = () => ({ passed: true }), simulate, council, execute, reflect, journal, recordDecision = () => {}, heartbeatMs = 60_000, onPhase }) {
   let timer = null
   let cycle = 0
   let running = false
@@ -26,6 +27,9 @@ export function createMonitorLoop({ getState, runGates, gates = () => ({ passed:
 
   // Phase reporting is observability only — a throwing listener must not kill a cycle.
   const phase = (p) => { try { onPhase?.(p) } catch { /* ignore */ } }
+
+  // Decision capture is observability — a throwing recorder must not kill a cycle.
+  const record = (ctx) => { try { recordDecision(ctx) } catch { /* ignore */ } }
 
   async function runCycle(idea) {
     cycle += 1
@@ -58,12 +62,14 @@ export function createMonitorLoop({ getState, runGates, gates = () => ({ passed:
       })
 
       if (v.verdict !== 'keep') {
+        record({ cycle, idea, state, verdict: v })
         journal.saveCycle({ cycle, phase: 'evaluate', verdict: 'discard', score: projectedReward.riskAdjustedScore, confidence: v.confidence, reason: v.reason, citedRules: v.citedRules, turbulence: state.market.turbulence })
         return
       }
 
       // keep → execute, then reflect on the real outcome (ACE).
       try {
+        record({ cycle, idea, state, verdict: v })
         phase('execute')
         const txHash = await execute(idea, allocations)
         phase('reflect')
