@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   getRules, addRule, upsertSeeds, retireRule, deleteRule, replaceAll, clearPlaybook,
+  increment, weight, getCounters,
 } from './ruleStore.js'
 
 function stubStorage() {
@@ -70,5 +71,52 @@ describe('ruleStore — records & CRUD', () => {
     localStorage.setItem('yv_playbook_v2', 'not json')
     expect(getRules()).toEqual([])
     expect(() => addRule({ id: 'z', role: 'yield', text: 't' })).not.toThrow()
+  })
+})
+
+describe('ruleStore — counters & weight', () => {
+  beforeEach(stubStorage)
+
+  it('unknown rule is neutral weight 1.0', () => {
+    upsertSeeds()
+    expect(weight('does-not-exist')).toBe(1.0)
+  })
+
+  it('increment bumps the matching record and evals; helpful raises weight', () => {
+    upsertSeeds()
+    for (let i = 0; i < 10; i++) increment('yield-uplift', 'helpful')
+    const r = getRules().find((x) => x.id === 'yield-uplift')
+    expect(r.helpful).toBe(10)
+    expect(r.evals).toBe(10)
+    const w = weight('yield-uplift')
+    expect(w).toBeGreaterThan(1.0)
+    expect(w).toBeLessThanOrEqual(1.5)
+  })
+
+  it('harmful lowers weight (floored at 0.5)', () => {
+    upsertSeeds()
+    for (let i = 0; i < 10; i++) increment('risk-calm-clear', 'harmful')
+    const w = weight('risk-calm-clear')
+    expect(w).toBeLessThan(1.0)
+    expect(w).toBeGreaterThanOrEqual(0.5)
+  })
+
+  it('a retired rule is floored to 0.5 regardless of counters', () => {
+    upsertSeeds()
+    increment('yield-uplift', 'helpful')
+    retireRule('yield-uplift')
+    expect(weight('yield-uplift')).toBe(0.5)
+  })
+
+  it('increment ignores invalid kind and unknown id without throwing', () => {
+    upsertSeeds()
+    expect(() => increment('yield-uplift', 'bogus')).not.toThrow()
+    expect(() => increment('nope', 'helpful')).not.toThrow()
+  })
+
+  it('getCounters returns the legacy {id:{helpful,harmful}} shape', () => {
+    upsertSeeds()
+    increment('yield-uplift', 'helpful')
+    expect(getCounters()['yield-uplift']).toEqual({ helpful: 1, harmful: 0 })
   })
 })

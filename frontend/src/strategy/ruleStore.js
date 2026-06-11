@@ -115,3 +115,40 @@ export function replaceAll(rules) {
 export function clearPlaybook() {
   try { localStorage.removeItem(KEY) } catch { /* ignore */ }
 }
+
+/** Bump a rule's counter. kind = 'helpful' | 'harmful'. Bumps evals. Never throws. */
+export function increment(id, kind) {
+  if (!id || (kind !== 'helpful' && kind !== 'harmful')) return
+  try {
+    const doc = read()
+    const r = doc.rules.find((x) => x.id === id)
+    if (!r) return
+    r[kind] = (r[kind] || 0) + 1
+    r.evals = (r.helpful || 0) + (r.harmful || 0)
+    write(doc)
+  } catch (err) {
+    console.warn('[RuleStore] increment failed:', err.message)
+  }
+}
+
+/**
+ * Confidence multiplier in [0.5, 1.5] from the helpful/harmful ratio (Laplace-smoothed).
+ * Unknown id → 1.0 (neutral, council always safe). Retired → 0.5 (de-emphasized).
+ */
+export function weight(id) {
+  const r = read().rules.find((x) => x.id === id)
+  if (!r) return 1.0
+  if (r.status === 'retired') return W_MIN
+  const h = r.helpful || 0
+  const x = r.harmful || 0
+  if (h + x === 0) return 1.0
+  const ratio = (h + 1) / (h + x + 2)
+  return +(W_MIN + (W_MAX - W_MIN) * ratio).toFixed(3)
+}
+
+/** Back-compat counter shape: { id: { helpful, harmful } }. */
+export function getCounters() {
+  const out = {}
+  for (const r of read().rules) out[r.id] = { helpful: r.helpful || 0, harmful: r.harmful || 0 }
+  return out
+}
