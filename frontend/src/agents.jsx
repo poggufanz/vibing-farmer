@@ -678,6 +678,11 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
   const pct = totalSteps ? (doneSteps / totalSteps) * 100 : 0;
   const allDone = doneSteps === totalSteps;
   const runningCount = strategy.agents.filter((a) => (execMap[a.id] || {}).status === "running").length;
+  const failedCount = strategy.agents.filter((a) => (execMap[a.id] || {}).status === "failed").length;
+  // Nothing running + at least one failure + not everything done = the run stalled. Without
+  // this the live banner says "waiting for relayer" forever (allDone never hits because failed
+  // workers never confirm), which is what made the stuck screen look like it was still working.
+  const stalled = runningCount === 0 && failedCount > 0 && !allDone;
 
   // Auto-advance to "done" only when execution finishes while viewing — NOT when the user
   // navigates back to an already-completed run via the step rail (would bounce to done).
@@ -717,7 +722,15 @@ const ExecuteCard = ({ strategy, execMap, paletteIsLight, onOpenMemory, onDone }
             Each worker executes the skills you approved: <span className="mono">swap → approve → deposit</span>.
             Click an agent node on the graph or a card below to open its memory panel.
           </p>
-          {!allDone && (
+          {!allDone && stalled && (
+            <div className="exec-live-status mono" style={{ color: "var(--danger, #e5484d)" }}>
+              <span>
+                {failedCount} agent{failedCount > 1 ? "s" : ""} failed — see agent card / console for reason
+                {" · "}{fmtCountdown(elapsedMs)} elapsed
+              </span>
+            </div>
+          )}
+          {!allDone && !stalled && (
             <div className="exec-live-status mono">
               <span className="think-spin" />
               <span>

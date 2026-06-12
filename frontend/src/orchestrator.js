@@ -8,6 +8,9 @@ import { USDC_SEPOLIA } from './config.js'
 // Scope window for a dispatch: agents may deposit up to their allocation, once, within the hour.
 const PERIOD_DURATION = 86400
 const SCOPE_TTL_SECONDS = 3600
+// Gap between serial worker dispatches — keeps the 1Shot relay off its rate limit so it
+// never sheds a request (429/503) and forces the user-signed MetaMask fallback to fire.
+const DISPATCH_INTERVAL_MS = 2000
 
 /**
  * Orchestrator Agent — receives Venice plan, dispatches Worker Agents in parallel.
@@ -176,27 +179,34 @@ export class OrchestratorAgent {
       workerRedelegations = null
     }
 
-    // Dispatch all workers in parallel — use Promise.allSettled so one failure doesn't abort others
+    // Dispatch workers SERIALLY — one fully completes (incl. receipt) before the next starts.
+    // Parallel dispatch spiked the 1Shot relay (3 simultaneous requests → 429/503 → every
+    // worker fell back to a user-signed MetaMask tx → 3 popups + delegated-EOA in-flight
+    // limit). Serial keeps the relay happy so the silent path holds; the 2s gap gives 1Shot
+    // and the mempool breathing room. Visually, the vis.js graph also lights up one-by-one.
     this.onEvent('orchestrator-step', { step: 'dispatching-agents', status: 'pending' })
-    const workerResults = await Promise.allSettled(
-      workers.map((worker, i) => {
-        const plan = vaultPlans[i]
-        return worker.execute().then((res) => {
-          // Worker redeemed its redelegation to execute the deposit → A2A redeem proof
-          const rd = workerRedelegations?.[i]
-          if (rd && res?.success) {
-            this.onEvent('RedelegationRedeemed', {
-              agentId: plan.agentId,
-              workerId: rd.workerId,
-              to: `worker-${rd.workerId}`,
-              txHash: res.txHash,
-              delegationHash: rd.delegationHash
-            })
-          }
-          return res
-        })
-      })
-    )
+    const workerResults = []
+    for (let i = 0; i < workers.length; i++) {
+      const plan = vaultPlans[i]
+      try {
+        const res = await workers[i].execute()
+        // Worker redeemed its redelegation to execute the deposit → A2A redeem proof
+        const rd = workerRedelegations?.[i]
+        if (rd && res?.success) {
+          this.onEvent('RedelegationRedeemed', {
+            agentId: plan.agentId,
+            workerId: rd.workerId,
+            to: `worker-${rd.workerId}`,
+            txHash: res.txHash,
+            delegationHash: rd.delegationHash,
+          })
+        }
+        workerResults.push({ status: 'fulfilled', value: res })
+      } catch (e) {
+        workerResults.push({ status: 'rejected', reason: e })
+      }
+      if (i < workers.length - 1) await new Promise((r) => setTimeout(r, DISPATCH_INTERVAL_MS))
+    }
     this.onEvent('orchestrator-step', { step: 'dispatching-agents', status: 'done' })
 
     // Aggregate results

@@ -54,3 +54,4 @@ graphify-out/
 design/agentdashboard/
 
 docs/PLAN-REVIEW-FINDINGS.md
+frontend/getUsdc.mjs

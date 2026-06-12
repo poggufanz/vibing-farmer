@@ -1029,6 +1029,11 @@ const App = () => {
                 ...cur,
                 status: "confirmed",
                 activeStep: null,
+                // The de-simulated worker only emits swap (skipped) + deposit, so the discrete
+                // "approve" step never fires — it was satisfied by the orchestrator's batched
+                // USDC approve + authorizeSessionKey. Mark it confirmed on completion so the
+                // step count reaches 3/3 (else allDone never trips → "waiting for relayer" hangs).
+                steps: { ...(cur.steps || {}), approve: "confirmed", deposit: "confirmed" },
                 memory: [...(cur.memory || []), {
                   status: "confirmed",
                   title: "agent completed",

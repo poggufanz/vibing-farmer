@@ -179,10 +179,21 @@ export async function authorizeSessionKeyOnChain(agent, vault, token, capPerPeri
  */
 export async function broadcastDepositOnChain(calldata) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
-  const signer = await ethersProvider.getSigner()
-  const tx = await signer.sendTransaction({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: calldata, gasLimit: 350000n })
-  await tx.wait()
-  return tx.hash
+  try {
+    const signer = await ethersProvider.getSigner()
+    const tx = await signer.sendTransaction({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: calldata, gasLimit: 350000n })
+    await tx.wait()
+    return tx.hash
+  } catch (err) {
+    // -32002: MetaMask refuses ALL requests while a wallet_requestExecutionPermissions (or
+    // any other) request is still pending in its service worker. Hanging here is what made
+    // the run stall silently. Fail fast with an actionable message instead.
+    const code = err?.code ?? err?.info?.error?.code
+    if (code === -32002 || /already pending|in process/i.test(err?.message || '')) {
+      throw new Error('MetaMask busy: a wallet request is already pending. Open MetaMask and resolve/close it (or restart the extension), then retry.')
+    }
+    throw err
+  }
 }
 
 /** Approve the depositor to pull `amount` USDC (Jalur B transferFrom) — user-signed.

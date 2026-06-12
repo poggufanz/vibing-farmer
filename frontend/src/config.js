@@ -6,10 +6,12 @@ export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0x79007794Eb31B6a8439C38B604827012
 export const MOCK_VAULT_ADDRESS = '0xdef19fED6Da53D3757779d27b9A2640547c30b6F'
 // Older standalone MockVault deployments — still valid ERC4626(asset=USDC) vaults, reusable
 // as AgentRegistry scope targets (the registry doesn't care which depositor deployed them).
-export const MOCK_VAULT_A_ADDRESS = '0x7791EA6F0438f30Cb8603864dc9E04E482684A52'
-export const MOCK_VAULT_B_ADDRESS = '0x7efC008FAf255f579d617EC603b4d0cbEb6Aa612'
-export const MOCK_VAULT_C_ADDRESS = '0x794204D8260d5cFD42c967056194d4CAc1397048'
-export const MOCK_VAULT_D_ADDRESS = '0x2C15ec8b4B9fD7204767EFc79ca1B6dFd2EF874A'
+// All catalog entries route to the deployed ERC-4626 MockVault v2 (asset()==USDC).
+// The old A-D MockVaults (non-4626) fail AgentRegistry.authorizeSessionKey's asset() check.
+export const MOCK_VAULT_A_ADDRESS = MOCK_VAULT_ADDRESS
+export const MOCK_VAULT_B_ADDRESS = MOCK_VAULT_ADDRESS
+export const MOCK_VAULT_C_ADDRESS = MOCK_VAULT_ADDRESS
+export const MOCK_VAULT_D_ADDRESS = MOCK_VAULT_ADDRESS
 
 // Network — Base Sepolia (84532). 1Shot Managed API supports this testnet
 // (keyless permissionless relayer is mainnet-only — see relay.js).
