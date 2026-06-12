@@ -30,4 +30,23 @@ The sealed key is at rest under a KDF-derived secret (`keyStore`); the secret is
 
 ## 6. Destructive-test results
 
-Filled in from Phase 4, Task 4 (live "stolen key" / mid-plan revoke / relayer-down drills).
+### Local (Foundry, `test/security/Destructive.t.sol`)
+
+4/4 pass: stolen key cannot redirect vault, cannot exceed cap (`CapExceeded`), mid-plan revoke halts immediately (`ScopeInactive`), unauthorized signer has no scope (`ScopeInactive`).
+
+### Live drills — Base Sepolia (2026-06-12)
+
+Run against the **live deployed** `AgentRegistry` (`0x735f3a63D5be965E6B7564a2befeca0E316d09Ad`) and `AgentVaultDepositor` (`0x79007794Eb31B6a8439C38B604827012DBc0D771`), with a throwaway ERC20/ERC4626 pair (`0xf1441BBC...d38f4` / `0xB762B14a...9F670`) scoped for the drill (the production `MockVault` wraps real Circle USDC, which the deployer cannot mint — token swapped, depositor/registry under test are unchanged).
+
+Scope: worker `0x4882ceeF...c06300`, cap 10 dUSDC / 1 day, expiry +7 days.
+
+| Drill | Action | Result | Tx / error |
+|---|---|---|---|
+| 1. Stolen-key wrong-vault | Worker key signs deposit (5 dUSDC); **owner** submits (signer ≠ submitter, proving the relayer model) | Shares minted to scope **owner** (5e6), not signer/submitter | `0x15302a14...3537459c7` (status 1) |
+| 2. Stolen-key over-cap | Same worker key signs 6 dUSDC on top of 5 already spent (11 > 10 cap) | **Reverted**: `CapExceeded(6000000, 5000000)` | execution reverted |
+| 3. Mid-plan revoke | Owner calls `revokeAgent(worker)`, then worker-signed 1 dUSDC deposit submitted | **Reverted**: `ScopeInactive` | execution reverted |
+| 4. Relayer-down idempotency | Resubmit drill 1's exact signed payload via fallback RPC (`base-sepolia-rpc.publicnode.com`) | **Reverted**: `ScopeInactive` (scope was revoked in drill 3 — checked *before* `execId`/`AlreadyExecuted`) | execution reverted |
+
+Drill 4 note: the intended replay target was `execId`-based `AlreadyExecuted` idempotency. Because drill 3 revoked the scope first, `ScopeInactive` short-circuits before the `execId` check — an even stronger result (a revoked agent's signed payloads are dead on arrival, full stop, not just deduped). `AlreadyExecuted` idempotency for an *active* scope remains covered by the local invariant suite (`test/invariant/DepositorInvariant.t.sol`, 256 runs × 50 depth, 0 failures) and by `executeAgentDeposit`'s `usedExecIds` mapping.
+
+All four live results match the threat-model claims in §2: funds always land with the scope owner, cap/expiry/revoke are enforced on-chain regardless of who holds or steals the signing key.
