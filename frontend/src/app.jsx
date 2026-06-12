@@ -43,6 +43,7 @@ import HomePage from './components/HomePage.jsx';
 import LandingHero from './components/LandingHero.jsx';
 import ExplorerPage from './components/ExplorerPage.jsx';
 import EcosystemPage from './components/EcosystemPage.jsx';
+import ReplayPage from './components/ReplayPage.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import { WalletPanel, PermissionPanel, ActivityPanel, SkillPanel, PalettePicker, PALETTES } from './components/RightRail.jsx';
 import { loadSettings, saveSetting } from './settingsStore.js';
@@ -1326,6 +1327,9 @@ const App = () => {
   }
   if (location.pathname === '/ecosystem') {
     return <EcosystemPage />;
+  }
+  if (location.pathname === '/replay') {
+    return <ReplayPage />;
   }
 
   // Landing takeover — first-time, not-yet-connected visitors see the scroll

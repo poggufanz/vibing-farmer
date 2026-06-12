@@ -33,6 +33,7 @@ export default function NavBar() {
 
   const isEcosystem = pathname === '/ecosystem'
   const isExplorer  = pathname === '/explorer'
+  const isReplay    = pathname === '/replay'
 
   return (
     <nav className="nv-bar" aria-label="Main navigation">
@@ -56,6 +57,13 @@ export default function NavBar() {
           aria-current={isExplorer ? 'page' : undefined}
         >
           Explorer
+        </button>
+        <button
+          className={`nv-link${isReplay ? ' is-active' : ''}`}
+          onClick={() => navigate('/replay')}
+          aria-current={isReplay ? 'page' : undefined}
+        >
+          Replay
         </button>
         <a className="nv-link" href={GITHUB_URL} target="_blank" rel="noreferrer noopener">Resources</a>
         <a className="nv-link" href={WHITEPAPER_URL} target="_blank" rel="noreferrer noopener">Whitepaper</a>
