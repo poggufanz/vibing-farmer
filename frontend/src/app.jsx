@@ -224,6 +224,7 @@ const App = () => {
   const [realAddress, setRealAddress] = useS(null);
   const loopRef = useR(null);
   const latestGasRef = useR(null); // last live gas snapshot { level, gwei } for the monitor loop
+  const hydratedRef = useR(null);  // address whose cached positions have finished restoring
   // Tracks which user addresses have had session key setup done (survives re-renders).
   const [loopTick, setLoopTick] = useS(0);
   const [loopPhase, setLoopPhase] = useS(null); // live pipeline phase from monitorLoop onPhase
@@ -315,6 +316,10 @@ const App = () => {
     if (Object.keys(restored).length) {
       setAgentData((d) => ({ ...d, positions: { ...restored, ...d.positions } }));
     }
+    // Mark hydrated after this render+effect flush (setTimeout 0), so the restored cache
+    // is committed before the persist effect is allowed to write an empty map. Pre-hydration
+    // empties stay skipped (anti-clobber); post-hydration empties = real withdraws → persist.
+    const hydrateTimer = setTimeout(() => { hydratedRef.current = realAddress; }, 0);
     let alive = true;
     reconcilePositionsFromChain(realAddress)
       .then((chain) => {
@@ -325,14 +330,17 @@ const App = () => {
         setAgentData((d) => ({ ...d, positions: mergePositions(d.positions, chain), lastUpdated: Date.now() }));
       })
       .catch(() => {});
-    return () => { alive = false; };
+    return () => { alive = false; clearTimeout(hydrateTimer); hydratedRef.current = null; };
   }, [realAddress]);
 
-  // Persist in-session position changes (deposits, withdraws). Skip empty pre-hydration
-  // writes so a fresh-connect {} can't clobber the cached snapshot before restore runs.
+  // Persist in-session position changes (deposits, withdraws). Pre-hydration empties are
+  // skipped so a fresh-connect {} can't clobber the cached snapshot before restore runs.
+  // Once hydrated, an empty map means a real withdraw emptied positions → MUST persist so
+  // the cache clears; otherwise a stale balance restores on the next reload/reconnect.
   useE(() => {
     if (!realAddress) return;
-    if (Object.keys(agentData.positions || {}).length === 0) return;
+    const isEmpty = Object.keys(agentData.positions || {}).length === 0;
+    if (isEmpty && hydratedRef.current !== realAddress) return;
     persistPositions(realAddress, agentData.positions);
   }, [agentData.positions, realAddress]);
 
@@ -616,6 +624,18 @@ const App = () => {
     const remaining = (strategy?.agents || []).filter((a) => positions[a.vault.addr]).map((a) => ({ address: a.vault.addr, name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }));
     if (remaining.length === 0) stopBackgroundAgent(); else updateAgentConfig({ activeVaults: remaining });
     addLog({ event: 'PermissionRevoked', meta: `withdrew ${shortAddr(vaultAddress)} · position updated`, detail: 'Position balance updated after withdraw; agent monitoring config synced.' });
+    // Optimistic subtract above can drift (partial fills, share-price). Chain = truth:
+    // applyChainPositions REPLACES balances (can move down), and a fully-withdrawn vault is
+    // absent from the chain map so it stays deleted. The persist effect writes the result,
+    // so the cache can't keep a stale balance for the next reload/reconnect.
+    if (realAddress) {
+      reconcilePositionsFromChain(realAddress)
+        .then((chain) => {
+          if (!chain) return;
+          setAgentData((d) => ({ ...d, positions: applyChainPositions(d.positions, chain), lastUpdated: Date.now() }));
+        })
+        .catch(() => {});
+    }
   };
 
   /* ----- STRATEGY (step 01) ----- */

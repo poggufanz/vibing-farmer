@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { submodules: recursive }
-      - uses: crytic/slither-action@v0
+      - uses: crytic/slither-action@v0.4.2
         with: { target: 'contracts/' }
         # config: slither.config.json filters lib/ + test/ noise (see Task 4 Step 0)
 
