@@ -22,6 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { submodules: recursive }
+      - uses: foundry-rs/foundry-toolchain@v1 # crytic-compile auto-detects foundry (root foundry.toml + lib/); needs forge on PATH
       - uses: crytic/slither-action@v0.4.2
         with: { target: 'contracts/' }
         # config: slither.config.json filters lib/ + test/ noise (see Task 4 Step 0)

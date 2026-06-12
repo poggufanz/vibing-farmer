@@ -34,8 +34,13 @@ export function persistPositions(address, positions) {
 
 /**
  * Reconcile positions against chain. Reads balanceOf + convertToAssets per unique
- * vault. Returns a positions map ({ [vaultAddr]: { vaultName, balance, unclaimedRewards } })
- * containing only non-zero balances, or null when all reads fail.
+ * vault. Returns a positions map ({ [vaultAddr]: { vaultName, balance, unclaimedRewards } }),
+ * or null when all reads fail.
+ *
+ * Successfully-read vaults are ALWAYS included — including those with balance '0'. The
+ * zero entries are how an authoritative consumer (applyChainPositions) learns a vault was
+ * fully withdrawn and must be PRUNED. A read that throws stays absent (vs. an explicit '0'),
+ * so a transient RPC failure can never be mistaken for a withdrawal.
  *
  * Reads go through the dedicated read-only provider (getReadProvider) — NEVER the
  * wallet's BrowserProvider, which throws -32603 while a wallet_* RPC is pending.
@@ -64,7 +69,8 @@ export async function reconcilePositionsFromChain(address) {
       const contract = new ethers.Contract(v.address, VAULT_ABI, provider)
       // Shares are minted to the user (receiver=user in AgentVaultDepositor.executeAgentDeposit)
       const shares = await contract.balanceOf(address)
-      if (shares === 0n) return null
+      // Explicit zero entry (not null) so authoritative consumers can prune a withdrawn vault.
+      if (shares === 0n) return [v.address, { vaultName: v.name, balance: '0', unclaimedRewards: '0' }]
       const assets = await contract.convertToAssets(shares)
       // v2 MockVault is plain ERC-4626 — yield is share-price appreciation, realized on
       // withdraw; there is no separate unclaimed-rewards balance to read.
@@ -108,14 +114,16 @@ export function mergePositions(prev, incoming) {
 }
 
 // Authoritatively apply on-chain positions over the current map: REPLACES balances for
-// returned vaults (can move down, e.g. after a withdraw) but leaves untracked vaults
+// returned vaults (can move down, e.g. after a withdraw) and DELETES any vault the chain
+// reports as '0' (fully withdrawn). Vaults absent from the chain map (read failed) are left
 // untouched. Use only when chain is proven-current — e.g. right after a Deposit/Withdraw
-// event — never for speculative/seeded values.
+// event or on cold reconnect — never for speculative/seeded values.
 export function applyChainPositions(prev, chain) {
   const positions = { ...(prev || {}) }
   for (const [addr, pos] of Object.entries(chain || {})) {
     if (!pos) continue
     const key = Object.keys(positions).find((k) => k.toLowerCase() === addr.toLowerCase()) || addr
+    if (BigInt(pos.balance || '0') === 0n) { delete positions[key]; continue }
     positions[key] = { ...positions[key], ...pos }
   }
   return positions

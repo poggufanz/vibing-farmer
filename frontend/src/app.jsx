@@ -324,10 +324,12 @@ const App = () => {
     reconcilePositionsFromChain(realAddress)
       .then((chain) => {
         if (!alive || !chain) return; // null = no RPC / all reads failed → keep cache
-        // Merge, never replace: on-chain truth updates/adds vaults but can't wipe seeded
-        // positions whose deposits are real but not yet mined (chain reads them as 0).
-        // The persist effect writes the merged result, so an empty chain can't clobber cache.
-        setAgentData((d) => ({ ...d, positions: mergePositions(d.positions, chain), lastUpdated: Date.now() }));
+        // Cold reconnect: cached positions are from a PRIOR session, so they're mined and
+        // the chain is authoritative. applyChainPositions replaces balances and PRUNES any
+        // vault the chain reports as '0' (withdrawn) — this is what heals a stale cached
+        // balance that lingered after a withdraw. Failed reads stay absent (not '0'), so a
+        // transient RPC error can't wipe a real position. The persist effect writes the result.
+        setAgentData((d) => ({ ...d, positions: applyChainPositions(d.positions, chain), lastUpdated: Date.now() }));
       })
       .catch(() => {});
     return () => { alive = false; clearTimeout(hydrateTimer); hydratedRef.current = null; };
