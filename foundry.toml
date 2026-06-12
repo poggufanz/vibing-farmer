@@ -17,6 +17,12 @@ fs_permissions = [
 [rpc_endpoints]
 base_sepolia = "${BASE_SEPOLIA_RPC}"
 eth_mainnet = "${MAINNET_RPC}"
+base_mainnet = "${BASE_MAINNET_RPC}"
 
 [etherscan]
 base_sepolia = { key = "${ETHERSCAN_API_KEY}", url = "https://api.etherscan.io/v2/api?chainid=84532" }
+
+[invariant]
+runs = 256
+depth = 50
+fail_on_revert = false

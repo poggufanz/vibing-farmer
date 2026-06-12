@@ -14,7 +14,7 @@ interface ISwapRouter {
     function exactInputSingle(ExactInputSingleParams calldata) external payable returns (uint256);
 }
 
-contract TimelineReplayTest is Test {
+contract TimelineReplayForkTest is Test {
     uint256 constant AMOUNT_IN = 1_000_000e6; // 1,000,000 USDC
 
     function test_replaySweep_writesGroundTruthJson() public {
