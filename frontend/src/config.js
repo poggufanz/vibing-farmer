@@ -1,5 +1,11 @@
-// Contract addresses — Base Sepolia (84532) deploy 2026-06-10 (session key support)
-export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0x04Af209371e62eC8432d084c6b7eAdef4804C15f'
+// Contract addresses — Base Sepolia (84532). AgentRegistry + EIP-712 AgentVaultDepositor
+// deploy 2026-06-11 (Roadmap v2 Phase 1 — deposit-only, signature-authorized).
+export const AGENT_REGISTRY_ADDRESS = '0x735f3a63D5be965E6B7564a2befeca0E316d09Ad'
+export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0x79007794Eb31B6a8439C38B604827012DBc0D771'
+// Single MockVault deployed alongside the new depositor — the demo's execution-safe target.
+export const MOCK_VAULT_ADDRESS = '0xdef19fED6Da53D3757779d27b9A2640547c30b6F'
+// Older standalone MockVault deployments — still valid ERC4626(asset=USDC) vaults, reusable
+// as AgentRegistry scope targets (the registry doesn't care which depositor deployed them).
 export const MOCK_VAULT_A_ADDRESS = '0x7791EA6F0438f30Cb8603864dc9E04E482684A52'
 export const MOCK_VAULT_B_ADDRESS = '0x7efC008FAf255f579d617EC603b4d0cbEb6Aa612'
 export const MOCK_VAULT_C_ADDRESS = '0x794204D8260d5cFD42c967056194d4CAc1397048'
@@ -26,47 +32,46 @@ export const DEEPSEEK_MODEL = 'deepseek-v4-flash'
 // Server-side AI proxy — key stays on the server (see api/ai.js). No secret in client.
 export const AI_PROXY_URL = '/api/ai'
 
-// AgentVaultDepositor ABI — only what frontend needs
+// AgentVaultDepositor ABI (EIP-712, deposit-only). Authorization is the worker key's
+// signature recovered on-chain — NOT msg.sender — so any submitter (1Shot relayer) can
+// broadcast. Scope is read from AgentRegistry; this contract holds none.
 export const DEPOSITOR_ABI = [
-  'function grantAgentPermission(bytes32 agentId, address vault, uint256 maxAmount, uint256 expiresAt) external',
-  'function setAgentCapabilities(bytes32 agentId, bool allowWithdraw, bool allowHarvest) external',
-  'function revokeAgentPermission(bytes32 agentId) external',
-  'function authorizeSessionKey(address sessionKey, uint256 expiresAt) external',
-  'function revokeSessionKey(address sessionKey) external',
-  'function sessionKeys(address user, address sessionKey) external view returns (uint256 expiresAt)',
-  'function executeAgentDeposit(bytes32 agentId, address user, address vault, uint256 amount) external',
-  'function executeWithdraw(bytes32 agentId, address user, address vault, uint256 amount) external',
-  'function executeHarvest(bytes32 agentId, address user, address vault, bool recompound) external',
-  'function attestStrategy(bytes32 strategyHash, string vaultProtocol, uint256 allocatedAmount) external',
-  'function agentPermissions(address user, bytes32 agentId) external view returns (address vault, uint256 maxAmount, uint256 usedAmount, uint256 expiresAt, bool active, bool allowWithdraw, bool allowHarvest)',
-  'event AgentStarted(bytes32 indexed agentId, address indexed user, address vault)',
-  'event SwapExecuted(bytes32 indexed agentId, address indexed user, uint256 amountIn, uint256 amountOut)',
-  'event ApproveExecuted(bytes32 indexed agentId, address indexed user, address vault, uint256 amount)',
-  'event DepositExecuted(bytes32 indexed agentId, address indexed user, address vault, uint256 amount, uint256 sharesReceived)',
-  'event AgentCompleted(bytes32 indexed agentId, address indexed user, address vault, uint256 sharesReceived)',
-  'event AgentFailed(bytes32 indexed agentId, address indexed user, string reason)',
-  'event SessionKeyAuthorized(address indexed user, address indexed sessionKey, uint256 expiresAt)',
-  'event SessionKeyRevoked(address indexed user, address indexed sessionKey)',
-  'event WithdrawExecuted(address indexed user, address vault, uint256 amount, uint256 shares)',
-  'event HarvestExecuted(address indexed user, address vault, uint256 rewards)',
-  'event HarvestRecompounded(address indexed user, address vault, uint256 rewards)',
-  'event StrategyAttested(address indexed user, bytes32 strategyHash, uint256 timestamp, string vaultProtocol, uint256 allocatedAmount)'
+  'function executeAgentDeposit(uint256 amount, uint256 minAmount, bytes32 execId, bytes sig) external returns (uint256 shares)',
+  'function hashDeposit(uint256 amount, uint256 minAmount, bytes32 execId) external view returns (bytes32)',
+  'function registry() external view returns (address)',
+  'function executed(bytes32 execId) external view returns (bool)',
+  'function reserves(address token) external view returns (uint256)',
+  'event AgentDepositExecuted(address indexed agent, address indexed owner, address indexed vault, address token, uint256 assetsIn, uint256 sharesOut, bytes32 execId)'
 ]
 
-// MockVault ABI — reads + harvest/withdraw flows for Background Agents (monitor, harvest, emergency withdraw)
+// AgentRegistry ABI — single on-chain source of truth for per-agent deposit scope.
+// authorizeSessionKey grants a scope; revokeAgent/revokeMany are user-signed kill switches.
+export const REGISTRY_ABI = [
+  'function authorizeSessionKey(address agent, address vault, address token, uint96 capPerPeriod, uint32 periodDuration, uint40 expiry) external',
+  'function revokeAgent(address agent) external',
+  'function revokeMany(address[] agents) external',
+  'function isActive(address agent) external view returns (bool)',
+  'function scopeOf(address agent) external view returns (tuple(address owner, address vault, address token, uint96 capPerPeriod, uint32 periodDuration, uint96 spentInPeriod, uint40 periodStart, uint40 expiry, bool revoked))',
+  'function scopesOfOwner(address owner) external view returns (address[])',
+  'event AgentAuthorized(address indexed owner, address indexed agent, address vault, address token, uint96 capPerPeriod, uint32 periodDuration, uint40 expiry)',
+  'event AgentRevoked(address indexed owner, address indexed agent)'
+]
+
+// MockVault ABI — plain ERC-4626 (no custom rewards/withdraw helpers in the v2 contract).
+// Positions reconcile via the 4626 standard (balanceOf + convertToAssets). User-signed
+// withdraw uses the standard redeem(shares, receiver, owner). apyBps is our only extension.
 export const VAULT_ABI = [
   'function apyBps() external view returns (uint256)',
+  'function asset() external view returns (address)',
   'function balanceOf(address account) external view returns (uint256)',
   'function totalAssets() external view returns (uint256)',
-  'function convertToAssets(uint256 shares) external pure returns (uint256)',
-  'function depositTimestamp(address user) external view returns (uint256)',
-  'function getUnclaimedRewards(address user) external view returns (uint256)',
-  'function claimRewards(address user) external returns (uint256)',
-  'function withdrawAssets(uint256 assets, address receiver, address owner) external returns (uint256)',
-  'event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares)',
-  'event Withdraw(address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares)',
-  'event RewardsClaimed(address indexed user, uint256 amount)',
-  'event YieldAccrued(address indexed user, uint256 amount)'
+  'function convertToAssets(uint256 shares) external view returns (uint256)',
+  'function convertToShares(uint256 assets) external view returns (uint256)',
+  'function maxWithdraw(address owner) external view returns (uint256)',
+  'function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares)',
+  'function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets)',
+  'event Deposit(address indexed sender, address indexed owner, uint256 assets, uint256 shares)',
+  'event Withdraw(address indexed sender, address indexed receiver, address indexed owner, uint256 assets, uint256 shares)'
 ]
 
 // Vault catalog — enriched metadata so the AI advisor can reason, not just split.

@@ -1,5 +1,8 @@
 import { ethers } from 'ethers'
-import { SEPOLIA_CHAIN_ID_HEX, AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, VAULT_ABI, USDC_SEPOLIA } from './config.js'
+import {
+  SEPOLIA_CHAIN_ID_HEX, AGENT_VAULT_DEPOSITOR_ADDRESS, AGENT_REGISTRY_ADDRESS,
+  DEPOSITOR_ABI, REGISTRY_ABI, VAULT_ABI, USDC_SEPOLIA,
+} from './config.js'
 import { requireFlask } from './flaskDetect.js'
 import { getReadProvider } from './readProvider.js'
 import { prepareSessionAccount, saveSessionGrant } from './strategy/session.js'
@@ -148,66 +151,113 @@ export async function requestERC7715Permission(expirySeconds = 86400) {
 }
 
 /**
- * Call grantAgentPermission on AgentVaultDepositor directly (user signs tx).
- * @param {string} agentId - bytes32 hex string
- * @param {string} vault - vault address
- * @param {bigint} maxAmount - max deposit amount in wei/units
- * @param {number} expiresAt - unix timestamp
+ * Authorize a worker key (agent) in AgentRegistry — user-signed. Grants ONE scope:
+ * (vault, token, capPerPeriod, periodDuration, expiry). One agent key = one scope forever.
+ * @param {string} agent - worker key address (EIP-712 signer the depositor will recover)
+ * @param {string} vault - ERC-4626 vault address
+ * @param {string} token - underlying asset (USDC)
+ * @param {bigint} capPerPeriod - uint96 max spend per period (units)
+ * @param {number} periodDuration - uint32 seconds
+ * @param {number} expiry - uint40 unix timestamp
  * @returns {Promise<string>} tx hash
  */
-export async function grantAgentPermissionOnChain(agentId, vault, maxAmount, expiresAt) {
+export async function authorizeSessionKeyOnChain(agent, vault, token, capPerPeriod, periodDuration, expiry) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
   const signer = await ethersProvider.getSigner()
-  const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, signer)
-  const tx = await contract.grantAgentPermission(agentId, vault, maxAmount, expiresAt)
+  const registry = new ethers.Contract(AGENT_REGISTRY_ADDRESS, REGISTRY_ABI, signer)
+  const tx = await registry.authorizeSessionKey(agent, vault, token, capPerPeriod, periodDuration, expiry)
   await tx.wait()
   return tx.hash
 }
 
 /**
- * Call executeAgentDeposit on AgentVaultDepositor directly (user signs tx).
- * @param {string} agentId - bytes32 hex
- * @param {string} user - permission owner address
- * @param {string} vault - vault address
- * @param {bigint} amount - deposit amount in units
+ * Broadcast an already-signed executeAgentDeposit calldata (user pays gas). The EIP-712
+ * worker signature inside `calldata` is the authorization — msg.sender is irrelevant — so
+ * the user's wallet broadcasting is just as valid as the relayer doing it.
+ * @param {string} calldata - encoded executeAgentDeposit(amount,minAmount,execId,sig)
  * @returns {Promise<string>} tx hash
  */
-export async function executeAgentDepositOnChain(agentId, user, vault, amount) {
+export async function broadcastDepositOnChain(calldata) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
   const signer = await ethersProvider.getSigner()
-  const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, signer)
-  const tx = await contract.executeAgentDeposit(agentId, user, vault, amount)
+  const tx = await signer.sendTransaction({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: calldata, gasLimit: 350000n })
   await tx.wait()
   return tx.hash
 }
 
-// Background-agent actions. Explicit gasLimit — MetaMask under-estimates these (the
-// dependent grant/caps are applied in a prior tx), which caused on-chain OutOfGas.
-export async function executeWithdrawOnChain(agentId, user, vault, amount) {
+/** Approve the depositor to pull `amount` USDC (Jalur B transferFrom) — user-signed.
+ *  Used as the non-batched fallback when the wallet lacks EIP-5792. */
+export async function approveDepositorOnChain(amount) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
   const signer = await ethersProvider.getSigner()
-  const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, signer)
-  const tx = await contract.executeWithdraw(agentId, user, vault, amount, { gasLimit: 300000n })
+  const erc20 = new ethers.Contract(USDC_SEPOLIA, ['function approve(address spender, uint256 amount) returns (bool)'], signer)
+  const tx = await erc20.approve(AGENT_VAULT_DEPOSITOR_ADDRESS, BigInt(amount))
   await tx.wait()
   return tx.hash
 }
 
-export async function executeHarvestOnChain(agentId, user, vault, recompound) {
+/** Revoke a single agent scope — user-signed AgentRegistry.revokeAgent. Works even if the
+ *  relayer is down (purely protective; the headline "user can revoke any time" rests on it). */
+export async function revokeAgentDirect(agent) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
   const signer = await ethersProvider.getSigner()
-  const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, signer)
-  const tx = await contract.executeHarvest(agentId, user, vault, recompound, { gasLimit: 300000n })
+  const registry = new ethers.Contract(AGENT_REGISTRY_ADDRESS, REGISTRY_ABI, signer)
+  const tx = await registry.revokeAgent(agent)
   await tx.wait()
   return tx.hash
 }
 
-/** Read a vault's on-chain depositTimestamp for a user (unix secs, 0 if none/unavailable). */
-export async function readVaultDepositTimestamp(vault, user) {
-  if (!ethersProvider) return 0
+/** Revoke many agent scopes in one user-signed tx — AgentRegistry.revokeMany. */
+export async function revokeManyDirect(agents) {
+  if (!ethersProvider) throw new Error('Wallet not connected.')
+  const signer = await ethersProvider.getSigner()
+  const registry = new ethers.Contract(AGENT_REGISTRY_ADDRESS, REGISTRY_ABI, signer)
+  const tx = await registry.revokeMany(agents)
+  await tx.wait()
+  return tx.hash
+}
+
+/** Read an agent's full scope from AgentRegistry (or null on failure). */
+export async function readScope(agent) {
   try {
-    const contract = new ethers.Contract(vault, VAULT_ABI, getReadProvider())
-    return Number(await contract.depositTimestamp(user))
-  } catch { return 0 }
+    const registry = new ethers.Contract(AGENT_REGISTRY_ADDRESS, REGISTRY_ABI, getReadProvider())
+    const s = await registry.scopeOf(agent)
+    return {
+      owner: s.owner, vault: s.vault, token: s.token,
+      capPerPeriod: s.capPerPeriod, periodDuration: Number(s.periodDuration),
+      spentInPeriod: s.spentInPeriod, periodStart: Number(s.periodStart),
+      expiry: Number(s.expiry), revoked: s.revoked,
+    }
+  } catch { return null }
+}
+
+/** User-signed ERC-4626 withdraw of `assets` (token units) from `vault` to the user.
+ *  The user owns the shares (deposit minted them to the owner), so this is a direct tx.
+ *  Returns { txHash, status }. */
+export async function withdrawFromVaultOnChain(vault, assets, user) {
+  if (!ethersProvider) throw new Error('Wallet not connected.')
+  const signer = await ethersProvider.getSigner()
+  const contract = new ethers.Contract(vault, VAULT_ABI, signer)
+  const tx = await contract.withdraw(BigInt(assets), user, user, { gasLimit: 300000n })
+  await tx.wait()
+  return { txHash: tx.hash, status: 'onchain' }
+}
+
+/** User-signed ERC-4626 redeem of `shares` from `vault` back to the user (owner == receiver).
+ *  The v2 MockVault is plain ERC-4626: no relayer/session-key withdraw path, so withdraw is
+ *  always a direct user tx (the user owns the shares). Returns { txHash, status }. */
+export async function redeemFromVaultOnChain(vault, shares, user) {
+  if (!ethersProvider) throw new Error('Wallet not connected.')
+  const signer = await ethersProvider.getSigner()
+  const contract = new ethers.Contract(vault, VAULT_ABI, signer)
+  const tx = await contract.redeem(BigInt(shares), user, user, { gasLimit: 300000n })
+  await tx.wait()
+  return { txHash: tx.hash, status: 'onchain' }
+}
+
+/** The v2 MockVault has no depositTimestamp — kept as a 0-stub so UI callers don't break. */
+export async function readVaultDepositTimestamp() {
+  return 0
 }
 
 /**
@@ -247,28 +297,18 @@ export async function batchCalls(calls) {
 }
 
 /**
- * Read agentPermission from contract.
- * @param {string} userAddress
- * @param {string} agentId - bytes32 hex
- * @returns {Promise<{vault, maxAmount, usedAmount, expiresAt, active}>}
- */
-export async function readAgentPermission(userAddress, agentId) {
-  if (!ethersProvider) throw new Error('Wallet not connected.')
-  const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, getReadProvider())
-  const [vault, maxAmount, usedAmount, expiresAt, active] =
-    await contract.agentPermissions(userAddress, agentId)
-  return { vault, maxAmount, usedAmount, expiresAt, active }
-}
-
-/**
- * Subscribe to contract events and call callback on each.
- * @param {string} eventName - 'AgentStarted' | 'DepositExecuted' | 'AgentCompleted' | 'AgentFailed'
- * @param {function} callback - (event) => void
+ * Subscribe to an on-chain event and call callback on each. Routes to the right contract:
+ * AgentAuthorized / AgentRevoked → AgentRegistry; AgentDepositExecuted → AgentVaultDepositor.
+ * @param {string} eventName
+ * @param {function} callback - (...args, event) => void (ethers v6 listener signature)
  * @returns {function} unsubscribe function
  */
 export async function onContractEvent(eventName, callback) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
-  const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, ethersProvider)
+  const isRegistry = eventName === 'AgentAuthorized' || eventName === 'AgentRevoked'
+  const contract = isRegistry
+    ? new ethers.Contract(AGENT_REGISTRY_ADDRESS, REGISTRY_ABI, ethersProvider)
+    : new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, ethersProvider)
   contract.on(eventName, callback)
   return () => contract.off(eventName, callback)
 }
@@ -315,59 +355,3 @@ export async function signSiweForVenice(address) {
   }))
 }
 
-/**
- * One-time setup for zero-popup autonomous monitor loop.
- * Bundles into a SINGLE EIP-5792 batch (1 MetaMask popup):
- *   - grantAgentPermission for each vault's background agent
- *   - setAgentCapabilities (allowWithdraw + allowHarvest) for each
- *   - authorizeSessionKey(serverWalletAddress, expiry)
- *
- * After this, all harvest/withdraw calls go through the managed relay
- * with the server wallet as msg.sender — zero MetaMask popups.
- *
- * @param {string[]} vaultAddresses - vaults to set up bg agents for
- * @param {string} serverWalletAddress - the 1Shot relayer wallet address
- * @param {number} expirySeconds - session key duration in seconds (default 30 days)
- * @returns {Promise<string>} batch tx hash
- */
-export async function setupBgAgentsWithSessionKey(vaultAddresses, serverWalletAddress, expirySeconds = 86400 * 30) {
-  if (!ethersProvider) throw new Error('Wallet not connected.')
-  if (!serverWalletAddress || !/^0x[0-9a-fA-F]{40}$/.test(serverWalletAddress)) {
-    throw new Error('Invalid server wallet address')
-  }
-
-  const iface = new ethers.Interface([
-    'function grantAgentPermission(bytes32 agentId, address vault, uint256 maxAmount, uint256 expiresAt)',
-    'function setAgentCapabilities(bytes32 agentId, bool allowWithdraw, bool allowHarvest)',
-    'function authorizeSessionKey(address sessionKey, uint256 expiresAt)',
-  ])
-
-  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + expirySeconds)
-  // Nominal cap — bg agents never consume usedAmount for withdraw/harvest.
-  // Just needs to be > 0 so the permission is considered active.
-  const BG_MAX = 1_000_000_000_000n
-
-  const calls = []
-
-  for (const vault of vaultAddresses) {
-    const agentId = ethers.id('yv-bg-' + vault.toLowerCase())
-    calls.push({
-      to: AGENT_VAULT_DEPOSITOR_ADDRESS,
-      data: iface.encodeFunctionData('grantAgentPermission', [agentId, vault, BG_MAX, expiresAt]),
-    })
-    calls.push({
-      to: AGENT_VAULT_DEPOSITOR_ADDRESS,
-      data: iface.encodeFunctionData('setAgentCapabilities', [agentId, true, true]),
-    })
-  }
-
-  // Authorize the server wallet as session key (once, covers all vaults)
-  calls.push({
-    to: AGENT_VAULT_DEPOSITOR_ADDRESS,
-    data: iface.encodeFunctionData('authorizeSessionKey', [serverWalletAddress, expiresAt]),
-  })
-
-  const txHash = await batchCalls(calls)
-  if (!txHash) throw new Error('Wallet lacks EIP-5792 batch support — cannot set up session key')
-  return txHash
-}

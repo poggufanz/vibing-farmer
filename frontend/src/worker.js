@@ -1,108 +1,108 @@
-import { relayGrantPermission, relayDeposit } from './relay.js'
+import { ethers } from 'ethers'
+import {
+  relayDeposit, computeExecId, signDeposit, DEPOSIT_DOMAIN, DEPOSIT_TYPES,
+} from './relay.js'
+import { authorizeSessionKeyOnChain } from './wallet.js'
 import { writeMemory, createEntry, buildLesson } from './memory.js'
-import { loadSkill } from './skills.js'
 import { generateWorkerKey, newSalt, deriveSecret, sealKey, openKey, zeroize } from './strategy/keyVault.js'
 import { createKeyStore } from './strategy/keyStore.js'
 import { createGasSnapshotProvider } from './strategy/gasFeeProvider.js'
 import { createSubmitGate } from './strategy/submitGate.js'
 import { getReadProvider } from './readProvider.js'
+import { SEPOLIA_CHAIN_ID, AGENT_VAULT_DEPOSITOR_ADDRESS, USDC_SEPOLIA } from './config.js'
 
-// Rough upper bound for executeAgentDeposit gas cost; refined once Phase 5 wires real estimateGas.
+// Rough upper bound for executeAgentDeposit gas cost; refined once real estimateGas is wired.
 const EST_DEPOSIT_GAS = 150_000n
 
 /**
- * Worker Agent — executes full Swap→Approve→Deposit for one vault.
- * Emits events for graph updates via onEvent callback.
+ * Worker Agent — executes a single scoped deposit for one vault.
+ *
+ * Roadmap v2 model: the worker holds an ephemeral KEY (the on-chain "agent"). It signs an
+ * EIP-712 AgentDeposit; the depositor recovers the signer and reads its scope from
+ * AgentRegistry. The scope itself is granted up-front (user-signed authorizeSessionKey,
+ * batched by the orchestrator) — the worker NEVER moves the user's funds without that
+ * pre-authorized, capped, expiring scope.
  */
 export class WorkerAgent {
   /**
    * @param {object} config
-   * @param {string} config.agentId - bytes32 hex (0x...)
-   * @param {string} config.user - user address
+   * @param {string} config.user - scope owner (the user) address
    * @param {string} config.vault - vault address
    * @param {bigint} config.amount - deposit amount (uint256 units)
-   * @param {string} config.permissionContext - from ERC-7715
    * @param {string} config.sessionId
-   * @param {function} config.onEvent - (eventName, data) => void
-   * @param {string} [config.sessionPassphrase] - session passphrase for the per-worker key vault.
-   *   When omitted, key-setup and signing-site steps are honestly marked 'skipped'.
-   * @param {bigint} [config.expectedBenefitWei] - per-step yield estimate for the economic gate.
-   * @param {object} [config.keyStore] - injectable keyStore (defaults to createKeyStore())
-   * @param {object} [config.submitGate] - injectable submitGate (defaults to createSubmitGate())
-   * @param {object} [config.gasSnapshot] - injectable gas snapshot provider
+   * @param {function} config.onEvent
+   * @param {number} config.planId - numeric plan id (execId determinism)
+   * @param {number} config.step - this worker's step index (execId uniqueness)
+   * @param {bigint} [config.minAmount] - received-delta floor (defaults to amount: USDC→USDC, no fee)
+   * @param {boolean} [config.scopeAuthorized] - true when the orchestrator already batched authorizeSessionKey
+   * @param {bigint} [config.capPerPeriod] - uint96 cap for the self-authorize fallback
+   * @param {number} [config.periodDuration] - uint32 seconds for the self-authorize fallback
+   * @param {number} [config.expiry] - uint40 expiry for the self-authorize fallback
+   * @param {string} [config.agentAddress] - pre-generated worker key address (skip key gen)
+   * @param {string} [config.sessionPassphrase] - seals the ephemeral key at rest (keyVault)
+   * @param {bigint} [config.expectedBenefitWei] - per-step yield estimate for the economic gate
+   * @param {object} [config.keyStore] @param {object} [config.submitGate] @param {object} [config.gasSnapshot]
    */
   constructor({
-    agentId, user, vault, amount, permissionContext, sessionId, onEvent, batchedHash, grantsBatched,
+    agentId, user, vault, amount, sessionId, onEvent, planId, step, minAmount,
+    scopeAuthorized, capPerPeriod, periodDuration, expiry, agentAddress,
     sessionPassphrase, expectedBenefitWei, keyStore, submitGate, gasSnapshot,
   }) {
     this.agentId = agentId
     this.user = user
     this.vault = vault
-    this.amount = amount
-    this.permissionContext = permissionContext
+    this.amount = BigInt(amount)
+    this.minAmount = minAmount != null ? BigInt(minAmount) : BigInt(amount)
     this.sessionId = sessionId
     this.onEvent = onEvent || (() => {})
-    this.batchedHash = batchedHash || null   // full batch: skip grant + deposit
-    this.grantsBatched = grantsBatched || false // hybrid: skip grant only, relay deposit
+    this.planId = planId ?? 0
+    this.step = step ?? 0
+    this.scopeAuthorized = scopeAuthorized || false
+    this.capPerPeriod = capPerPeriod != null ? BigInt(capPerPeriod) : this.amount
+    this.periodDuration = periodDuration ?? 86400
+    this.expiry = expiry ?? (Math.floor(Date.now() / 1000) + 3600)
     this.memoryEntries = []
 
-    // Ops-security wiring (Phase 2): per-worker ephemeral key + pre-submit circuit breaker.
+    // Ops-security wiring: per-worker ephemeral key + pre-submit circuit breaker.
     this.sessionPassphrase = sessionPassphrase || null
     this.expectedBenefitWei = expectedBenefitWei ?? null
     this.keyStore = keyStore || createKeyStore()
     this.submitGate = submitGate || createSubmitGate()
     this.gasSnapshot = gasSnapshot || createGasSnapshotProvider({ provider: getReadProvider() })
-    this.keyAddress = null
+    this.keyAddress = agentAddress || null
+    this._ephemeralKey = null // in-memory pk when no passphrase store is configured
   }
 
   /**
-   * Execute full agent flow.
-   * @returns {Promise<{success: boolean, txHash?: string, error?: string, shares?: bigint, status?: string, step?: string, reason?: string}>}
+   * Full agent flow. Key is generated at plan time (setupKey), opened only at the sign site.
+   * @returns {Promise<{success: boolean, txHash?: string, error?: string, status?: string, step?: string, reason?: string}>}
    */
   async execute() {
     try {
       this.emit('started', { agentId: this.agentId, vault: this.vault })
 
-      // Step 0: per-worker ephemeral key — generated + sealed at plan time (keyVault + keyStore).
+      // Step 0: per-worker ephemeral key — generated + (optionally) sealed at plan time.
       await this.setupKey()
 
-      // Step 1: Grant on-chain permission (skipped when already batched by the orchestrator)
-      if (!this.batchedHash && !this.grantsBatched) {
-        this.emit('step', { agentId: this.agentId, step: 'grant-permission', status: 'pending' })
-        const expiresAt = Math.floor(Date.now() / 1000) + 3600
-        const grantResult = await relayGrantPermission({
-          agentId: this.agentId,
-          vault: this.vault,
-          maxAmount: this.amount,
-          expiresAt,
-          permissionContext: this.permissionContext
-        })
-        this.memoryEntries.push(createEntry('grant', 'success', { txHash: grantResult.txHash }))
-        this.emit('step', { agentId: this.agentId, step: 'grant-permission', status: 'done', txHash: grantResult.txHash })
+      // Step 1: ensure the worker key is scoped on-chain. Normally the orchestrator
+      // batched authorizeSessionKey into ONE user popup; if not, fall back to a single
+      // user-signed authorize for this key.
+      if (!this.scopeAuthorized) {
+        this.emit('step', { agentId: this.agentId, step: 'authorize-scope', status: 'pending' })
+        const txHash = await authorizeSessionKeyOnChain(
+          this.keyAddress, this.vault, USDC_SEPOLIA,
+          this.capPerPeriod, this.periodDuration, this.expiry,
+        )
+        this.memoryEntries.push(createEntry('authorize', 'success', { txHash, agent: this.keyAddress }))
+        this.emit('step', { agentId: this.agentId, step: 'authorize-scope', status: 'done', txHash })
       }
 
-      // Step 2: Swap — for our USDC→USDC MockVault there is no token conversion.
-      // Honest: mark skipped. (On-chain, executeAgentDeposit still emits a 1:1
-      // SwapExecuted event atomically with the deposit; no separate swap tx exists.)
-      const swapNeeded = false // tokenIn === tokenOut for MockVault
+      // Step 2: Swap — USDC→USDC MockVault has no token conversion. Honestly skipped.
       this.emit('step', { agentId: this.agentId, step: 'swap', status: 'pending' })
-      if (swapNeeded) {
-        // Reserved for real tokenIn !== tokenOut routing (Uniswap V3) — not used by MockVault.
-        this.memoryEntries.push(createEntry('swap', 'success', { amountIn: this.amount.toString(), amountOut: this.amount.toString() }))
-        this.emit('step', { agentId: this.agentId, step: 'swap', status: 'done' })
-      } else {
-        this.memoryEntries.push(createEntry('swap', 'skipped', { reason: 'USDC→USDC: no swap required' }))
-        this.emit('step', { agentId: this.agentId, step: 'swap', status: 'skipped', reason: 'USDC→USDC: no swap required' })
-      }
-
-      // Step 3: Approve — no real ERC20 approve exists (MockVault is pure-accounting;
-      // executeAgentDeposit never calls transferFrom). The ApproveExecuted event is
-      // emitted on-chain ATOMICALLY inside the deposit tx, so we resolve this step
-      // from the real deposit tx hash AFTER the deposit returns (below).
-      this.emit('step', { agentId: this.agentId, step: 'approve', status: 'pending' })
+      this.memoryEntries.push(createEntry('swap', 'skipped', { reason: 'USDC→USDC: no swap required' }))
+      this.emit('step', { agentId: this.agentId, step: 'swap', status: 'skipped', reason: 'USDC→USDC: no swap required' })
 
       // Step 3.5: Pre-submit circuit breaker — gas freshness + economic + rate-anomaly gate.
-      // Soft check; the hard stop is AgentVaultDepositor.pause() on-chain.
       const gateResult = await this.checkSubmitGate()
       if (!gateResult.ok) {
         this.memoryEntries.push(createEntry('deposit', 'skipped', { reason: gateResult.reason }))
@@ -116,45 +116,33 @@ export class WorkerAgent {
         return { success: false, status: 'skipped', step: 'deposit', reason: gateResult.reason }
       }
 
-      // Step 3.6: Open the ephemeral key at the EIP-712 sign site — and only here.
-      await this.signAtSubmitSite()
+      // Step 4: Sign the EIP-712 AgentDeposit at the submit site, then submit.
+      this.emit('step', { agentId: this.agentId, step: 'sign', status: 'pending' })
+      const execId = computeExecId({ owner: this.user, vault: this.vault, planId: this.planId, step: this.step })
+      const sig = await this.signAtSubmitSite(execId)
+      this.memoryEntries.push(createEntry('sign', 'done', { execId }))
+      this.emit('step', { agentId: this.agentId, step: 'sign', status: 'done', execId })
 
-      // Step 4: Deposit — batched (already on-chain) or via relay
       this.emit('step', { agentId: this.agentId, step: 'deposit', status: 'pending' })
-      const depositResult = (this.batchedHash && !this.grantsBatched)
-        ? { txHash: this.batchedHash, status: 'onchain' }
-        : await relayDeposit({
-            agentId: this.agentId,
-            user: this.user,
-            vault: this.vault,
-            amount: this.amount,
-            permissionContext: this.permissionContext
-          })
+      const depositResult = await relayDeposit({
+        amount: this.amount, minAmount: this.minAmount, execId, sig,
+      })
       const gasMethod = depositResult.status === 'onchain' ? 'user-signed' : 'relayer'
-
-      // Resolve approve from the real deposit tx (ApproveExecuted emitted in the same tx).
-      this.memoryEntries.push(createEntry('approve', 'success', { txHash: depositResult.txHash, note: 'emitted on-chain in deposit tx' }))
-      this.emit('step', { agentId: this.agentId, step: 'approve', status: 'done', txHash: depositResult.txHash })
 
       const lesson = buildLesson(this.vault, { shares: this.amount.toString() })
       this.memoryEntries.push(createEntry('deposit', 'success', { txHash: depositResult.txHash, gasMethod }, lesson))
       this.emit('step', {
         agentId: this.agentId, step: 'deposit', status: 'done',
-        txHash: depositResult.txHash, gasMethod, relayer: depositResult.relayer || null
+        txHash: depositResult.txHash, gasMethod, relayer: depositResult.relayer || null,
       })
 
-      // Write memory
       writeMemory(this.agentId, this.sessionId, this.vault, this.memoryEntries)
       this.emit('completed', {
-        agentId: this.agentId,
-        vault: this.vault,
-        txHash: depositResult.txHash,
-        gasMethod,
-        relayer: depositResult.relayer || null
+        agentId: this.agentId, vault: this.vault, txHash: depositResult.txHash,
+        gasMethod, relayer: depositResult.relayer || null,
       })
 
       return { success: true, txHash: depositResult.txHash }
-
     } catch (err) {
       const lesson = buildLesson(this.vault, { error: err.message })
       this.memoryEntries.push(createEntry('deposit', 'failed', {}, lesson))
@@ -165,32 +153,35 @@ export class WorkerAgent {
   }
 
   /**
-   * Generate + seal a fresh ephemeral worker key (keyVault) and persist the
-   * sealed blob (keyStore). One key per worker, never a master key.
-   * Without a session passphrase there is nothing to derive the at-rest
-   * secret from, so this is honestly marked 'skipped' rather than faked.
+   * Generate the ephemeral worker key (the on-chain agent identity). With a session
+   * passphrase the key is sealed at rest (keyVault + keyStore) and re-opened only at the
+   * sign site; without one it stays in memory for this page-load only (same ephemeral
+   * rationale as the ERC-7710 session key). Idempotent if agentAddress was pre-supplied.
    */
   async setupKey() {
     this.emit('step', { agentId: this.agentId, step: 'key-setup', status: 'pending' })
-
-    if (!this.sessionPassphrase) {
-      this.memoryEntries.push(createEntry('key-setup', 'skipped', { reason: 'no session passphrase configured' }))
-      this.emit('step', { agentId: this.agentId, step: 'key-setup', status: 'skipped', reason: 'no session passphrase configured' })
-      return
+    if (this.keyAddress && (this._ephemeralKey || this.sessionPassphrase)) {
+      this.emit('step', { agentId: this.agentId, step: 'key-setup', status: 'done', address: this.keyAddress })
+      return this.keyAddress
     }
 
     const { privateKey, address } = await generateWorkerKey()
-    const salt = await newSalt()
-    const secret = await deriveSecret(this.sessionPassphrase, salt)
-    const sealed = await sealKey(privateKey, secret)
-    await this.keyStore.put(address, { sealed, salt })
-    zeroize(secret)
-    // TODO(phase5): authorize `address` on-chain via AgentRegistry.authorizeSessionKey(...)
-    // so the relayer-broadcast EIP-712 deposit signed by this key is accepted.
-
     this.keyAddress = address
+
+    if (this.sessionPassphrase) {
+      const salt = await newSalt()
+      const secret = await deriveSecret(this.sessionPassphrase, salt)
+      const sealed = await sealKey(privateKey, secret)
+      await this.keyStore.put(address, { sealed, salt })
+      zeroize(secret)
+    } else {
+      // No passphrase → no at-rest store. Hold the key in memory for this session only.
+      this._ephemeralKey = privateKey
+    }
+
     this.memoryEntries.push(createEntry('key-setup', 'success', { address }))
     this.emit('step', { agentId: this.agentId, step: 'key-setup', status: 'done', address })
+    return address
   }
 
   /**
@@ -211,23 +202,30 @@ export class WorkerAgent {
   }
 
   /**
-   * Open the sealed ephemeral key at the EIP-712 sign site — and only here.
-   * No-op if setupKey() was skipped (no session passphrase).
+   * Open the sealed (or in-memory) ephemeral key, sign the EIP-712 AgentDeposit digest, and
+   * drop the key reference. The signature — not msg.sender — is the on-chain authorization.
+   * @param {string} execId
+   * @returns {Promise<string>} 0x signature
    */
-  async signAtSubmitSite() {
-    if (!this.keyAddress) return
+  async signAtSubmitSite(execId) {
+    let pk = this._ephemeralKey
+    if (!pk && this.sessionPassphrase) {
+      const { sealed, salt } = await this.keyStore.get(this.keyAddress)
+      const secret = await deriveSecret(this.sessionPassphrase, salt)
+      pk = await openKey(sealed, secret)
+      zeroize(secret)
+    }
+    if (!pk) throw new Error('worker key unavailable — setupKey did not run')
 
-    this.emit('step', { agentId: this.agentId, step: 'sign', status: 'pending' })
-    const { sealed, salt } = await this.keyStore.get(this.keyAddress)
-    const secret = await deriveSecret(this.sessionPassphrase, salt)
-    const pk = await openKey(sealed, secret)
-    // TODO(phase5): const sig = await signDeposit(pk, digest) — sign the AgentDeposit
-    // EIP-712 digest with `pk`, then pass `sig` into the relayer submission.
-    zeroize(secret)
-    void pk // immutable hex string — cannot be zeroized; drop reference immediately
-
-    this.memoryEntries.push(createEntry('sign', 'done', { note: 'TODO(phase5): signDeposit not yet wired' }))
-    this.emit('step', { agentId: this.agentId, step: 'sign', status: 'done', note: 'TODO(phase5): signDeposit' })
+    const wallet = new ethers.Wallet(pk)
+    // ethers v6 signTypedData(domain, types, value) — types must NOT include EIP712Domain.
+    const sig = await wallet.signTypedData(
+      DEPOSIT_DOMAIN(SEPOLIA_CHAIN_ID, AGENT_VAULT_DEPOSITOR_ADDRESS),
+      DEPOSIT_TYPES,
+      { amount: this.amount, minAmount: this.minAmount, execId },
+    )
+    pk = null // immutable hex string — drop the reference immediately
+    return sig
   }
 
   emit(eventName, data) {
@@ -236,15 +234,19 @@ export class WorkerAgent {
 }
 
 /**
- * Generate a deterministic bytes32 agentId from index + session.
- * @param {number} index
- * @param {string} sessionId
+ * Generate a deterministic bytes32 agentId from index + session (UI/graph identity).
+ * @param {number} index @param {string} sessionId
  * @returns {string} 0x... bytes32 hex
  */
 export function makeAgentId(index, sessionId) {
   const raw = `agent-${index}-${sessionId}`
-  // Simple deterministic hash: encode as hex padded to 32 bytes
   const bytes = new TextEncoder().encode(raw)
   const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
   return '0x' + hex.slice(0, 64).padEnd(64, '0')
+}
+
+/** Deterministic numeric planId from a sessionId — stable across retries for execId. */
+export function makePlanId(sessionId) {
+  const h = ethers.id(String(sessionId))
+  return BigInt(h) % 1_000_000_007n
 }

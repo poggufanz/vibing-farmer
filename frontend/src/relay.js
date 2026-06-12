@@ -1,79 +1,147 @@
-import { ethers } from 'ethers'
-import { ONE_SHOT_RELAYER_URL, AGENT_VAULT_DEPOSITOR_ADDRESS, SEPOLIA_CHAIN_ID } from './config.js'
-import { grantAgentPermissionOnChain, executeAgentDepositOnChain } from './wallet.js'
+// relay.js — encode/sign/submit for the EIP-712 deposit-only AgentVaultDepositor.
+//
+// Authorization model (Roadmap v2): the WORKER KEY signs an EIP-712 AgentDeposit;
+// the contract recovers the signer and reads its scope from AgentRegistry. msg.sender
+// is irrelevant, so ANY submitter (the 1Shot managed relayer, or the user's own wallet)
+// can broadcast the call. Scope is granted up-front via AgentRegistry.authorizeSessionKey
+// (user-signed, batched) + a USDC approve to the depositor so its transferFrom succeeds.
 
-/**
- * Encode calldata for executeAgentDeposit.
- * Uses ethers.js v6 ABI encoding.
- * @param {string} agentId - bytes32 hex (0x...)
- * @param {string} user - address
- * @param {string} vault - address
- * @param {bigint} amount - uint256
- * @returns {Promise<string>} hex calldata
- */
-export async function encodeExecuteAgentDeposit(agentId, user, vault, amount) {
-  const iface = new ethers.Interface([
-    'function executeAgentDeposit(bytes32 agentId, address user, address vault, uint256 amount)'
-  ])
-  return iface.encodeFunctionData('executeAgentDeposit', [agentId, user, vault, amount])
-}
+import {
+  encodeFunctionData, keccak256, encodeAbiParameters, parseAbiParameters,
+} from 'viem'
+import {
+  AGENT_VAULT_DEPOSITOR_ADDRESS, AGENT_REGISTRY_ADDRESS, SEPOLIA_CHAIN_ID, USDC_SEPOLIA,
+} from './config.js'
+import { broadcastDepositOnChain } from './wallet.js'
 
-/**
- * Encode calldata for grantAgentPermission.
- * @param {string} agentId - bytes32 hex
- * @param {string} vault - address
- * @param {bigint} maxAmount
- * @param {number} expiresAt - unix timestamp
- * @returns {Promise<string>} hex calldata
- */
-export async function encodeGrantAgentPermission(agentId, vault, maxAmount, expiresAt) {
-  const iface = new ethers.Interface([
-    'function grantAgentPermission(bytes32 agentId, address vault, uint256 maxAmount, uint256 expiresAt)'
-  ])
-  return iface.encodeFunctionData('grantAgentPermission', [agentId, vault, maxAmount, BigInt(expiresAt)])
-}
-
-/**
- * Submit a call via 1Shot Permissionless Relayer (EIP-7710).
- * No API key required. Pure JSON-RPC.
- * @param {object} params
- * @param {string} params.to - target contract address
- * @param {string} params.calldata - hex encoded calldata
- * @param {string} params.permissionContext - from ERC-7715 wallet_requestExecutionPermissions
- * @param {string} params.account - user EOA address
- * @returns {Promise<{txHash: string, status: string}>}
- */
-// Chains supported by the 1Shot KEYLESS Permissionless Relayer (relayer.1shotapi.com).
-// Verified live 2026-06-03 via relayer_getCapabilities: MAINNETS ONLY — no testnet.
-//   eth(1) base(8453) arbitrum(42161) optimism(10) polygon(137) bsc(56) linea(59144) ...
-// Base Sepolia (84532) is NOT here → keyless relay is impossible on our testnet.
-// Real 1Shot on Base Sepolia goes through the MANAGED API (api/relay.js proxy, key+secret +
-// funded server wallet). Until that proxy + creds are wired, 84532 falls back to on-chain
-// user-signed tx (see relayGrantPermission / relayDeposit) — real txs, just not gas-abstracted.
-const ONESHOT_SUPPORTED_CHAINS = new Set(['1', '8453', '42161', '10', '137', '56', '59144'])
-
-// Server-side Managed-API proxy (key+secret + funded server wallet stay on the server).
-// This is the path that makes 1Shot real on Base Sepolia. See api/relay.js.
 const RELAY_PROXY_URL = '/api/relay'
 
+// ─── Deterministic execId ─────────────────────────────────────────────────────
 /**
- * Relay a deposit through the 1Shot Managed API proxy (real, gas-abstracted).
- * Returns null when the proxy isn't configured or fails → caller falls back to
- * a user-signed on-chain tx. Never throws.
- * @returns {Promise<{txHash: string, status: string, relayer?: string} | null>}
+ * Deterministic execId per (owner, vault, planId, step).
+ * NOTE: the contract does NOT recompute this — it only stores `executed[execId]` as given.
+ * So this is an OFF-CHAIN contract among agent components (worker/orchestrator/retry) to
+ * produce a stable id; the on-chain guard just dedupes whatever id it receives. Encoding
+ * parity with `abi.encode(address,address,uint256,uint256)` is what matters: viem's
+ * encodeAbiParameters yields the identical 32-byte-padded layout, so retries hash the same.
+ * @returns {`0x${string}`} bytes32
  */
-export async function relayDepositManaged({ agentId, user, vault, amount }) {
+export function computeExecId({ owner, vault, planId, step }) {
+  return keccak256(encodeAbiParameters(
+    parseAbiParameters('address, address, uint256, uint256'),
+    [owner, vault, BigInt(planId), BigInt(step)],
+  ))
+}
+
+// ─── EIP-712 typed data (MUST match AgentVaultDepositor: name "VibingFarmer", version "1") ─
+export const DEPOSIT_DOMAIN = (chainId, verifyingContract) => ({
+  name: 'VibingFarmer', version: '1', chainId, verifyingContract,
+})
+export const DEPOSIT_TYPES = {
+  AgentDeposit: [
+    { name: 'amount', type: 'uint256' },
+    { name: 'minAmount', type: 'uint256' },
+    { name: 'execId', type: 'bytes32' },
+  ],
+}
+
+/**
+ * Worker key signs the deposit. `workerSigner` is any viem-style account/wallet client
+ * exposing signTypedData (e.g. privateKeyToAccount(pk)). Returns the 0x signature.
+ */
+export async function signDeposit(workerSigner, { chainId, depositor, amount, minAmount, execId }) {
+  return workerSigner.signTypedData({
+    domain: DEPOSIT_DOMAIN(chainId, depositor),
+    types: DEPOSIT_TYPES,
+    primaryType: 'AgentDeposit',
+    message: { amount: BigInt(amount), minAmount: BigInt(minAmount), execId },
+  })
+}
+
+// ─── Calldata encoders ────────────────────────────────────────────────────────
+const DEPOSITOR_DEPOSIT_ABI = [{
+  type: 'function', name: 'executeAgentDeposit', stateMutability: 'nonpayable',
+  inputs: [
+    { name: 'amount', type: 'uint256' },
+    { name: 'minAmount', type: 'uint256' },
+    { name: 'execId', type: 'bytes32' },
+    { name: 'sig', type: 'bytes' },
+  ],
+  outputs: [{ name: 'shares', type: 'uint256' }],
+}]
+
+export function encodeExecuteAgentDeposit({ amount, minAmount, execId, sig }) {
+  return encodeFunctionData({
+    abi: DEPOSITOR_DEPOSIT_ABI, functionName: 'executeAgentDeposit',
+    args: [BigInt(amount), BigInt(minAmount), execId, sig],
+  })
+}
+
+const REGISTRY_AUTH_ABI = [{
+  type: 'function', name: 'authorizeSessionKey', stateMutability: 'nonpayable',
+  inputs: [
+    { name: 'agent', type: 'address' },
+    { name: 'vault', type: 'address' },
+    { name: 'token', type: 'address' },
+    { name: 'capPerPeriod', type: 'uint96' },
+    { name: 'periodDuration', type: 'uint32' },
+    { name: 'expiry', type: 'uint40' },
+  ],
+  outputs: [],
+}]
+
+/** {to,data} for AgentRegistry.authorizeSessionKey — user-signed, EIP-5792-batchable. */
+export function buildAuthorizeSessionKeyCall({ agent, vault, token, capPerPeriod, periodDuration, expiry }) {
+  return {
+    to: AGENT_REGISTRY_ADDRESS,
+    data: encodeFunctionData({
+      abi: REGISTRY_AUTH_ABI, functionName: 'authorizeSessionKey',
+      args: [agent, vault, token, BigInt(capPerPeriod), Number(periodDuration), Number(expiry)],
+    }),
+  }
+}
+
+const ERC20_APPROVE_ABI = [{
+  type: 'function', name: 'approve', stateMutability: 'nonpayable',
+  inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
+  outputs: [{ name: '', type: 'bool' }],
+}]
+
+/** {to,data} approving the depositor to pull `amount` USDC (Jalur B transferFrom). */
+export function buildApproveCall({ spender = AGENT_VAULT_DEPOSITOR_ADDRESS, amount }) {
+  return {
+    to: USDC_SEPOLIA,
+    data: encodeFunctionData({ abi: ERC20_APPROVE_ABI, functionName: 'approve', args: [spender, BigInt(amount)] }),
+  }
+}
+
+// ─── Submit a signed deposit ──────────────────────────────────────────────────
+/**
+ * Submit a signed deposit. Managed 1Shot proxy first (gas-abstracted); if unconfigured
+ * or failing, broadcast the encoded calldata as a user-signed on-chain tx (one popup).
+ * The signature — not msg.sender — is the authorization, so either submitter is valid.
+ * @returns {Promise<{txHash: string, status: string, relayer?: string}>}
+ */
+export async function relayDeposit({ amount, minAmount, execId, sig }) {
+  const managed = await relayDepositManaged({ amount, minAmount, execId, sig })
+  if (managed) return managed
+  const calldata = encodeExecuteAgentDeposit({ amount, minAmount, execId, sig })
+  const txHash = await broadcastDepositOnChain(calldata)
+  return { txHash, status: 'onchain' }
+}
+
+/** Managed-API proxy submit. Returns null when unconfigured/failed → caller falls back. */
+export async function relayDepositManaged({ amount, minAmount, execId, sig }) {
   try {
     const res = await fetch(RELAY_PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'deposit',
-        to: AGENT_VAULT_DEPOSITOR_ADDRESS,
-        agentId, user, vault, amount: amount.toString(),
+        amount: String(amount), minAmount: String(minAmount), execId, sig,
       }),
     })
-    if (!res.ok) return null // 503 not-configured, 4xx/5xx → fall back on-chain
+    if (!res.ok) return null // 503 not-configured / 4xx-5xx → on-chain fallback
     const data = await res.json()
     if (data.configured === false || data.error) return null
     return {
@@ -102,198 +170,5 @@ export async function getRelayerAddress() {
   }
 }
 
-/**
- * Submit via the 1Shot KEYLESS EIP-7710 relayer. Mainnet-only.
- * On unsupported chains (incl. Base Sepolia) callers use the on-chain fallback instead,
- * so this branch should not be reached in normal flow.
- */
-export async function submitRelay({ to, calldata, permissionContext }) {
-  const chainStr = String(SEPOLIA_CHAIN_ID)
-
-  // Keyless relayer can't serve this chain. Callers (relayDeposit/relayGrantPermission)
-  // already route Base Sepolia to the managed proxy / on-chain fallback BEFORE calling
-  // submitRelay, so reaching here is a real misconfiguration — fail loudly, never fake a tx.
-  if (!ONESHOT_SUPPORTED_CHAINS.has(chainStr)) {
-    throw new Error(`1Shot keyless relayer does not support chain ${chainStr} — use the managed proxy`)
-  }
-
-  // Real 1Shot relay — EIP-7710 relayer_send7710Transaction
-  // permissionContext from MetaMask Flask wallet_requestExecutionPermissions must be array
-  const ctxArray = Array.isArray(permissionContext) ? permissionContext : [permissionContext]
-
-  const body = {
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'relayer_send7710Transaction',
-    params: {
-      chainId: chainStr,
-      transactions: [
-        {
-          permissionContext: ctxArray,
-          executions: [{ target: to, callData: calldata, value: '0x0' }]
-        }
-      ]
-    }
-  }
-
-  const response = await fetch(ONE_SHOT_RELAYER_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`1Shot relay failed: ${response.status} · ${text}`)
-  }
-
-  const data = await response.json()
-  if (data.error) throw new Error(`1Shot error: ${data.error.message || JSON.stringify(data.error)}`)
-
-  return {
-    txHash: data.result?.transactionHash || data.result?.txHash || data.result || 'pending',
-    status: 'submitted'
-  }
-}
-
-/**
- * Execute grantAgentPermission via 1Shot relay.
- * @param {object} params
- * @param {string} params.agentId - bytes32 hex
- * @param {string} params.vault
- * @param {bigint} params.maxAmount
- * @param {number} params.expiresAt
- * @param {string} params.permissionContext - from ERC-7715
- * @param {string} params.user - user EOA address
- * @returns {Promise<{txHash: string}>}
- */
-export async function relayGrantPermission({ agentId, vault, maxAmount, expiresAt, permissionContext }) {
-  const calldata = await encodeGrantAgentPermission(agentId, vault, maxAmount, expiresAt)
-
-  // ERC-7710 session redemption is impossible for this call: MetaMask Flask only
-  // issues token-transfer permission types (we grant `erc20-token-periodic`), and
-  // its ERC20PeriodTransferEnforcer caveat rejects any execution that is not
-  // USDC.transfer() on the token itself — a call into AgentVaultDepositor always
-  // reverts at the DelegationManager. The 7715 grant stays as the user-facing
-  // permission boundary; on-chain scope is enforced by the contract's own storage
-  // (ADR in docs/spikes/architecture-erc7715-scoped-permissions-spike.md).
-  // Zero-popup path = EIP-5792 grant batch + contract session key (see orchestrator).
-
-  // 1) Keyless 1Shot relay (mainnet only).
-  if (!ONESHOT_SUPPORTED_CHAINS.has(String(SEPOLIA_CHAIN_ID))) {
-    // 2) On-chain user-signed (one popup) — last resort.
-    const txHash = await grantAgentPermissionOnChain(agentId, vault, maxAmount, expiresAt)
-    return { txHash, status: 'onchain' }
-  }
-  return submitRelay({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, calldata, permissionContext })
-}
-
-/**
- * Execute executeAgentDeposit via 1Shot relay.
- * @param {object} params
- * @param {string} params.agentId - bytes32 hex
- * @param {string} params.user
- * @param {string} params.vault
- * @param {bigint} params.amount
- * @param {string} params.permissionContext
- * @returns {Promise<{txHash: string}>}
- */
-export async function relayDeposit({ agentId, user, vault, amount, permissionContext }) {
-  const calldata = await encodeExecuteAgentDeposit(agentId, user, vault, amount)
-
-  // No 7710 redemption here — see relayGrantPermission for why it always reverts.
-  // Zero-popup deposits go through the managed relay: the server wallet was
-  // authorized as a contract session key in the grant batch, so _isAuthorized
-  // passes when it calls executeAgentDeposit.
-
-  // 1) Base Sepolia: managed proxy (real, gas-abstracted), then on-chain.
-  if (!ONESHOT_SUPPORTED_CHAINS.has(String(SEPOLIA_CHAIN_ID))) {
-    const managed = await relayDepositManaged({ agentId, user, vault, amount })
-    if (managed) return managed
-    const txHash = await executeAgentDepositOnChain(agentId, user, vault, amount)
-    return { txHash, status: 'onchain' }
-  }
-
-  // 2) Keyless 1Shot relay (mainnet only).
-  return submitRelay({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, calldata, permissionContext })
-}
-
-/** Build a {to,data} authorizeSessionKey call for EIP-5792 batching.
- *  Authorizes the 1Shot server wallet as a contract session key so the managed
- *  relay can execute zero-popup deposits/harvests on the user's behalf. */
-export async function buildAuthorizeSessionKeyCall({ sessionKey, expiresAt }) {
-  const iface = new ethers.Interface([
-    'function authorizeSessionKey(address sessionKey, uint256 expiresAt)'
-  ])
-  return {
-    to: AGENT_VAULT_DEPOSITOR_ADDRESS,
-    data: iface.encodeFunctionData('authorizeSessionKey', [sessionKey, BigInt(expiresAt)]),
-  }
-}
-
-/** True when the current chain can't use the 1Shot relayer (→ broadcast on-chain instead). */
-export function isUnsupportedByOneShot() {
-  return !ONESHOT_SUPPORTED_CHAINS.has(String(SEPOLIA_CHAIN_ID))
-}
-
-/** True when the Managed API proxy should handle deposits.
- *  On Base Sepolia we skip the EIP-5792 batch so each worker calls relayDeposit
- *  → managed API proxy → real gas-abstracted 1Shot tx. */
-export function useManagedRelay() {
-  return String(SEPOLIA_CHAIN_ID) === '84532'
-}
-
-/** Build a {to,data} grantAgentPermission call for EIP-5792 batching. */
-export async function buildGrantCall({ agentId, vault, maxAmount, expiresAt }) {
-  return { to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: await encodeGrantAgentPermission(agentId, vault, maxAmount, expiresAt) }
-}
-
-/** Build a {to,data} executeAgentDeposit call for EIP-5792 batching. */
-export async function buildDepositCall({ agentId, user, vault, amount }) {
-  return { to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: await encodeExecuteAgentDeposit(agentId, user, vault, amount) }
-}
-
-// ─── Background Agent: harvest + emergency withdraw ───────────────────────────
-// Zero-popup autonomous monitor loop. The 1Shot server wallet is pre-authorized
-// as a session key in AgentVaultDepositor (via setupBgAgentsWithSessionKey called
-// once at "Start Monitoring"). All subsequent harvest/withdraw calls go through
-// the managed relay → server wallet → contract (session key check passes).
-// No MetaMask popups after setup.
-
-export const bgAgentId = (vault) => ethers.id('yv-bg-' + vault.toLowerCase())
-
-/**
- * Harvest rewards from `vault` for `user` (optionally recompound).
- * Zero-popup — uses managed relay, server wallet is pre-authorized session key.
- */
-export async function relayHarvest({ user, vault, recompound = false }) {
-  const agentId = bgAgentId(vault)
-  const res = await fetch(RELAY_PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'harvest', agentId, user, vault, recompound }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `Relay harvest failed: ${res.status}`)
-  }
-  return res.json()
-}
-
-/**
- * Emergency withdraw `amount` (units) from `vault` back to `user`.
- * Zero-popup — uses managed relay, server wallet is pre-authorized session key.
- */
-export async function relayWithdraw({ user, vault, amount }) {
-  const agentId = bgAgentId(vault)
-  const res = await fetch(RELAY_PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'withdraw', agentId, user, vault, amount: String(amount) }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `Relay withdraw failed: ${res.status}`)
-  }
-  return res.json()
-}
+/** Current chain id as string — small helper kept for callers that branch on chain. */
+export const chainIdStr = () => String(SEPOLIA_CHAIN_ID)
