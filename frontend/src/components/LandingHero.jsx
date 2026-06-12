@@ -26,10 +26,10 @@ import NavBar from './NavBar.jsx'
 const SCENE_2 = {
   heading: ['Your USDC.', 'Earning yield.', 'Zero gas.'],
   features: [
-    'AI picks the optimal vault',
-    'One permission, scoped & revocable',
+    'Venice AI picks the optimal vault allocation',
+    'Three-specialist AI Council (Yield, Risk, Market) deliberates',
+    'Monte Carlo simulation projects risk & returns',
     '1Shot relayer pays all gas. You pay $0',
-    'Agent monitors 24/7, exits on risk',
   ],
 }
 
@@ -37,9 +37,9 @@ const SCENE_3 = {
   heading: ['Permission-bounded', 'autonomy.'],
   features: [
     'EIP-7702 smart account upgrade',
-    'ERC-7715 scoped permissions',
-    'Multi-agent A2A coordination',
-    'On-chain strategy attestation',
+    'ERC-7715 scoped permissions & AgentRegistry',
+    'Parallel worker agents execute using ephemeral keys',
+    'On-chain strategy attestation (ERC-8004)',
   ],
 }
 
@@ -174,18 +174,18 @@ function StaticHero({ onStart }) {
     <div className="vf-static">
       <section className="vf-static__scene">
         <Wordmark />
-        <Player />
+        <Player src="/demo.mp4" />
         <p className="vf-tagline">Set once. Vibe forever.</p>
       </section>
 
       <section className="vf-static__scene vf-static__scene--split">
-        <Player />
+        <Player src="/strategy.mp4" />
         <SceneText data={SCENE_2} side="right" active />
       </section>
 
       <section className="vf-static__scene vf-static__scene--split reverse">
         <SceneText data={SCENE_3} side="left" active />
-        <Player />
+        <Player src="/agent.mp4" />
       </section>
 
       <section className="vf-static__scene vf-outro">
@@ -199,8 +199,8 @@ function StaticHero({ onStart }) {
 
 /* -------------------------- scroll-driven -------------------------- */
 
-// Per-scene video. All /demo.mp4 for now — swap freely later.
-const SCENE_VIDEO = { 1: '/demo.mp4', 2: '/demo.mp4', 3: '/demo.mp4' }
+// Per-scene video mapped to user's recorded demo components.
+const SCENE_VIDEO = { 1: '/demo.mp4', 2: '/strategy.mp4', 3: '/agent.mp4' }
 
 function ScrollHero({ onStart, scrollContainer }) {
   const ref = useRef(null)
