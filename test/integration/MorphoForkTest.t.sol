@@ -45,14 +45,14 @@ contract MorphoForkTest is Test {
 
     /// Sign an AgentDeposit with `pk` over the depositor's EIP-712 digest.
     function _sign(uint256 pk, uint256 amount, uint256 minAmount, bytes32 execId) internal view returns (bytes memory) {
-        bytes32 digest = dep.hashDeposit(amount, minAmount, execId);
+        bytes32 digest = dep.hashDeposit(amount, minAmount, 0, execId);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
         return abi.encodePacked(r, s, v);
     }
 
     function test_realVault_depositCreditsOwnerShares() public {
         bytes memory sig = _sign(workerPk, 1_000e6, 990e6, keccak256("m1"));
-        uint256 shares = dep.executeAgentDeposit(1_000e6, 990e6, keccak256("m1"), sig);
+        uint256 shares = dep.executeAgentDeposit(1_000e6, 990e6, 0, keccak256("m1"), sig);
         assertGt(shares, 0);
         assertEq(IERC4626(MORPHO_USDC_VAULT).balanceOf(owner), shares);
         uint256 assets = IERC4626(MORPHO_USDC_VAULT).convertToAssets(shares);
@@ -67,11 +67,11 @@ contract MorphoForkTest is Test {
             // cap-constrained vault: a deposit over the 4626 cap must revert
             bytes memory sig = _sign(workerPk, 1_000e6, 990e6, keccak256("m2"));
             vm.expectRevert();
-            dep.executeAgentDeposit(1_000e6, 990e6, keccak256("m2"), sig);
+            dep.executeAgentDeposit(1_000e6, 990e6, 0, keccak256("m2"), sig);
         } else {
             // normal large vault: deposit succeeds and credits shares to owner
             bytes memory sig = _sign(workerPk, 1_000e6, 990e6, keccak256("m2b"));
-            uint256 shares = dep.executeAgentDeposit(1_000e6, 990e6, keccak256("m2b"), sig);
+            uint256 shares = dep.executeAgentDeposit(1_000e6, 990e6, 0, keccak256("m2b"), sig);
             assertGt(shares, 0);
             assertEq(IERC4626(MORPHO_USDC_VAULT).balanceOf(owner), shares);
         }

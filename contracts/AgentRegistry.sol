@@ -81,6 +81,7 @@ contract AgentRegistry {
     function revokeAgent(address agent) external {
         if (scopes[agent].owner != msg.sender) revert NotOwner();
         scopes[agent].revoked = true;
+        _removeOwnerAgent(msg.sender, agent);
         emit AgentRevoked(msg.sender, agent);
     }
 
@@ -88,7 +89,23 @@ contract AgentRegistry {
         for (uint256 i; i < agents.length; ++i) {
             if (scopes[agents[i]].owner != msg.sender) revert NotOwner();
             scopes[agents[i]].revoked = true;
+            _removeOwnerAgent(msg.sender, agents[i]);
             emit AgentRevoked(msg.sender, agents[i]);
+        }
+    }
+
+    /// @dev Swap-and-pop the agent out of the owner's index list so it cannot grow
+    ///      unbounded across authorize/revoke cycles. scopes[agent] is retained
+    ///      (revoked) for the on-chain audit trail; only the view index shrinks.
+    function _removeOwnerAgent(address owner, address agent) private {
+        address[] storage list = _ownerAgents[owner];
+        uint256 len = list.length;
+        for (uint256 i; i < len; ++i) {
+            if (list[i] == agent) {
+                list[i] = list[len - 1];
+                list.pop();
+                return;
+            }
         }
     }
 

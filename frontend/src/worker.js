@@ -44,7 +44,7 @@ export class WorkerAgent {
    * @param {object} [config.keyStore] @param {object} [config.submitGate] @param {object} [config.gasSnapshot]
    */
   constructor({
-    agentId, user, vault, amount, sessionId, onEvent, planId, step, minAmount,
+    agentId, user, vault, amount, sessionId, onEvent, planId, step, minAmount, minShares,
     scopeAuthorized, capPerPeriod, periodDuration, expiry, agentAddress,
     sessionPassphrase, expectedBenefitWei, keyStore, submitGate, gasSnapshot,
   }) {
@@ -53,6 +53,9 @@ export class WorkerAgent {
     this.vault = vault
     this.amount = BigInt(amount)
     this.minAmount = minAmount != null ? BigInt(minAmount) : BigInt(amount)
+    // minShares: floor on ERC-4626 shares minted to the owner (adversarial-vault guard).
+    // Defaults to 0 (opt out) — MockVault is 1:1 so no client-side preview is needed yet.
+    this.minShares = minShares != null ? BigInt(minShares) : 0n
     this.sessionId = sessionId
     this.onEvent = onEvent || (() => {})
     this.planId = planId ?? 0
@@ -125,7 +128,7 @@ export class WorkerAgent {
 
       this.emit('step', { agentId: this.agentId, step: 'deposit', status: 'pending' })
       const depositResult = await relayDeposit({
-        amount: this.amount, minAmount: this.minAmount, execId, sig,
+        amount: this.amount, minAmount: this.minAmount, minShares: this.minShares, execId, sig,
       })
       const gasMethod = depositResult.status === 'onchain' ? 'user-signed' : 'relayer'
 
@@ -222,7 +225,7 @@ export class WorkerAgent {
     const sig = await wallet.signTypedData(
       DEPOSIT_DOMAIN(SEPOLIA_CHAIN_ID, AGENT_VAULT_DEPOSITOR_ADDRESS),
       DEPOSIT_TYPES,
-      { amount: this.amount, minAmount: this.minAmount, execId },
+      { amount: this.amount, minAmount: this.minAmount, minShares: this.minShares, execId },
     )
     pk = null // immutable hex string — drop the reference immediately
     return sig

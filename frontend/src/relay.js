@@ -41,6 +41,7 @@ export const DEPOSIT_TYPES = {
   AgentDeposit: [
     { name: 'amount', type: 'uint256' },
     { name: 'minAmount', type: 'uint256' },
+    { name: 'minShares', type: 'uint256' },
     { name: 'execId', type: 'bytes32' },
   ],
 }
@@ -48,13 +49,14 @@ export const DEPOSIT_TYPES = {
 /**
  * Worker key signs the deposit. `workerSigner` is any viem-style account/wallet client
  * exposing signTypedData (e.g. privateKeyToAccount(pk)). Returns the 0x signature.
+ * @param {bigint|string|number} [opts.minShares] floor on ERC-4626 shares minted; 0 opts out.
  */
-export async function signDeposit(workerSigner, { chainId, depositor, amount, minAmount, execId }) {
+export async function signDeposit(workerSigner, { chainId, depositor, amount, minAmount, minShares = 0, execId }) {
   return workerSigner.signTypedData({
     domain: DEPOSIT_DOMAIN(chainId, depositor),
     types: DEPOSIT_TYPES,
     primaryType: 'AgentDeposit',
-    message: { amount: BigInt(amount), minAmount: BigInt(minAmount), execId },
+    message: { amount: BigInt(amount), minAmount: BigInt(minAmount), minShares: BigInt(minShares), execId },
   })
 }
 
@@ -64,16 +66,17 @@ const DEPOSITOR_DEPOSIT_ABI = [{
   inputs: [
     { name: 'amount', type: 'uint256' },
     { name: 'minAmount', type: 'uint256' },
+    { name: 'minShares', type: 'uint256' },
     { name: 'execId', type: 'bytes32' },
     { name: 'sig', type: 'bytes' },
   ],
   outputs: [{ name: 'shares', type: 'uint256' }],
 }]
 
-export function encodeExecuteAgentDeposit({ amount, minAmount, execId, sig }) {
+export function encodeExecuteAgentDeposit({ amount, minAmount, minShares = 0, execId, sig }) {
   return encodeFunctionData({
     abi: DEPOSITOR_DEPOSIT_ABI, functionName: 'executeAgentDeposit',
-    args: [BigInt(amount), BigInt(minAmount), execId, sig],
+    args: [BigInt(amount), BigInt(minAmount), BigInt(minShares), execId, sig],
   })
 }
 
@@ -122,14 +125,14 @@ export function buildApproveCall({ spender = AGENT_VAULT_DEPOSITOR_ADDRESS, amou
  * The signature — not msg.sender — is the authorization, so either submitter is valid.
  * @returns {Promise<{txHash: string, status: string, relayer?: string}>}
  */
-export async function relayDeposit({ amount, minAmount, execId, sig }) {
-  const managed = await relayDepositManaged({ amount, minAmount, execId, sig })
+export async function relayDeposit({ amount, minAmount, minShares = 0, execId, sig }) {
+  const managed = await relayDepositManaged({ amount, minAmount, minShares, execId, sig })
   if (managed) return managed
   // Demo-day diagnostic: the popup-per-worker symptom only happens when this fallback fires.
   // Log exactly WHY 1Shot returned null (rate-limit 429/503, auth, not-configured, network)
   // so a fallback during a live demo is explainable from the console, not guesswork.
   console.warn('[relay] 1Shot managed relay returned null — falling back to user-signed MetaMask tx', getLastRelayDiag() || {})
-  const calldata = encodeExecuteAgentDeposit({ amount, minAmount, execId, sig })
+  const calldata = encodeExecuteAgentDeposit({ amount, minAmount, minShares, execId, sig })
   const txHash = await broadcastFallback(calldata)
   return { txHash, status: 'onchain' }
 }
@@ -152,14 +155,14 @@ function broadcastFallback(calldata) {
 
 /** Managed-API proxy submit. Returns null when unconfigured/failed → caller falls back.
  *  Records why in _lastRelayDiag so the fallback site can log the real reason. */
-export async function relayDepositManaged({ amount, minAmount, execId, sig }) {
+export async function relayDepositManaged({ amount, minAmount, minShares = 0, execId, sig }) {
   try {
     const res = await fetch(RELAY_PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'deposit',
-        amount: String(amount), minAmount: String(minAmount), execId, sig,
+        amount: String(amount), minAmount: String(minAmount), minShares: String(minShares), execId, sig,
       }),
     })
     if (!res.ok) { // 503 not-configured / 429 rate-limit / 4xx-5xx → on-chain fallback

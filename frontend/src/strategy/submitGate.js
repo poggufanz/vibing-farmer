@@ -14,6 +14,7 @@ export function createSubmitGate({
   maxGasAgeMs = 15_000,
   maxPerMin = 5,
   maxDecisions = 1000,
+  maxOwners = 1000,
 } = {}) {
   const hits = new Map(); // owner -> number[] timestamps
   const decisions = [];
@@ -22,6 +23,14 @@ export function createSubmitGate({
     decisions.push(decision);
     if (decisions.length > maxDecisions) decisions.shift(); // ring buffer
     return decision;
+  }
+
+  // Drop owners whose timestamps are all older than the window so a long-running,
+  // many-owner process cannot leak memory through `hits` (single-user = no-op).
+  function sweepStaleOwners(t) {
+    for (const [k, arr] of hits) {
+      if (!arr.some((ts) => t - ts < ONE_MIN)) hits.delete(k);
+    }
   }
 
   function check({ owner, gasSnapshotAt, estGasCostWei, expectedBenefitWei }) {
@@ -38,7 +47,10 @@ export function createSubmitGate({
     } else {
       const arr = (hits.get(owner) || []).filter((ts) => t - ts < ONE_MIN);
       if (arr.length >= maxPerMin) { ok = false; reason = 'rate_anomaly'; }
-      else { arr.push(t); hits.set(owner, arr); }
+      else { arr.push(t); }
+      // Prune this owner's empty bucket; sweep all stale owners when the map grows.
+      if (arr.length) hits.set(owner, arr); else hits.delete(owner);
+      if (hits.size > maxOwners) sweepStaleOwners(t);
     }
 
     return record({ at: t, owner, ok, reason });

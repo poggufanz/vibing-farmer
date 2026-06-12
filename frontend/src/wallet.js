@@ -174,7 +174,7 @@ export async function authorizeSessionKeyOnChain(agent, vault, token, capPerPeri
  * Broadcast an already-signed executeAgentDeposit calldata (user pays gas). The EIP-712
  * worker signature inside `calldata` is the authorization — msg.sender is irrelevant — so
  * the user's wallet broadcasting is just as valid as the relayer doing it.
- * @param {string} calldata - encoded executeAgentDeposit(amount,minAmount,execId,sig)
+ * @param {string} calldata - encoded executeAgentDeposit(amount,minAmount,minShares,execId,sig)
  * @returns {Promise<string>} tx hash
  */
 export async function broadcastDepositOnChain(calldata) {

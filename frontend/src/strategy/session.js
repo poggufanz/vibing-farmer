@@ -122,6 +122,13 @@ export function saveSessionGrant(grantData) {
 export function getActiveSessionGrant() {
   if (typeof localStorage === 'undefined') return null
   const data = localStorage.getItem('vibing_session_grant')
-  return data ? JSON.parse(data) : null
+  if (!data) return null
+  try {
+    return JSON.parse(data)
+  } catch {
+    // Corrupt/partial value — drop it and behave as "no grant" rather than throwing.
+    localStorage.removeItem('vibing_session_grant')
+    return null
+  }
 }
 

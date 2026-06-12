@@ -50,9 +50,33 @@ export function applyCors(req, res) {
 const _buckets = new Map() // key → { count, resetAt }
 const MAX_BUCKETS = 5000
 
+// How many TRUSTED proxies sit in front of this process and APPEND to XFF.
+// Default 1 (a single platform edge, e.g. Vercel). The first (leftmost) XFF
+// entries are client-supplied and forgeable — trusting them lets an attacker
+// mint a fresh rate-limit bucket per request. We instead read from the RIGHT.
+const TRUST_PROXY_HOPS = Number(process.env.TRUST_PROXY_HOPS ?? 1)
+
 function clientIp(req) {
+  // 1. Platform-guaranteed connecting IP. Vercel/most PaaS set `x-real-ip` to the
+  //    real client and it is NOT an appendable chain, so a forged value can't hide
+  //    behind it. Prefer it outright.
+  const real = req.headers['x-real-ip']
+  if (typeof real === 'string' && real.trim()) return real.trim()
+
+  // 2. Raw XFF: trusted proxies append the true connecting IP to the RIGHT; an
+  //    external attacker can only inject entries on the LEFT. Pick the entry the
+  //    n-th trusted hop observed, counting from the right, so the spoofed prefix
+  //    is ignored. With one edge this is simply the last entry.
   const xff = req.headers['x-forwarded-for']
-  if (typeof xff === 'string' && xff.length) return xff.split(',')[0].trim()
+  if (TRUST_PROXY_HOPS > 0 && typeof xff === 'string' && xff.trim()) {
+    const parts = xff.split(',').map((p) => p.trim()).filter(Boolean)
+    if (parts.length) {
+      const idx = parts.length - TRUST_PROXY_HOPS
+      return parts[idx >= 0 ? idx : 0]
+    }
+  }
+
+  // 3. No trusted proxy headers — fall back to the socket peer.
   return req.socket?.remoteAddress || 'unknown'
 }
 

@@ -30,7 +30,7 @@ contract PauseInvariantTest is Test {
     function _sign(uint256 pk, uint256 amount, uint256 minAmount, bytes32 execId)
         internal view returns (bytes memory)
     {
-        bytes32 digest = dep.hashDeposit(amount, minAmount, execId);
+        bytes32 digest = dep.hashDeposit(amount, minAmount, 0, execId);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
         return abi.encodePacked(r, s, v);
     }
@@ -43,7 +43,7 @@ contract PauseInvariantTest is Test {
 
         dep.pause();
         vm.expectRevert(); // whenNotPaused reverts before signature recovery
-        dep.executeAgentDeposit(50e6, 50e6, execId, sig);
+        dep.executeAgentDeposit(50e6, 50e6, 0, execId, sig);
         // no funds moved while paused
         assertEq(token.balanceOf(address(dep)), 0);
         assertEq(dep.reserves(address(token)), 0);
@@ -51,7 +51,7 @@ contract PauseInvariantTest is Test {
         dep.unpause();
         // execId reuse after a reverted attempt is intentional: the revert rolled
         // back executed[execId]=true, proving a failed attempt does not burn the id.
-        dep.executeAgentDeposit(50e6, 50e6, execId, sig);
+        dep.executeAgentDeposit(50e6, 50e6, 0, execId, sig);
         assertEq(token.balanceOf(address(dep)), 0); // atomic: nothing idle after
         assertEq(dep.reserves(address(token)), 0);
         assertGt(vault.balanceOf(owner), 0);
