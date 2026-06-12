@@ -1,60 +1,65 @@
-// frontend/src/relay.test.js
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-const redeemMock = vi.fn()
-const hasSessionMock = vi.fn()
-vi.mock('./strategy/session.js', () => ({
-  redeemCall: (...a) => redeemMock(...a),
-  hasSession: () => hasSessionMock(),
-}))
+// Mock wallet.js (avoid loading the SAK/viem session chain) + config (stable addresses).
 vi.mock('./wallet.js', () => ({
-  grantAgentPermissionOnChain: vi.fn(async () => '0xONCHAINGRANT'),
-  executeAgentDepositOnChain: vi.fn(async () => '0xONCHAINDEP'),
-  batchCalls: vi.fn(), executeWithdrawOnChain: vi.fn(), executeHarvestOnChain: vi.fn(),
+  broadcastDepositOnChain: vi.fn(async () => '0xONCHAINDEP'),
 }))
 vi.mock('./config.js', () => ({
-  ONE_SHOT_RELAYER_URL: 'http://x', AGENT_VAULT_DEPOSITOR_ADDRESS: '0xDEP', SEPOLIA_CHAIN_ID: 84532,
+  AGENT_VAULT_DEPOSITOR_ADDRESS: '0x' + 'de'.repeat(20),
+  AGENT_REGISTRY_ADDRESS: '0x' + 're'.repeat(20),
+  SEPOLIA_CHAIN_ID: 84532,
+  USDC_SEPOLIA: '0x' + 'dc'.repeat(20),
 }))
 
-import { relayGrantPermission, relayDeposit } from './relay.js'
+import {
+  encodeExecuteAgentDeposit, computeExecId, buildAuthorizeSessionKeyCall, buildApproveCall,
+  relayDeposit,
+} from './relay.js'
+import { broadcastDepositOnChain } from './wallet.js'
 
-// Real bytes32 / address shapes — encodeGrantAgentPermission/encodeExecuteAgentDeposit
-// run through the real ethers ABI encoder (only ./wallet.js and ./strategy/session.js
-// are mocked), so fixtures must be valid hex of the right width.
-const AGENT_ID = '0x' + '11'.repeat(32)
-const VAULT = '0x' + '22'.repeat(20)
-const USER = '0x' + '33'.repeat(20)
+// All-lowercase 20-byte addresses: viem's encodeAbiParameters validates EIP-55 checksum on
+// mixed-case input and throws. Lowercase = no checksum check, so fixtures exercise encoding.
+const owner = '0x' + 'a1'.repeat(20)
+const vault = '0x' + 'b2'.repeat(20)
+const token = '0x' + 'c3'.repeat(20)
+const agent = '0x' + 'd4'.repeat(20)
 
-describe('relay redeem-first', () => {
-  beforeEach(() => { redeemMock.mockReset(); hasSessionMock.mockReset(); global.fetch = vi.fn(async () => ({ ok: false })) })
+describe('relay encode + execId', () => {
+  beforeEach(() => { vi.clearAllMocks(); global.fetch = vi.fn(async () => ({ ok: false })) })
 
-  it('relayGrantPermission uses session redemption when a session is active', async () => {
-    hasSessionMock.mockReturnValue(true)
-    redeemMock.mockResolvedValue('0xREDEEMGRANT')
-    const res = await relayGrantPermission({ agentId: AGENT_ID, vault: VAULT, maxAmount: 1n, expiresAt: 9999999999, permissionContext: '0xctx' })
-    expect(res.txHash).toBe('0xREDEEMGRANT')
-    expect(res.status).toBe('redeemed')
+  it('encodes executeAgentDeposit(amount,minAmount,execId,sig)', () => {
+    const execId = computeExecId({ owner, vault, planId: 1, step: 0 })
+    const sig = '0x' + '11'.repeat(65)
+    const data = encodeExecuteAgentDeposit({ amount: 50_000000n, minAmount: 49_000000n, execId, sig })
+    expect(data.startsWith('0x')).toBe(true)
+    expect(execId).toMatch(/^0x[0-9a-f]{64}$/i)
   })
 
-  it('relayGrantPermission falls back to on-chain when no session', async () => {
-    hasSessionMock.mockReturnValue(false)
-    const res = await relayGrantPermission({ agentId: AGENT_ID, vault: VAULT, maxAmount: 1n, expiresAt: 9999999999, permissionContext: '0xctx' })
-    expect(res.txHash).toBe('0xONCHAINGRANT')
+  it('computeExecId is deterministic for the same (owner,vault,planId,step)', () => {
+    const a = computeExecId({ owner, vault, planId: 7, step: 2 })
+    const b = computeExecId({ owner, vault, planId: 7, step: 2 })
+    const c = computeExecId({ owner, vault, planId: 7, step: 3 })
+    expect(a).toBe(b)
+    expect(a).not.toBe(c)
   })
 
-  it('relayDeposit uses session redemption first', async () => {
-    hasSessionMock.mockReturnValue(true)
-    redeemMock.mockResolvedValue('0xREDEEMDEP')
-    const res = await relayDeposit({ agentId: AGENT_ID, user: USER, vault: VAULT, amount: 1n, permissionContext: '0xctx' })
-    expect(res.txHash).toBe('0xREDEEMDEP')
-    expect(res.status).toBe('redeemed')
+  it('builds an authorizeSessionKey call to the registry', () => {
+    const call = buildAuthorizeSessionKeyCall({ agent, vault, token, capPerPeriod: 100_000000n, periodDuration: 86400, expiry: 1_900_000_000 })
+    expect(call.to).toBe('0x' + 're'.repeat(20))
+    expect(call.data.startsWith('0x')).toBe(true)
   })
 
-  it('relayDeposit falls back to managed→on-chain when redeem throws', async () => {
-    hasSessionMock.mockReturnValue(true)
-    redeemMock.mockRejectedValue(new Error('redeem boom'))
-    // managed proxy returns !ok (configured=false) → on-chain
-    const res = await relayDeposit({ agentId: AGENT_ID, user: USER, vault: VAULT, amount: 1n, permissionContext: '0xctx' })
+  it('builds a USDC approve call to the depositor', () => {
+    const call = buildApproveCall({ amount: 100_000000n })
+    expect(call.to).toBe('0x' + 'dc'.repeat(20)) // USDC
+    expect(call.data.startsWith('0x')).toBe(true)
+  })
+
+  it('relayDeposit falls back to a user-signed on-chain broadcast when the proxy is unconfigured', async () => {
+    const execId = computeExecId({ owner, vault, planId: 1, step: 0 })
+    const res = await relayDeposit({ amount: 1n, minAmount: 1n, execId, sig: '0x' + '11'.repeat(65) })
     expect(res.txHash).toBe('0xONCHAINDEP')
+    expect(res.status).toBe('onchain')
+    expect(broadcastDepositOnChain).toHaveBeenCalledOnce()
   })
 })

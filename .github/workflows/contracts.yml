@@ -1,0 +1,39 @@
+name: contracts
+on:
+  push: { branches: [main, iq] }
+  pull_request:
+  # NOTE: scheduled runs fire ONLY from the default branch (main). On `iq` the
+  # fork-nightly job will not trigger until this is merged to main.
+  schedule: [{ cron: '0 3 * * *' }] # nightly fork tests
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: foundry-rs/foundry-toolchain@v1
+      # Exclude every fork/RPC test by CONTRACT-NAME suffix `Fork` (brace globs are unreliable).
+      - run: forge test --no-match-contract Fork -vv
+
+  slither:
+    runs-on: ubuntu-latest
+    continue-on-error: true # soft-fail for now; promote to hard gate after Phase 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: crytic/slither-action@v0.4.2
+        with: { target: 'contracts/' }
+        # config: slither.config.json filters lib/ + test/ noise (see Task 4 Step 0)
+
+  fork-nightly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge test --match-contract Fork -vv
+        env:
+          MAINNET_RPC: ${{ secrets.MAINNET_RPC }}
+          BASE_MAINNET_RPC: ${{ secrets.BASE_MAINNET_RPC }}

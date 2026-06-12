@@ -1,0 +1,7 @@
+{
+  "agentRegistry": "0x735f3a63D5be965E6B7564a2befeca0E316d09Ad",
+  "agentVaultDepositor": "0x79007794Eb31B6a8439C38B604827012DBc0D771",
+  "chainId": 84532,
+  "mockVault": "0xdef19fED6Da53D3757779d27b9A2640547c30b6F",
+  "usdc": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+}

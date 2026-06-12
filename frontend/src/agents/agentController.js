@@ -1,9 +1,11 @@
 // agentController.js
-// Main-thread controller. Spawns the worker, routes its messages, asks Venice AI to
-// classify risk, and triggers execution via the existing 1Shot/relay flow.
+// Main-thread controller. Spawns the background monitor worker, routes its messages, and
+// asks Venice AI to classify risk. Roadmap v2: the v2 MockVault is plain ERC-4626 with no
+// on-chain harvest, and withdraw is a direct user-signed tx (the user owns the shares) —
+// there is no relayer harvest/withdraw path anymore.
 
 import { saveTransaction } from '../history.js'
-import { relayHarvest, relayWithdraw } from '../relay.js'
+import { withdrawFromVaultOnChain } from '../wallet.js'
 import { classifyRisk } from '../venice.js'
 
 let worker = null
@@ -53,10 +55,6 @@ async function handleWorkerMessage(e) {
     case 'REBALANCE_OPPORTUNITY':
       emit({ kind: 'rebalance_proposal', ...payload }) // propose only — never auto-execute
       break
-    case 'HARVEST_READY':
-      if (payload.autoHarvest) await executeHarvest(payload)
-      else emit({ kind: 'harvest_ready', ...payload })
-      break
     case 'RISK_SCAN_RESULT': {
       const severity = await classifyRisk(payload.searchAnswer, payload.protocol)
       if (severity === 'high' || severity === 'medium') emit({ kind: 'risk_alert', severity, ...payload })
@@ -68,33 +66,16 @@ async function handleWorkerMessage(e) {
   }
 }
 
-async function executeHarvest(payload) {
-  try {
-    const { txHash } = await relayHarvest({ user: currentConfig.userAddress, vault: payload.vaultAddress, recompound: false })
-    saveTransaction({ txHash, vaultName: payload.vaultName, vaultAddress: payload.vaultAddress, amountUsdc: payload.rewardsUsdc, workerLabel: 'RewardHarvester', network: 'sepolia' })
-    emit({ kind: 'harvest_executed', txHash, ...payload })
-  } catch (err) {
-    emit({ kind: 'harvest_failed', error: err.message, ...payload })
-  }
-}
-
-/** Manual "Harvest now" from the dashboard. Returns tx hash. */
-export async function harvestVault({ user, vault, vaultName, rewardsUsdc }) {
-  const { txHash } = await relayHarvest({ user, vault, recompound: false })
-  saveTransaction({ txHash, vaultName, vaultAddress: vault, amountUsdc: rewardsUsdc, workerLabel: 'RewardHarvester', network: 'sepolia' })
-  return txHash
-}
-
-/** Emergency withdraw — called from UI. `amount` is in token units (string/bigint). */
+/** Emergency withdraw — called from a risk alert. `amount` is asset units (string/bigint).
+ *  User-signed ERC-4626 withdraw (one popup). Same native-gas asterisk as revoke. */
 export async function emergencyWithdraw(vaultAddress, amount, userAddress) {
-  const { txHash } = await relayWithdraw({ user: userAddress, vault: vaultAddress, amount })
+  const { txHash } = await withdrawFromVaultOnChain(vaultAddress, amount, userAddress)
   saveTransaction({ txHash, vaultName: 'Emergency Withdraw', vaultAddress, amountUsdc: Number(amount) / 1e6, workerLabel: 'RiskWatcher', network: 'sepolia' })
   return txHash
 }
 
-/** Manual withdraw from the dashboard with a user-specified amount (units, string/bigint).
- *  Routes through relayWithdraw (not emergencyWithdraw) so the caller logs ONE history
- *  entry with the real vault metadata. Returns { txHash, status }. */
+/** Manual withdraw from the dashboard with a user-specified amount (asset units, string/bigint).
+ *  Returns { txHash, status }. */
 export async function withdrawFromVault(vaultAddress, amount, userAddress) {
-  return relayWithdraw({ user: userAddress, vault: vaultAddress, amount })
+  return withdrawFromVaultOnChain(vaultAddress, amount, userAddress)
 }

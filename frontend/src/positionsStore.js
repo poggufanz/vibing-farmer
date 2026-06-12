@@ -66,12 +66,12 @@ export async function reconcilePositionsFromChain(address) {
       const shares = await contract.balanceOf(address)
       if (shares === 0n) return null
       const assets = await contract.convertToAssets(shares)
-      let rewards = 0n
-      try { rewards = await contract.getUnclaimedRewards(address) } catch { /* optional */ }
+      // v2 MockVault is plain ERC-4626 — yield is share-price appreciation, realized on
+      // withdraw; there is no separate unclaimed-rewards balance to read.
       return [v.address, {
         vaultName: v.name,
         balance: assets.toString(),
-        unclaimedRewards: rewards.toString(),
+        unclaimedRewards: '0',
       }]
     })
   )

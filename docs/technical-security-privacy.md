@@ -203,3 +203,14 @@ Vibing Farmer is engineered around the principle of **per-agent permission-bound
 - [ ] Permission revocation flows work flawlessly.
 - [ ] MetaMask Flask (rather than regular MetaMask) is actively used.
 - [ ] The browser runs in a clean profile (no extensions that might interfere).
+
+---
+
+## Key lifecycle (worker / session keys)
+
+1. One private key per worker, generated at plan time (`keyVault.generateWorkerKey`, ethers v6), never a master key.
+2. Scoped on-chain via `AgentRegistry.authorizeSessionKey`; the key can do nothing outside its scope.
+3. Stored encrypted at rest in `keyStore` (IndexedDB in browser) as a libsodium sealed box under a **KDF-derived** secret (`deriveSecret` → `crypto_pwhash`). The derived secret is re-computed from the session passphrase on demand and is **never persisted next to the blob** — an attacker reading storage cannot decrypt.
+4. Decrypted to memory only at the EIP-712 sign site. The opened key is an immutable hex string and **cannot be zeroized** — we minimize the exposure window instead (open → sign → drop reference). Byte buffers are zeroized.
+5. Rotation = `authorizeSessionKey(newKey, scope)` + `revokeAgent(oldKey)`. The old key is dead permanently by design (one agent = one scope, forever).
+6. Production roadmap: move the sealing secret — ideally the whole sign operation — to a KMS so the plaintext key never enters JS.

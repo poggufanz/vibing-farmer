@@ -1,8 +1,16 @@
-import { WorkerAgent, makeAgentId } from './worker.js'
+import { WorkerAgent, makeAgentId, makePlanId } from './worker.js'
 import { generateAgentSkills } from './venice.js'
 import { saveSkill } from './skills.js'
-import { batchCalls } from './wallet.js'
-import { isUnsupportedByOneShot, useManagedRelay, buildGrantCall, buildDepositCall, buildAuthorizeSessionKeyCall, getRelayerAddress } from './relay.js'
+import { batchCalls, approveDepositorOnChain } from './wallet.js'
+import { buildAuthorizeSessionKeyCall, buildApproveCall } from './relay.js'
+import { USDC_SEPOLIA } from './config.js'
+
+// Scope window for a dispatch: agents may deposit up to their allocation, once, within the hour.
+const PERIOD_DURATION = 86400
+const SCOPE_TTL_SECONDS = 3600
+// Gap between serial worker dispatches — keeps the 1Shot relay off its rate limit so it
+// never sheds a request (429/503) and forces the user-signed MetaMask fallback to fire.
+const DISPATCH_INTERVAL_MS = 2000
 
 /**
  * Orchestrator Agent — receives Venice plan, dispatches Worker Agents in parallel.
@@ -16,13 +24,14 @@ export class OrchestratorAgent {
    * @param {string|null} config.devApiKey - DeepSeek API key for dev mode
    * @param {function} config.onEvent - (eventName, data) => void
    */
-  constructor({ user, permissionContext, veniceAuth, devApiKey, sessionId, onEvent }) {
+  constructor({ user, permissionContext, veniceAuth, devApiKey, sessionId, onEvent, sessionPassphrase }) {
     this.user = user
     this.permissionContext = permissionContext
     this.veniceAuth = veniceAuth || null
     this.devApiKey = devApiKey || null
     this.onEvent = onEvent || (() => {})
     this.sessionId = sessionId || `session-${Date.now()}`
+    this.sessionPassphrase = sessionPassphrase || null
   }
 
   /**
@@ -32,6 +41,8 @@ export class OrchestratorAgent {
    * @returns {Promise<{completed: number, failed: number, results: Array}>}
    */
   async dispatch(strategy, totalAmount) {
+    const planId = makePlanId(this.sessionId)
+    const expiry = Math.floor(Date.now() / 1000) + SCOPE_TTL_SECONDS
     const vaultPlans = strategy.vaults.map((v, i) => ({
       index: i,
       agentId: makeAgentId(i, this.sessionId),
@@ -73,37 +84,66 @@ export class OrchestratorAgent {
       }
     })
 
-    // Batch strategy (EIP-5792):
-    //   Managed relay active (Base Sepolia): batch GRANTS only (1 popup) → deposits via 1Shot relay
-    //   No managed relay: batch GRANTS + DEPOSITS together (1 popup, user pays gas)
-    let batchedHash = null   // set → workers skip both grant AND deposit (legacy full-batch)
-    let grantsBatched = false // set → workers skip grant only, still relay deposit via 1Shot
-    if (isUnsupportedByOneShot()) {
-      const expiresAt = Math.floor(Date.now() / 1000) + 3600
-      const grantCalls = []
-      const depositCalls = []
-      for (const p of vaultPlans) {
-        grantCalls.push(await buildGrantCall({ agentId: p.agentId, vault: p.vault, maxAmount: p.amountUnits, expiresAt }))
-        depositCalls.push(await buildDepositCall({ agentId: p.agentId, user: this.user, vault: p.vault, amount: p.amountUnits }))
-      }
-      if (useManagedRelay()) {
-        // Batch grants only — 1 popup for all permissions, relay handles deposits.
-        // Also authorize the 1Shot server wallet as a contract session key in the
-        // SAME batch, so executeAgentDeposit from the managed relay passes
-        // _isAuthorized (zero further popups). Skipped if proxy unconfigured.
-        const relayer = await getRelayerAddress()
-        if (relayer) {
-          grantCalls.push(await buildAuthorizeSessionKeyCall({ sessionKey: relayer, expiresAt: Math.floor(Date.now() / 1000) + 86400 }))
-        }
-        // Only mark batched if EIP-5792 actually ran (null = wallet lacks it →
-        // workers fall back to per-agent grant so permission is never silently skipped).
-        const h = await batchCalls(grantCalls)
-        grantsBatched = h !== null
-      } else {
-        // Full batch: grants + deposits in 1 popup (user pays gas, no relay)
-        batchedHash = await batchCalls([...grantCalls, ...depositCalls])
-      }
+    // Scope setup (EIP-5792): ONE user popup batches the USDC approve (so the depositor's
+    // transferFrom succeeds) + one AgentRegistry.authorizeSessionKey per worker key. Each
+    // worker generates its key first so its address is known before we batch the grants.
+    // The deposits themselves are submitted later by each worker (EIP-712 signed) — they
+    // need no further popup because authorization is the signature, not msg.sender.
+    const totalUnits = vaultPlans.reduce((acc, p) => acc + p.amountUnits, 0n)
+    const workers = vaultPlans.map((p) => new WorkerAgent({
+      agentId: p.agentId,
+      user: this.user,
+      vault: p.vault,
+      amount: p.amountUnits,
+      sessionId: this.sessionId,
+      onEvent: this.onEvent,
+      planId,
+      step: p.index,
+      capPerPeriod: p.amountUnits,
+      periodDuration: PERIOD_DURATION,
+      expiry,
+      sessionPassphrase: this.sessionPassphrase,
+    }))
+
+    // Generate every worker key up-front (the on-chain agent identities to authorize).
+    await Promise.all(workers.map((w) => w.setupKey()))
+
+    let scopeAuthorized = false
+    this.onEvent('orchestrator-step', { step: 'authorizing-scope', status: 'pending' })
+    const calls = [buildApproveCall({ amount: totalUnits })]
+    for (const w of workers) {
+      calls.push(buildAuthorizeSessionKeyCall({
+        agent: w.keyAddress, vault: w.vault, token: USDC_SEPOLIA,
+        capPerPeriod: w.capPerPeriod, periodDuration: PERIOD_DURATION, expiry,
+      }))
     }
+    try {
+      const batchHash = await batchCalls(calls)
+      if (batchHash) {
+        scopeAuthorized = true
+      } else {
+        // Wallet lacks EIP-5792 → approve once (one popup), workers self-authorize.
+        await approveDepositorOnChain(totalUnits)
+      }
+    } catch (err) {
+      this.onEvent('orchestrator-step', { step: 'authorizing-scope', status: 'error', error: err.message })
+      throw err
+    }
+    this.onEvent('orchestrator-step', { step: 'authorizing-scope', status: 'done' })
+    workers.forEach((w) => { w.scopeAuthorized = scopeAuthorized })
+
+    // Surface each authorized scope so the UI can show a single-source permission summary
+    // (cap + max-at-risk) and a Revoke button keyed by the worker's on-chain agent address.
+    workers.forEach((w, i) => this.onEvent('AgentScopeAuthorized', {
+      agentId: vaultPlans[i].agentId,
+      agent: w.keyAddress,
+      vault: w.vault,
+      token: USDC_SEPOLIA,
+      capPerPeriod: w.capPerPeriod,
+      periodDuration: PERIOD_DURATION,
+      expiry,
+      authorized: scopeAuthorized,
+    }))
 
     // ── A2A coordination: orchestrator redelegates a scoped subset to each worker ──
     // Real ERC-7710 redelegation chain (user root → orchestrator → workers), the on-chain
@@ -114,7 +154,7 @@ export class OrchestratorAgent {
     try {
       const { createOrchestratorAccount, createWorkerRedelegations } = await import('./redelegation.js')
       const orchestratorSmartAccount = await createOrchestratorAccount()
-      const workers = vaultPlans.map((p) => ({
+      const workerDelegates = vaultPlans.map((p) => ({
         workerId: p.index + 1,
         address: p.vault,            // per-worker delegate identity (distinct vault)
         allocationUsdc: p.amountUSDC,
@@ -123,7 +163,7 @@ export class OrchestratorAgent {
       workerRedelegations = await createWorkerRedelegations({
         orchestratorSmartAccount,
         rootDelegation: this.permissionContext?.rootDelegation || this.permissionContext,
-        workers
+        workers: workerDelegates
       })
       workerRedelegations.forEach((rd) => this.onEvent('RedelegationCreated', {
         agentId: vaultPlans[rd.workerId - 1]?.agentId,
@@ -139,37 +179,34 @@ export class OrchestratorAgent {
       workerRedelegations = null
     }
 
-    // Dispatch all workers in parallel — use Promise.allSettled so one failure doesn't abort others
+    // Dispatch workers SERIALLY — one fully completes (incl. receipt) before the next starts.
+    // Parallel dispatch spiked the 1Shot relay (3 simultaneous requests → 429/503 → every
+    // worker fell back to a user-signed MetaMask tx → 3 popups + delegated-EOA in-flight
+    // limit). Serial keeps the relay happy so the silent path holds; the 2s gap gives 1Shot
+    // and the mempool breathing room. Visually, the vis.js graph also lights up one-by-one.
     this.onEvent('orchestrator-step', { step: 'dispatching-agents', status: 'pending' })
-    const workerResults = await Promise.allSettled(
-      vaultPlans.map((plan, i) => {
-        const worker = new WorkerAgent({
-          agentId: plan.agentId,
-          user: this.user,
-          vault: plan.vault,
-          amount: plan.amountUnits,
-          permissionContext: this.permissionContext,
-          sessionId: this.sessionId,
-          onEvent: this.onEvent,
-          batchedHash,
-          grantsBatched
-        })
-        return worker.execute().then((res) => {
-          // Worker redeemed its redelegation to execute the deposit → A2A redeem proof
-          const rd = workerRedelegations?.[i]
-          if (rd && res?.success) {
-            this.onEvent('RedelegationRedeemed', {
-              agentId: plan.agentId,
-              workerId: rd.workerId,
-              to: `worker-${rd.workerId}`,
-              txHash: res.txHash,
-              delegationHash: rd.delegationHash
-            })
-          }
-          return res
-        })
-      })
-    )
+    const workerResults = []
+    for (let i = 0; i < workers.length; i++) {
+      const plan = vaultPlans[i]
+      try {
+        const res = await workers[i].execute()
+        // Worker redeemed its redelegation to execute the deposit → A2A redeem proof
+        const rd = workerRedelegations?.[i]
+        if (rd && res?.success) {
+          this.onEvent('RedelegationRedeemed', {
+            agentId: plan.agentId,
+            workerId: rd.workerId,
+            to: `worker-${rd.workerId}`,
+            txHash: res.txHash,
+            delegationHash: rd.delegationHash,
+          })
+        }
+        workerResults.push({ status: 'fulfilled', value: res })
+      } catch (e) {
+        workerResults.push({ status: 'rejected', reason: e })
+      }
+      if (i < workers.length - 1) await new Promise((r) => setTimeout(r, DISPATCH_INTERVAL_MS))
+    }
     this.onEvent('orchestrator-step', { step: 'dispatching-agents', status: 'done' })
 
     // Aggregate results

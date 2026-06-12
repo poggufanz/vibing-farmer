@@ -1,6 +1,19 @@
 // Skill file generator + localStorage persistence + editor UI
 
+import { AGENT_VAULT_DEPOSITOR_ADDRESS } from './config.js'
+
 const SKILLS_STORAGE_KEY = 'yv_skills'
+
+// Single fund path: every generated skill's execution target is the depositor — never a
+// worker EOA. Source the address from the deployed config (validated, real — NOT a
+// placeholder), with an optional Vite env override. A non-address would be a runtime
+// footgun, so resolve it loudly at module load.
+const ADDR_RE = /^0x[0-9a-fA-F]{40}$/
+export const DEPOSITOR_TARGET =
+  (import.meta.env?.VITE_DEPOSITOR_ADDRESS) || AGENT_VAULT_DEPOSITOR_ADDRESS
+if (!DEPOSITOR_TARGET || !ADDR_RE.test(DEPOSITOR_TARGET)) {
+  throw new Error('DEPOSITOR_TARGET missing or not a 20-byte address — check config.js / VITE_DEPOSITOR_ADDRESS')
+}
 
 // Escape before interpolating into innerHTML — skill JSON is user-editable and
 // agentId is externally supplied; unescaped they enable DOM XSS.
@@ -14,25 +27,27 @@ function esc(value) {
 }
 
 /**
- * Build skill object for an agent.
- * @param {string} agentId
- * @param {string} vault - vault address
- * @param {number} amountUSDC - human-readable USDC amount
+ * Build a skill whose ONLY execution target is the depositor. Funds can never route to a
+ * worker EOA — the single-fund-path guarantee is structural here, not a convention.
+ * @param {object} params
+ * @param {string} params.vault - ERC-4626 vault the deposit lands in
+ * @param {string} params.token - underlying asset (USDC)
+ * @param {string|number} params.amount - deposit amount in token units (uint string)
+ * @param {string} [params.worker] - MUST be undefined; present → throws (no worker target)
  * @returns {object} skill JSON
  */
-export function buildSkill(agentId, vault, amountUSDC) {
-  const expiresAt = Math.floor(Date.now() / 1000) + 3600
-  const maxAmountUnits = String(Math.floor(amountUSDC * 1e6))
-  return {
-    agentId,
-    vaultAddress: vault,
-    skills: {
-      swap: { required: false, maxSlippage: 0.5, dexPreference: 'mock', maxRetries: 2, timeoutSeconds: 30 },
-      deposit: { maxAmount: maxAmountUnits, vaultAddress: vault, expiresAt }
-    },
-    generatedBy: 'venice-ai',
-    approvedByUser: false
+export function buildSkill({ vault, token, amount, worker }) {
+  // A caller must never be able to slip a worker EOA in as a fund target.
+  if (worker !== undefined) {
+    throw new Error('buildSkill does not accept a worker target — funds route through the depositor only')
   }
+  const steps = [{ kind: 'deposit', target: DEPOSITOR_TARGET, vault, token, amount: String(amount) }]
+  for (const s of steps) {
+    if (s.target.toLowerCase() !== DEPOSITOR_TARGET.toLowerCase()) {
+      throw new Error(`illegal skill target ${s.target} — only the depositor is allowed`)
+    }
+  }
+  return { steps, vault, token, generatedBy: 'venice-ai', approvedByUser: false }
 }
 
 /**

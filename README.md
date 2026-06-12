@@ -15,7 +15,7 @@ Most yield farming is repetitive work: find a vault, swap the asset, approve the
 1. **Strategy generation** — AI takes your deposit amount, risk level, and vault count, then outputs an allocation plan and a skill file per agent.
 2. **User review** — You read and optionally edit the generated skill JSON before any transaction is signed.
 3. **Smart account upgrade** — One EIP-7702 signature upgrades your MetaMask Flask EOA into a smart account.
-4. **Scoped permission** — An ERC-7715 batch permission request binds each worker agent to a single vault and spend cap.
+4. **Scoped permission** — The user signs once: (a) a bounded `IERC20.approve(depositor, totalCap)` and (b) registers each worker key in the on-chain `AgentRegistry` (vault, token, per-period cap, expiry). Each deposit is an EIP-712 message signed by the worker key; **any** submitter (the 1Shot relayer, or the user's own RPC) can broadcast it gas-abstracted — authorization is the signature, not `msg.sender`. ERC-7715's enforcer only releases plain `transfer()` calldata, so deposit authorization lives in our registry, not in a 7715 permission. See [Why not pure ERC-7715](docs/technical-blockchain-usage.md#why-not-pure-erc-7715).
 5. **Parallel execution** — `OrchestratorAgent` runs N `WorkerAgent` instances via `Promise.allSettled`. Each does Swap → Approve → Deposit through the 1Shot EIP-7710 relayer, paying zero gas.
 6. **Strategy attestation** — The Venice AI output is hashed (keccak256) and written on-chain via `AgentVaultDepositor.attestStrategy`. Anyone can reproduce that hash from the original JSON.
 7. **Background monitoring** — A Web Worker (`backgroundAgent.worker.js`) polls positions, detects APY drops, triggers harvest, and surfaces alerts in the Agent Dashboard.
@@ -41,7 +41,7 @@ User input (amount · risk level · vault count)
     ┌─────┼─────┐
     ▼     ▼     ▼
  Worker Worker Worker   (one per vault, parallel)
-   ERC-7715 scoped permission
+   Registry scope + EIP-712 signed deposits
    1Shot EIP-7710 relay (zero gas)
    AgentVaultDepositor.sol
    MockVault.sol (ERC-4626)
@@ -82,7 +82,7 @@ Test suite: 57 / 57 passing · Coverage: 93.3%
 | AI fallback | DeepSeek via server-side proxy (`/api/ai`) |
 | Live yield data | DeFiLlama API — APY, TVL, 7-day history, sparklines |
 | Gas abstraction | 1Shot API — EIP-7710 permissionless relayer, no API key |
-| Wallet | MetaMask Flask 13.9+ (EIP-7702 + ERC-7715) |
+| Wallet | MetaMask Flask 13.9+ (EIP-7702 smart account); deposits authorized by EIP-712 worker signatures |
 | Network | Base Sepolia (chain ID 84532) |
 
 ---

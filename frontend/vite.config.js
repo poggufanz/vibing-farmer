@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
   if (env.ONESHOT_KEY) process.env.ONESHOT_KEY = env.ONESHOT_KEY
   if (env.ONESHOT_SECRET) process.env.ONESHOT_SECRET = env.ONESHOT_SECRET
   if (env.ONESHOT_BIZ_ID) process.env.ONESHOT_BIZ_ID = env.ONESHOT_BIZ_ID
+  if (env.AGENT_VAULT_DEPOSITOR_ADDRESS) process.env.AGENT_VAULT_DEPOSITOR_ADDRESS = env.AGENT_VAULT_DEPOSITOR_ADDRESS
 
   const apiProxyPlugin = {
     name: 'api-proxy',

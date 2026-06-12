@@ -18,6 +18,9 @@ node_modules/
 .pnp
 .pnp.js
 
+# Vite/Vitest cache (created at repo root when run via npm --prefix frontend exec)
+.vite/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -50,3 +53,5 @@ graphify-out/
 .claude/settings.json
 design/agentdashboard/
 
+docs/PLAN-REVIEW-FINDINGS.md
+frontend/getUsdc.mjs
