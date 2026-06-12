@@ -8,18 +8,17 @@
 // never ship in a Vite client bundle.
 //
 // Execution model (server-wallet-as-relayer):
-//   The 1Shot server wallet is the on-chain msg.sender of
-//   executeAgentDeposit(agentId, user, vault, amount). AgentVaultDepositor
-//   enforces scope against agentPermissions[user][agentId] (vault, maxAmount,
-//   expiresAt) regardless of caller, so the server wallet sponsors gas while the
-//   contract enforces the cryptographic boundary. No EIP-7702 / delegation
-//   redemption required for the deposit path.
+//   The 1Shot server wallet broadcasts executeAgentDeposit(amount, minAmount, execId, sig).
+//   Authorization is the EIP-712 WORKER-KEY signature inside `sig` — the depositor recovers
+//   the signer and reads its scope from AgentRegistry — so msg.sender (the server wallet) is
+//   irrelevant. The server wallet only sponsors gas; the cryptographic boundary is the sig +
+//   the on-chain scope. No EIP-7702 / delegation redemption required.
 //
 // Two POST actions:
 //   { action: 'wallet' }
-//       → { address, chainId, walletId }  (auto-provisions the server wallet)
-//   { action: 'deposit', to, agentId, user, vault, amount }
-//       → { txHash, status }              (executes + polls to a real hash)
+//       → { address, chainId, walletId }      (auto-provisions the server wallet)
+//   { action: 'deposit', amount, minAmount, execId, sig }
+//       → { txHash, status }                  (executes + polls to a real hash)
 
 import { applyCors, rateLimit } from './_guard.js'
 
@@ -28,33 +27,18 @@ const CHAIN_ID = 84532 // Base Sepolia
 // 1Shot NewSolidityStructParam shape: `type` is the BASE enum
 // (address/bool/bytes/int/string/uint/struct) — bit/byte width goes in `typeSize`,
 // and `index` (ordinal position) is REQUIRED. bytes32 → {type:'bytes',typeSize:32};
-// uint256 → {type:'uint',typeSize:256}; bool → {type:'bool'}. Wrong shape → ZodError → 502.
+// uint256 → {type:'uint',typeSize:256}; dynamic bytes → {type:'bytes'} (no typeSize).
 const DEPOSIT_FN = 'executeAgentDeposit'
 const DEPOSIT_INPUTS = [
-  { name: 'agentId', type: 'bytes', typeSize: 32, index: 0 },
-  { name: 'user', type: 'address', index: 1 },
-  { name: 'vault', type: 'address', index: 2 },
-  { name: 'amount', type: 'uint', typeSize: 256, index: 3 },
-]
-
-const HARVEST_FN = 'executeHarvest'
-const HARVEST_INPUTS = [
-  { name: 'agentId', type: 'bytes', typeSize: 32, index: 0 },
-  { name: 'user', type: 'address', index: 1 },
-  { name: 'vault', type: 'address', index: 2 },
-  { name: 'recompound', type: 'bool', index: 3 },
-]
-
-const WITHDRAW_FN = 'executeWithdraw'
-const WITHDRAW_INPUTS = [
-  { name: 'agentId', type: 'bytes', typeSize: 32, index: 0 },
-  { name: 'user', type: 'address', index: 1 },
-  { name: 'vault', type: 'address', index: 2 },
-  { name: 'amount', type: 'uint', typeSize: 256, index: 3 },
+  { name: 'amount', type: 'uint', typeSize: 256, index: 0 },
+  { name: 'minAmount', type: 'uint', typeSize: 256, index: 1 },
+  { name: 'execId', type: 'bytes', typeSize: 32, index: 2 },
+  { name: 'sig', type: 'bytes', index: 3 },
 ]
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/
+const BYTES_RE = /^0x[0-9a-fA-F]*$/
 const UINT_RE = /^[0-9]+$/
 
 // Canonical depositor address — server-controlled, NEVER from the client.
@@ -113,9 +97,7 @@ async function resolveServerWallet(client, bizId) {
 }
 
 const FN_META = {
-  [DEPOSIT_FN]:  { inputs: DEPOSIT_INPUTS,  name: 'AgentVaultDepositor.executeAgentDeposit',  desc: 'Relayed agent deposit under on-chain scoped permission' },
-  [HARVEST_FN]:  { inputs: HARVEST_INPUTS,  name: 'AgentVaultDepositor.executeHarvest',        desc: 'Relayed harvest via server-wallet session key' },
-  [WITHDRAW_FN]: { inputs: WITHDRAW_INPUTS, name: 'AgentVaultDepositor.executeWithdraw',       desc: 'Relayed emergency withdraw via server-wallet session key' },
+  [DEPOSIT_FN]: { inputs: DEPOSIT_INPUTS, name: 'AgentVaultDepositor.executeAgentDeposit', desc: 'Relayed agent deposit authorized by an EIP-712 worker-key signature' },
 }
 
 /** Resolve (or auto-register) a contract method bound to the server wallet. */
@@ -194,59 +176,20 @@ export default async function handler(req, res) {
     }
 
     if (action === 'deposit') {
-      const { agentId, user, vault, amount } = body
-      // Target contract is server-controlled — NEVER from the client. Ignore any
-      // client-supplied `to` so a caller can't aim the funded server wallet at an
-      // arbitrary contract (register + execute) or poison the method cache.
+      const { amount, minAmount, execId, sig } = body
+      // Target contract is server-controlled — NEVER from the client. The authorization is
+      // the EIP-712 worker-key signature; the server wallet just sponsors gas.
       const depositor = depositorAddress()
       if (!ADDRESS_RE.test(depositor)) return bad(res, 'Depositor address not configured')
-      if (!BYTES32_RE.test(agentId || '')) return bad(res, 'Invalid agentId')
-      if (!ADDRESS_RE.test(user || '')) return bad(res, 'Invalid user address')
-      if (!ADDRESS_RE.test(vault || '')) return bad(res, 'Invalid vault address')
       if (!UINT_RE.test(String(amount ?? ''))) return bad(res, 'Invalid amount')
+      if (!UINT_RE.test(String(minAmount ?? ''))) return bad(res, 'Invalid minAmount')
+      if (!BYTES32_RE.test(execId || '')) return bad(res, 'Invalid execId')
+      if (!BYTES_RE.test(sig || '') || (sig || '').length < 4) return bad(res, 'Invalid sig')
 
       const wallet = await resolveServerWallet(client, bizId)
       const methodId = await resolveContractMethod(client, bizId, depositor, wallet.id, DEPOSIT_FN)
       const tx = await client.contractMethods.execute(methodId, {
-        agentId, user, vault, amount: String(amount),
-      })
-      const result = await pollForHash(client, tx.id)
-      return res.end(JSON.stringify({ ...result, relayer: wallet.accountAddress }))
-    }
-
-    // harvest + withdraw — zero-popup autonomous monitor loop.
-    // The server wallet is pre-authorized as a session key in AgentVaultDepositor
-    // (via authorizeSessionKey called once at setup). No MetaMask needed.
-    if (action === 'harvest') {
-      const { agentId, user, vault, recompound } = body
-      const depositor = depositorAddress()
-      if (!ADDRESS_RE.test(depositor)) return bad(res, 'Depositor address not configured')
-      if (!BYTES32_RE.test(agentId || '')) return bad(res, 'Invalid agentId')
-      if (!ADDRESS_RE.test(user || '')) return bad(res, 'Invalid user address')
-      if (!ADDRESS_RE.test(vault || '')) return bad(res, 'Invalid vault address')
-
-      const wallet = await resolveServerWallet(client, bizId)
-      const methodId = await resolveContractMethod(client, bizId, depositor, wallet.id, HARVEST_FN)
-      const tx = await client.contractMethods.execute(methodId, {
-        agentId, user, vault, recompound: Boolean(recompound),
-      })
-      const result = await pollForHash(client, tx.id)
-      return res.end(JSON.stringify({ ...result, relayer: wallet.accountAddress }))
-    }
-
-    if (action === 'withdraw') {
-      const { agentId, user, vault, amount } = body
-      const depositor = depositorAddress()
-      if (!ADDRESS_RE.test(depositor)) return bad(res, 'Depositor address not configured')
-      if (!BYTES32_RE.test(agentId || '')) return bad(res, 'Invalid agentId')
-      if (!ADDRESS_RE.test(user || '')) return bad(res, 'Invalid user address')
-      if (!ADDRESS_RE.test(vault || '')) return bad(res, 'Invalid vault address')
-      if (!UINT_RE.test(String(amount ?? ''))) return bad(res, 'Invalid amount')
-
-      const wallet = await resolveServerWallet(client, bizId)
-      const methodId = await resolveContractMethod(client, bizId, depositor, wallet.id, WITHDRAW_FN)
-      const tx = await client.contractMethods.execute(methodId, {
-        agentId, user, vault, amount: String(amount),
+        amount: String(amount), minAmount: String(minAmount), execId, sig,
       })
       const result = await pollForHash(client, tx.id)
       return res.end(JSON.stringify({ ...result, relayer: wallet.accountAddress }))

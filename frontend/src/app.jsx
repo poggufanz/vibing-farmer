@@ -20,7 +20,7 @@ import {
 } from './tweaks-panel.jsx';
 
 import { ethers } from 'ethers';
-import { connectWallet, requestERC7715Permission, signSiweForVenice, switchToSepolia, getProvider } from './wallet.js';
+import { connectWallet, requestERC7715Permission, signSiweForVenice, switchToSepolia, getProvider, revokeAgentDirect, readScope, onContractEvent } from './wallet.js';
 import { generateStrategy } from './venice.js';
 import { saveGrant, clearGrant } from './strategy/grantStore.js';
 import { initSession, clearSession, hasSession, saveSessionGrant } from './strategy/session.js';
@@ -31,13 +31,13 @@ import FlaskGate from './components/FlaskGate.jsx';
 import OnboardingFlow from './components/OnboardingFlow.jsx';
 import { OrchestratorAgent } from './orchestrator.js';
 import { makeAgentId } from './worker.js';
-import { VAULT_CATALOG, VENICE_TIMEOUT_MS, AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI } from './config.js';
+import { VAULT_CATALOG, VENICE_TIMEOUT_MS, AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, AGENT_REGISTRY_ADDRESS, REGISTRY_ABI } from './config.js';
 import { loadPersistedPositions, persistPositions, reconcilePositionsFromChain, mergePositions, applyChainPositions } from './positionsStore.js';
 import { getReadProvider } from './readProvider.js';
 import SkillDrawer from './components/SkillDrawer.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
 import { saveTransaction } from './history.js';
-import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEvent, harvestVault, emergencyWithdraw } from './agents/agentController.js';
+import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEvent, emergencyWithdraw } from './agents/agentController.js';
 import AgentDashboard from './components/AgentDashboard.jsx';
 import HomePage from './components/HomePage.jsx';
 import LandingHero from './components/LandingHero.jsx';
@@ -52,6 +52,7 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import VaultDetailPage from './components/VaultDetailPage.jsx';
 import TxDetailPage from './components/TxDetailPage.jsx';
 
+import { toSummary as scopeSummary } from './strategy/permissionScope.js';
 import { buildStrategyState, enforceActionSpace, scoreReward } from './strategy/mdp.js';
 import { runSimulation, allocationsFromStrategy } from './strategy/simulation.js';
 import { evaluateGates } from './strategy/gates.js';
@@ -61,8 +62,6 @@ import { reflect } from './strategy/reflector.js';
 import { increment as playbookIncrement, weight as playbookWeight } from './strategy/playbook.js';
 import { saveCycle, getCycles, getJournalSummary } from './strategy/cycleJournal.js';
 import { recordDecision, getDecisions, getDecisionSummary } from './strategy/decisionLog.js';
-import { relayHarvest, relayWithdraw, getRelayerAddress } from './relay.js';
-import { setupBgAgentsWithSessionKey } from './wallet.js';
 import { resolveCouncilConflict, councilSpecialistVerdict, askVeniceJson } from './venice.js';
 import { councilReview, buildCouncilInput } from './strategy/councilReview.js';
 import { councilOutcome } from './strategy/outcome.js';
@@ -191,6 +190,8 @@ const App = () => {
   const [permPhase, setPermPhase] = useS("idle");
   const [permError, setPermError] = useS(null);
   const [permActive, setPermActive] = useS(false);
+  // Per-agent on-chain scopes (single-source summary + Revoke). Keyed by worker agent address.
+  const [scopes, setScopes] = useS([]);
   const [permExpiresAt, setPermExpiresAt] = useS(null);
 
   // Rehydrate the single grant on mount: if a valid ERC-7715 grant is persisted,
@@ -224,7 +225,6 @@ const App = () => {
   const loopRef = useR(null);
   const latestGasRef = useR(null); // last live gas snapshot { level, gwei } for the monitor loop
   // Tracks which user addresses have had session key setup done (survives re-renders).
-  const sessionKeySetupRef = useR(new Set());
   const [loopTick, setLoopTick] = useS(0);
   const [loopPhase, setLoopPhase] = useS(null); // live pipeline phase from monitorLoop onPhase
   const [permContext, setPermContext] = useS(null);
@@ -240,10 +240,9 @@ const App = () => {
   // exists (post-connect) and the AI strategy carries a deterministic hash. Any
   // failure/rejection is swallowed by attestStrategyOnChain → strategy still executes.
   useE(() => {
-    const provider = getProvider();
-    if (!rawStrategy?.strategyHash || !provider || strategyAttestation || attesting) return;
+    if (!rawStrategy?.strategyHash || strategyAttestation || attesting) return;
     setAttesting(true);
-    attestStrategyOnChain(rawStrategy, provider)
+    attestStrategyOnChain(rawStrategy)
       .then((a) => setStrategyAttestation(formatAttestation(a)))
       .finally(() => setAttesting(false));
   }, [rawStrategy, realAddress]);
@@ -354,16 +353,18 @@ const App = () => {
       setAgentData((d) => ({ ...d, positions: applyChainPositions(d.positions, chain), lastUpdated: Date.now() }));
     };
     const onEvent = () => { clearTimeout(timer); timer = setTimeout(sync, 1500); };
-    const depFilter = contract.filters.DepositExecuted(null, realAddress); // (agentId, user, ...)
-    const wdFilter = contract.filters.WithdrawExecuted(realAddress);       // (user, ...)
+    // v2 depositor: AgentDepositExecuted(agent, owner, vault, token, assetsIn, sharesOut, execId).
+    // owner is the 2nd indexed topic → filter on it. Withdraws are user-signed ERC-4626 txs
+    // (no depositor event); handleWithdrawSuccess updates positions directly, so we only
+    // need the deposit listener here.
+    const depFilter = contract.filters.AgentDepositExecuted(null, realAddress);
 
-    // Capture deposit event to save amounts (each internal call's amount tracked separately)
-    const onDepositEvent = (agentId, user, vault, amount, shares, event) => {
+    const onDepositEvent = (agent, owner, vault, token, assetsIn, sharesOut, execId, event) => {
       const vaultMeta = VAULT_CATALOG.find(v => v.address.toLowerCase() === vault.toLowerCase());
-      const amountUsdc = Number(amount) / 1e6;
+      const amountUsdc = Number(assetsIn) / 1e6;
       if (amountUsdc > 0) {
         saveTransaction({
-          txHash: event.transactionHash,
+          txHash: event?.log?.transactionHash || event?.transactionHash,
           vaultName: vaultMeta?.name || `Vault ${vault.slice(0, 6)}…`,
           vaultAddress: vault,
           protocol: vaultMeta?.protocol,
@@ -377,11 +378,9 @@ const App = () => {
     };
 
     contract.on(depFilter, onDepositEvent);
-    contract.on(wdFilter, onEvent);
     return () => {
       clearTimeout(timer);
       contract.off(depFilter, onDepositEvent);
-      contract.off(wdFilter, onEvent);
     };
   }, [realAddress]);
 
@@ -437,27 +436,9 @@ const App = () => {
     // strategy — otherwise a new deposit would stop the agent watching earlier vaults.
     let activeVaults = buildActiveVaults(agentData.positions, strategy);
     if (!activeVaults.length) activeVaults = strategy.agents.map((a) => ({ address: a.vault.addr, name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }));
-    // ── Session key setup (once per user, zero-popup autonomous loop) ──────────
-    // When autoHarvest is enabled, pre-authorize the 1Shot server wallet as a
-    // session key in AgentVaultDepositor. One EIP-5792 batch popup (grant bg
-    // permissions + authorizeSessionKey) — after this, all harvest/withdraw calls
-    // route through the managed relay with zero MetaMask prompts.
-    if (agentSettings.autoHarvest && !sessionKeySetupRef.current.has(realAddress)) {
-      sessionKeySetupRef.current.add(realAddress); // mark eagerly to prevent double-call
-      getRelayerAddress()
-        .then((serverWallet) => {
-          if (!serverWallet) throw new Error('Relayer wallet not configured');
-          return setupBgAgentsWithSessionKey(
-            activeVaults.map((v) => v.address),
-            serverWallet
-          );
-        })
-        .then(() => addLog({ event: 'OrchestratorPlanned', meta: 'session key · authorized — monitor loop now zero-popup' }))
-        .catch((err) => {
-          sessionKeySetupRef.current.delete(realAddress); // allow retry on next start
-          addLog({ event: 'AgentFailed', meta: `session key setup failed: ${err?.message}` });
-        });
-    }
+    // v2: the depositor is deposit-only and the MockVault is plain ERC-4626 — there is no
+    // on-chain harvest, so no server-wallet session-key setup. The monitor loop observes +
+    // proposes; any execution (withdraw/revoke) is a user-signed tx initiated from the UI.
 
     startBackgroundAgent({
       userAddress: realAddress,
@@ -489,20 +470,11 @@ const App = () => {
         resolveConflict: resolveCouncilConflict,
       }),
       execute: async (idea) => {
-        // Respect autoHarvest setting — if disabled the loop observes/suggests only,
-        // no on-chain calls, no MetaMask popups. User opts in explicitly.
-        if (!agentSettings.autoHarvest) return null;
-        if (idea.kind === 'harvest') {
-          const { txHash } = await relayHarvest({ user: realAddress, vault: idea.vaultAddress, recompound: false });
-          saveTransaction({ txHash, vaultName: idea.vaultName, vaultAddress: idea.vaultAddress, amountUsdc: 0, workerLabel: 'MonitorLoop', network: 'sepolia' });
-          return txHash;
-        }
-        if (idea.kind === 'rebalance') {
-          const pos = agentData.positions[idea.fromVaultAddress];
-          const { txHash } = await relayWithdraw({ user: realAddress, vault: idea.fromVaultAddress, amount: pos?.balance || '0' });
-          return txHash;
-        }
-        throw new Error(`unknown idea kind: ${idea.kind}`);
+        // v2 is observe + propose only. The deposit-only depositor + plain ERC-4626 vault
+        // have no relayer harvest/rebalance path, so the loop never moves funds autonomously.
+        // Surface the proposal; the user acts via the UI (user-signed withdraw / revoke).
+        addLog({ event: 'OrchestratorPlanned', meta: `proposal · ${idea.kind} ${idea.vaultName || idea.fromVault || ''}`.trim() });
+        return null;
       },
       reflect: (cycle) => reflect(cycle, { increment: playbookIncrement }),
       curate: (ctx) => {
@@ -593,14 +565,6 @@ const App = () => {
     return () => { cancelled = true; ctrl.abort(); };
   }, [strategy, amount, risk, councilRetry]);
 
-  const handleHarvestNow = async (alert) => {
-    try {
-      const tx = await harvestVault({ user: realAddress, vault: alert.vaultAddress, vaultName: alert.vaultName, rewardsUsdc: alert.rewardsUsdc });
-      addLog({ event: 'DepositExecuted', meta: `harvest ${alert.vaultName} · tx ${shortAddr(tx)}`, txHash: tx, detail: `Claimed rewards from ${alert.vaultName}.` });
-      dismissAlert(alert.id);
-    } catch (e) { addLog({ event: 'AgentFailed', meta: `harvest failed: ${e.message}` }); }
-  };
-
   const handleEmergencyWithdraw = async (alert) => {
     const pos = agentData.positions[alert.vaultAddress];
     const bal = BigInt(pos?.balance || '0');
@@ -614,6 +578,30 @@ const App = () => {
   };
 
   const handleReviewRebalance = (alert) => addLog({ event: 'OrchestratorPlanned', meta: `rebalance review · ${alert.fromVault} → ${alert.toProtocol} (+${alert.apyGain}%)`, detail: `Venice AI flagged ${alert.toProtocol} at ${alert.toApy}% vs ${alert.fromVault} at ${alert.fromApy}% (+${alert.apyGain}%). Rebalancing requests a fresh ERC-7715 permission for the new vault.` });
+
+  // Kill switch — user-signed AgentRegistry.revokeAgent (works even if the relayer is down).
+  // Optimistically flip the row; the on-chain AgentRevoked subscription confirms it.
+  const handleRevokeAgent = async (agent) => {
+    try {
+      const tx = await revokeAgentDirect(agent);
+      setScopes((prev) => prev.map((s) => s.agent?.toLowerCase() === agent.toLowerCase() ? { ...s, revoked: true } : s));
+      addLog({ event: 'PermissionRevoked', meta: `revoked agent ${shortAddr(agent)} · tx ${shortAddr(tx)}`, txHash: tx, detail: 'Agent scope revoked on-chain. Further deposits by this key now revert (ScopeInactive).' });
+    } catch (e) {
+      addLog({ event: 'AgentFailed', meta: `revoke failed: ${e.message}` });
+    }
+  };
+
+  // Live AgentRevoked subscription — flips a scope row to "revoked" the instant the event lands,
+  // whether revoked from this UI or elsewhere. Filtered to the connected owner.
+  useE(() => {
+    if (!realAddress) return;
+    let off = null;
+    onContractEvent('AgentRevoked', (owner, agent) => {
+      if (String(owner).toLowerCase() !== realAddress.toLowerCase()) return;
+      setScopes((prev) => prev.map((s) => s.agent?.toLowerCase() === String(agent).toLowerCase() ? { ...s, revoked: true } : s));
+    }).then((unsub) => { off = unsub; }).catch(() => {});
+    return () => { if (off) off(); };
+  }, [realAddress]);
 
   // After a withdraw: reduce/remove the position, sync the worker, stop the agent if empty
   const handleWithdrawSuccess = (vaultAddress, withdrawnUnits) => {
@@ -943,6 +931,21 @@ const App = () => {
             event: "AgentFailed",
             agent: dId,
             meta: `skill gen failed · ${data.error} · using fallback skill`,
+          });
+          return;
+        }
+
+        if (evName === "AgentScopeAuthorized") {
+          // Single source: derive the human summary (cap + max-at-risk) from the SAME scope
+          // object the orchestrator authorized on-chain. UI numbers cannot diverge from chain.
+          const summary = scopeSummary({
+            agent: data.agent, vault: data.vault, token: data.token,
+            capPerPeriod: BigInt(data.capPerPeriod), periodDuration: data.periodDuration,
+            expiry: data.expiry, nowSec: Math.floor(Date.now() / 1000),
+          });
+          setScopes((prev) => {
+            const next = prev.filter((s) => s.agent?.toLowerCase() !== data.agent?.toLowerCase());
+            return [...next, { ...summary, agentId: data.agentId, revoked: false, authorized: data.authorized }];
           });
           return;
         }
@@ -1396,6 +1399,26 @@ const App = () => {
           <Route path="/agent" element={
             <div className="stage">
               <div style={{ maxWidth: 820, margin: "0 auto", width: "100%" }}>
+                {scopes.length > 0 && (
+                  <div className="surface-card" style={{ padding: 14, marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, letterSpacing: '.04em', textTransform: 'uppercase', opacity: .6, marginBottom: 8 }}>
+                      Agent permissions · scoped on-chain
+                    </div>
+                    {scopes.map((s) => (
+                      <div key={s.agent} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '6px 0', borderTop: '.5px solid rgba(255,255,255,.06)' }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="mono" style={{ fontSize: 12 }}>{shortAddr(s.agent)}</div>
+                          <div style={{ fontSize: 10.5, opacity: .6 }}>
+                            cap {(Number(s.capPerPeriod) / 1e6).toFixed(2)} · max-at-risk {(Number(s.maxAtRisk) / 1e6).toFixed(2)} USDC
+                          </div>
+                        </div>
+                        {s.revoked
+                          ? <span style={{ fontSize: 11, color: 'var(--danger)' }}>revoked</span>
+                          : <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => handleRevokeAgent(s.agent)}>Revoke</button>}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <AgentDashboard
                   active={agentEnabled && stage === "done"}
                   positions={agentData.positions}
@@ -1405,7 +1428,6 @@ const App = () => {
                   userAddress={realAddress}
                   settings={agentSettings}
                   withdrawEnabled={stage === "done"}
-                  onHarvest={handleHarvestNow}
                   onEmergencyWithdraw={handleEmergencyWithdraw}
                   onReview={handleReviewRebalance}
                   onDismiss={dismissAlert}

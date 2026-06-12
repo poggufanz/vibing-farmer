@@ -3,7 +3,6 @@
 // Creates a verifiable, tamper-proof record of the AI reasoning (ERC-8004 aligned).
 
 import { ethers } from 'ethers'
-import { AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI } from './config.js'
 
 /**
  * Hash strategy + reasoning into a deterministic bytes32.
@@ -27,43 +26,18 @@ export function hashStrategy(strategy) {
 }
 
 /**
- * Attest a strategy hash on-chain via AgentVaultDepositor.attestStrategy.
- * Emits StrategyAttested — verifiable on Etherscan. NEVER blocking: any failure
- * returns null so strategy execution always continues.
- * @param {object} strategy - raw Venice AI strategy output (must carry strategyHash or selected_vaults)
- * @param {object} provider - ethers BrowserProvider (from MetaMask)
- * @returns {Promise<{txHash, strategyHash, blockNumber}|null>}
+ * Strategy attestation. The Roadmap v2 AgentVaultDepositor is deposit-only and carries NO
+ * attestStrategy method, so there is no on-chain attestation tx. We still compute the
+ * deterministic strategyHash (verifiable off-chain by reproducing it from the strategy JSON)
+ * and return it without a txHash. NEVER blocking — strategy execution always continues.
+ * @param {object} strategy - raw Venice AI strategy output
+ * @returns {Promise<{strategyHash}|null>}
  */
-export async function attestStrategyOnChain(strategy, provider) {
+export async function attestStrategyOnChain(strategy) {
   try {
-    const signer = await provider.getSigner()
-    const contract = new ethers.Contract(AGENT_VAULT_DEPOSITOR_ADDRESS, DEPOSITOR_ABI, signer)
-
     const strategyHash = strategy.strategyHash || hashStrategy(strategy)
-    const primaryVault = strategy.selected_vaults?.[0]
-    const vaultProtocol = primaryVault?.protocol || 'unknown'
-    const allocatedAmount = Math.floor((primaryVault?.allocation || 0) * 1e6)
-
-    // Pre-flight guard — prevents MetaMask's misleading "transaction likely to fail /
-    // insufficient funds" popup when the contract is undeployed (e.g. stale address)
-    // or lacks attestStrategy. We never reach the signature prompt unless the call is sound.
-    const code = await provider.getCode(AGENT_VAULT_DEPOSITOR_ADDRESS)
-    if (code === '0x') {
-      console.warn('[Attestation] No contract code at', AGENT_VAULT_DEPOSITOR_ADDRESS, '— skipping (non-blocking)')
-      return null
-    }
-    await contract.attestStrategy.estimateGas(strategyHash, vaultProtocol, allocatedAmount)
-
-    // Log the exact tx before sending (for debugging the MetaMask prompt)
-    const txReq = await contract.attestStrategy.populateTransaction(strategyHash, vaultProtocol, allocatedAmount)
-    console.log('[Attestation] sending attestStrategy →', { to: txReq.to, data: txReq.data, strategyHash, vaultProtocol, allocatedAmount })
-
-    const tx = await contract.attestStrategy(strategyHash, vaultProtocol, allocatedAmount)
-    const receipt = await tx.wait()
-
-    return { txHash: receipt.hash, strategyHash, blockNumber: receipt.blockNumber }
+    return { strategyHash, txHash: null, blockNumber: null }
   } catch (err) {
-    // Non-blocking: contract missing attestStrategy / estimation failed / user rejected.
     console.warn('[Attestation] Skipped (non-blocking):', err.message)
     return null
   }
@@ -78,8 +52,8 @@ export function formatAttestation(attestation) {
   return {
     hash: attestation.strategyHash.slice(0, 10) + '...',
     fullHash: attestation.strategyHash,
-    txHash: attestation.txHash,
-    etherscanUrl: `https://sepolia.basescan.org/tx/${attestation.txHash}`,
-    label: 'Strategy attested on-chain',
+    txHash: attestation.txHash || null,
+    etherscanUrl: attestation.txHash ? `https://sepolia.basescan.org/tx/${attestation.txHash}` : null,
+    label: attestation.txHash ? 'Strategy attested on-chain' : 'Strategy hash (off-chain verifiable)',
   }
 }

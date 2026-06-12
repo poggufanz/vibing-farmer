@@ -6,14 +6,13 @@
 const INTERVALS = {
   position: 5 * 60 * 1000,   // 5 min — slow backstop; event listener handles real-time sync
   apy: 10 * 60 * 1000,       // 10 min — APY drift + rebalance opportunity
-  reward: 5 * 60 * 1000,     // 5 min — unclaimed rewards check
   risk: 15 * 60 * 1000,      // 15 min — security news scan
 }
 
-// Verified against deployed MockVault ABI (cast sig)
+// Verified against deployed MockVault ABI (cast sig). The v2 MockVault is plain ERC-4626 —
+// no on-chain rewards accrual — so only the ERC-20 balanceOf is read here.
 const SELECTORS = {
   balanceOf: '0x70a08231',           // balanceOf(address)
-  getUnclaimedRewards: '0x69a69e29', // getUnclaimedRewards(address)
 }
 
 let config = null // { userAddress, activeVaults, rpcUrl, tavilyKey, supportedProtocols, thresholds }
@@ -40,7 +39,6 @@ function startMonitoring() {
   // Run each monitor immediately, then on interval. Each is independent — one crash never stops others.
   runPositionCheck(); timers.push(setInterval(runPositionCheck, INTERVALS.position))
   runApyCheck(); timers.push(setInterval(runApyCheck, INTERVALS.apy))
-  runRewardCheck(); timers.push(setInterval(runRewardCheck, INTERVALS.reward))
   runRiskCheck(); timers.push(setInterval(runRiskCheck, INTERVALS.risk))
 }
 
@@ -55,10 +53,9 @@ async function runPositionCheck() {
   try {
     for (const vault of config.activeVaults) {
       const balance = await ethCall(vault.address, 'balanceOf', config.userAddress)
-      const rewards = await ethCall(vault.address, 'getUnclaimedRewards', config.userAddress)
       self.postMessage({
         type: 'POSITION_UPDATE',
-        payload: { vaultAddress: vault.address, vaultName: vault.name, balance, unclaimedRewards: rewards, timestamp: Date.now() },
+        payload: { vaultAddress: vault.address, vaultName: vault.name, balance, unclaimedRewards: '0', timestamp: Date.now() },
       })
     }
   } catch (err) {
@@ -109,25 +106,8 @@ async function runApyCheck() {
   }
 }
 
-// ─── Monitor 3: Reward Harvest threshold ──────────────────────────────────────
-async function runRewardCheck() {
-  if (!config?.rpcUrl) return
-  try {
-    for (const vault of config.activeVaults) {
-      const rewards = await ethCall(vault.address, 'getUnclaimedRewards', config.userAddress)
-      const rewardsUsdc = Number(rewards) / 1e6
-      const threshold = config.thresholds.harvestMinUsdc || 1.0
-      if (rewardsUsdc >= threshold) {
-        self.postMessage({
-          type: 'HARVEST_READY',
-          payload: { vaultName: vault.name, vaultAddress: vault.address, rewardsUsdc: rewardsUsdc.toFixed(4), autoHarvest: config.thresholds.autoHarvest || false, timestamp: Date.now() },
-        })
-      }
-    }
-  } catch (err) {
-    self.postMessage({ type: 'MONITOR_ERROR', payload: { monitor: 'reward', error: err.message } })
-  }
-}
+// Monitor 3 (Reward Harvest) removed in v2 — the plain ERC-4626 MockVault has no on-chain
+// rewards to harvest. Yield accrues as share-price appreciation, realized on withdraw.
 
 // ─── Monitor 4: Risk Watcher (Tavily security news) ───────────────────────────
 async function runRiskCheck() {
