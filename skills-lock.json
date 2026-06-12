@@ -42,6 +42,12 @@
       "skillPath": "skills/build-graph/SKILL.md",
       "computedHash": "ae4760f61632866c69df9bdf6ecf54d1444a3e6bea012310e122d9175f3bd813"
     },
+    "caveman": {
+      "source": "juliusbrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman/SKILL.md",
+      "computedHash": "b0e7741886c0c32270cedc1a2fc21c2879d90964d3ce00f24952de7064613404"
+    },
     "code-review": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
