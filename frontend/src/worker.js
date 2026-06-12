@@ -127,10 +127,21 @@ export class WorkerAgent {
       this.emit('step', { agentId: this.agentId, step: 'sign', status: 'done', execId })
 
       this.emit('step', { agentId: this.agentId, step: 'deposit', status: 'pending' })
+      // Snapshot the user's vault shares BEFORE submitting — the only honest success signal.
+      const baselineShares = await this.readShares()
       const depositResult = await relayDeposit({
         amount: this.amount, minAmount: this.minAmount, minShares: this.minShares, execId, sig,
       })
       const gasMethod = depositResult.status === 'onchain' ? 'user-signed' : 'relayer'
+
+      // A relayer/tx that ACCEPTS a job is not a deposit. The relayer's executeAgentDeposit can
+      // still revert (e.g. transferFrom fails when USDC balance < amount) — relayDeposit returns
+      // a txHash regardless. Confirm the vault actually minted shares before declaring success,
+      // otherwise the UI seeds a phantom position the chain never holds.
+      const minted = await this.verifyDepositMined(baselineShares)
+      if (!minted) {
+        throw new Error('deposit not confirmed on-chain: vault shares did not increase (tx likely reverted — check USDC balance/allowance)')
+      }
 
       const lesson = buildLesson(this.vault, { shares: this.amount.toString() })
       this.memoryEntries.push(createEntry('deposit', 'success', { txHash: depositResult.txHash, gasMethod }, lesson))
@@ -229,6 +240,32 @@ export class WorkerAgent {
     )
     pk = null // immutable hex string — drop the reference immediately
     return sig
+  }
+
+  /** Read the user's current ERC-4626 share balance in this worker's vault, or null on RPC failure. */
+  async readShares() {
+    try {
+      const c = new ethers.Contract(this.vault, ['function balanceOf(address) view returns (uint256)'], getReadProvider())
+      return await c.balanceOf(this.user)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Poll the vault until the user's shares exceed the pre-deposit baseline — proof the deposit
+   * actually minted. Returns false if no increase appears within the window (revert/failed relay).
+   * Degrades to true only when the baseline could not be read (RPC down), to avoid false negatives.
+   * @param {bigint|null} baseline shares before the deposit
+   */
+  async verifyDepositMined(baseline, { attempts = 8, intervalMs = 3000 } = {}) {
+    if (baseline == null) return true // couldn't snapshot → can't verify; don't falsely fail
+    for (let i = 0; i < attempts; i++) {
+      const cur = await this.readShares()
+      if (cur != null && cur > baseline) return true
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, intervalMs))
+    }
+    return false
   }
 
   emit(eventName, data) {

@@ -196,6 +196,16 @@ export async function broadcastDepositOnChain(calldata) {
   }
 }
 
+/** Read the user's USDC balance (raw 6-decimal units) via the read-only provider, or null on failure. */
+export async function readUsdcBalance(user) {
+  try {
+    const erc20 = new ethers.Contract(USDC_SEPOLIA, ['function balanceOf(address) view returns (uint256)'], getReadProvider())
+    return await erc20.balanceOf(user)
+  } catch {
+    return null
+  }
+}
+
 /** Approve the depositor to pull `amount` USDC (Jalur B transferFrom) — user-signed.
  *  Used as the non-batched fallback when the wallet lacks EIP-5792. */
 export async function approveDepositorOnChain(amount) {

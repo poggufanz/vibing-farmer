@@ -111,6 +111,27 @@ async function isExecutedOnChain(depositor, execId) {
   }
 }
 
+// Positively-confirmed code presence at `addr`. A relayed executeAgentDeposit to a
+// CODELESS address does NOT revert — the EVM treats a call to an account with no code
+// as a successful no-op, so 1Shot reports a green tx while USDC never moves and no shares
+// mint (the "1Shot succeeds but vault shares didn't increase" symptom). We refuse to
+// broadcast in that case so the client falls back to a user-signed tx against the live
+// contract. Fail-OPEN (returns true) on any RPC error — never block a real deposit on a hiccup.
+async function hasCode(addr) {
+  try {
+    const res = await fetch(rpcUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getCode', params: [addr, 'latest'] }),
+    })
+    const json = await res.json()
+    if (typeof json?.result !== 'string') return true // inconclusive → don't block
+    return json.result !== '0x' && json.result !== '0x0'
+  } catch {
+    return true // RPC failure → fail-open, let the deposit proceed
+  }
+}
+
 async function readBody(req) {
   if (req.body && typeof req.body === 'object') return req.body // pre-parsed (serverless)
   const chunks = []
@@ -180,6 +201,14 @@ async function resolveContractMethod(client, bizId, depositor, walletId, fnName 
     inputs: meta.inputs,
     outputs: [],
   })
+  // Defend against a platform that dedups create-by-name and returns a PRE-EXISTING method
+  // bound to a different (stale) contractAddress. Executing that would broadcast to the wrong
+  // address. If the registered target doesn't match what we asked for, refuse — the caller
+  // catches and falls back to a user-signed tx against the correct contract.
+  const createdAddr = (created.contractAddress || '').toLowerCase()
+  if (createdAddr && createdAddr !== depositor.toLowerCase()) {
+    throw new Error(`1Shot method bound to ${created.contractAddress}, expected ${depositor} — refusing stale target`)
+  }
   _contractMethodIds.set(cacheKey, created.id)
   return created.id
 }
@@ -234,6 +263,13 @@ export default async function handler(req, res) {
       // the EIP-712 worker-key signature; the server wallet just sponsors gas.
       const depositor = depositorAddress()
       if (!ADDRESS_RE.test(depositor)) return bad(res, 'Depositor address not configured')
+      // Stale-address guard: a relayed call to a codeless address "succeeds" as a no-op
+      // (no revert) and silently eats the deposit. Refuse → client falls back to a
+      // user-signed tx against the live contract. Logs the bad address for diagnosis.
+      if (!(await hasCode(depositor))) {
+        console.error('[api/relay] depositor has NO CODE — refusing no-op broadcast:', depositor)
+        return bad(res, 'Depositor address has no code on-chain (stale/misconfigured): ' + depositor)
+      }
       if (!UINT_RE.test(String(amount ?? ''))) return bad(res, 'Invalid amount')
       if (!UINT_RE.test(String(minAmount ?? ''))) return bad(res, 'Invalid minAmount')
       if (!UINT_RE.test(String(minShares ?? '0'))) return bad(res, 'Invalid minShares')
