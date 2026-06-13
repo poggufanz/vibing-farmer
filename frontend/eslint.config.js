@@ -31,7 +31,14 @@ export default [
   },
   // Node-context server proxies, Pages Functions, root .mjs scripts, and build/config files
   {
-    files: ['api/**/*.js', 'functions/**/*.js', '**/*.mjs', 'vite.config.js', 'eslint.config.js', 'scripts/**/*.js'],
+    files: [
+      'api/**/*.js',
+      'functions/**/*.js',
+      '**/*.mjs',
+      'vite.config.js',
+      'eslint.config.js',
+      'scripts/**/*.js',
+    ],
     languageOptions: { globals: { ...globals.node } },
     rules: { 'no-console': 'off' },
   },

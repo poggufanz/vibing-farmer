@@ -19,7 +19,8 @@ export default defineConfig(({ mode }) => {
   if (env.ONESHOT_KEY) process.env.ONESHOT_KEY = env.ONESHOT_KEY
   if (env.ONESHOT_SECRET) process.env.ONESHOT_SECRET = env.ONESHOT_SECRET
   if (env.ONESHOT_BIZ_ID) process.env.ONESHOT_BIZ_ID = env.ONESHOT_BIZ_ID
-  if (env.AGENT_VAULT_DEPOSITOR_ADDRESS) process.env.AGENT_VAULT_DEPOSITOR_ADDRESS = env.AGENT_VAULT_DEPOSITOR_ADDRESS
+  if (env.AGENT_VAULT_DEPOSITOR_ADDRESS)
+    process.env.AGENT_VAULT_DEPOSITOR_ADDRESS = env.AGENT_VAULT_DEPOSITOR_ADDRESS
 
   const apiProxyPlugin = {
     name: 'api-proxy',
@@ -45,12 +46,19 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return
-            if (id.includes('react-force-graph') || id.includes('force-graph') || id.includes('d3-'))
+            if (
+              id.includes('react-force-graph') ||
+              id.includes('force-graph') ||
+              id.includes('d3-')
+            )
               return 'graph'
             if (
-              id.includes('ethers') || id.includes('viem') ||
-              id.includes('@metamask') || id.includes('/ox/') ||
-              id.includes('@coinbase') || id.includes('libsodium')
+              id.includes('ethers') ||
+              id.includes('viem') ||
+              id.includes('@metamask') ||
+              id.includes('/ox/') ||
+              id.includes('@coinbase') ||
+              id.includes('libsodium')
             )
               return 'web3'
             if (id.includes('framer-motion')) return 'motion'
@@ -66,7 +74,7 @@ export default defineConfig(({ mode }) => {
       historyApiFallback: true,
     },
     optimizeDeps: {
-      include: ['react-force-graph-2d']
-    }
+      include: ['react-force-graph-2d'],
+    },
   }
 })
