@@ -3,6 +3,7 @@
    Design state machine wired to real wallet.js / venice.js / orchestrator.js
    ============================================ */
 import React, { useState as useS, useEffect as useE, useRef as useR, useMemo as useM } from 'react';
+import { lazy, Suspense } from 'react';
 import { isDevMode } from './devFlag.js';
 
 import { Icon, Sidebar, TopBar, StepRail, STEPS } from './components.jsx';
@@ -41,10 +42,10 @@ import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEv
 import AgentDashboard from './components/AgentDashboard.jsx';
 import NotificationCenter from './components/NotificationCenter.jsx';
 import HomePage from './components/HomePage.jsx';
-import LandingHero from './components/LandingHero.jsx';
-import ExplorerPage from './components/ExplorerPage.jsx';
-import EcosystemPage from './components/EcosystemPage.jsx';
-import ReplayPage from './components/ReplayPage.jsx';
+const LandingHero = lazy(() => import('./components/LandingHero.jsx'));
+const ExplorerPage = lazy(() => import('./components/ExplorerPage.jsx'));
+const EcosystemPage = lazy(() => import('./components/EcosystemPage.jsx'));
+const ReplayPage = lazy(() => import('./components/ReplayPage.jsx'));
 import SettingsPage from './components/SettingsPage.jsx';
 import { WalletPanel, PermissionPanel, ActivityPanel, SkillPanel, PalettePicker, PALETTES } from './components/RightRail.jsx';
 import { loadSettings, saveSetting } from './settingsStore.js';
@@ -1370,13 +1371,25 @@ const App = () => {
   // Public pages — standalone full-bleed, own NavBar, no wallet required.
   // Checked before every gate so judges and visitors can browse without connecting.
   if (location.pathname === '/explorer') {
-    return <ExplorerPage />;
+    return (
+      <Suspense fallback={<div className="route-loading" aria-busy="true" />}>
+        <ExplorerPage />
+      </Suspense>
+    );
   }
   if (location.pathname === '/ecosystem') {
-    return <EcosystemPage />;
+    return (
+      <Suspense fallback={<div className="route-loading" aria-busy="true" />}>
+        <EcosystemPage />
+      </Suspense>
+    );
   }
   if (location.pathname === '/replay') {
-    return <ReplayPage />;
+    return (
+      <Suspense fallback={<div className="route-loading" aria-busy="true" />}>
+        <ReplayPage />
+      </Suspense>
+    );
   }
 
   // Landing takeover — first-time, not-yet-connected visitors see the scroll
@@ -1384,15 +1397,17 @@ const App = () => {
   // sets the URL to /strategy, which surfaces once onboarding (connect) completes.
   if (!skipLanding && !realAddress) {
     return (
-      <LandingHero
-        onStart={() => {
-          localStorage.setItem('yv_skip_landing', 'true');
-          localStorage.setItem('yv_onboarded', 'true');
-          setSkipLanding(true);
-          setOnboarded(true);
-          navigate('/strategy');
-        }}
-      />
+      <Suspense fallback={<div className="route-loading" aria-busy="true" />}>
+        <LandingHero
+          onStart={() => {
+            localStorage.setItem('yv_skip_landing', 'true');
+            localStorage.setItem('yv_onboarded', 'true');
+            setSkipLanding(true);
+            setOnboarded(true);
+            navigate('/strategy');
+          }}
+        />
+      </Suspense>
     );
   }
 
