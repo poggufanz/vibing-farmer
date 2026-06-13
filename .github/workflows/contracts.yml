@@ -22,10 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { submodules: recursive }
-      - uses: foundry-rs/foundry-toolchain@v1 # crytic-compile auto-detects foundry (root foundry.toml + lib/); needs forge on PATH
+      - uses: foundry-rs/foundry-toolchain@v1 # forge lives on the RUNNER host, NOT inside the slither Docker container
+      - run: forge build --build-info # produce out/ + out/build-info on host for slither to read
       - uses: crytic/slither-action@v0.4.2
-        with: { target: 'contracts/' }
-        # config: slither.config.json filters lib/ + test/ noise (see Task 4 Step 0)
+        with:
+          target: '.' # repo root so crytic-compile finds foundry.toml (src=contracts)
+          ignore-compile: true # don't shell out to forge inside the container (forge isn't installed there)
+          slither-config: slither.config.json # filters lib/ + test/ noise
 
   fork-nightly:
     if: github.event_name == 'schedule'

@@ -12,7 +12,7 @@ Built out of frustration with click-heavy sequential DeFi workflows. The thesis:
 
 ## How it works
 
-1. **Strategy** — Venice AI (or DeepSeek fallback) takes your deposit amount, risk tolerance, and vault count. It outputs an allocation plan and a skill JSON per worker agent. A Monte Carlo simulation runs 200 scenarios over 30 days against the proposed allocation before you commit.
+1. **Strategy** — A privacy-first AI strategist takes your deposit amount, risk tolerance, and vault count, then outputs an allocation plan and a skill JSON per worker agent. The recommended provider is **Venice AI** (uncensored, zero-data-retention), used either by pasting a Venice API key in Settings or via x402 wallet payment (an EIP-4361 SIWE signature with a prepaid USDC balance on Base — not a social login). If neither is configured, it falls back to a DeepSeek server-side proxy so the app works with zero setup. A Monte Carlo simulation runs 200 scenarios over 30 days against the proposed allocation before you commit.
 
 2. **AI Council** — Three AI specialists (yield, risk, market) independently evaluate the proposal. If they disagree, a synthesis call resolves the conflict. The verdict, cited playbook rules, and resolution method are all logged.
 
@@ -24,7 +24,7 @@ Built out of frustration with click-heavy sequential DeFi workflows. The thesis:
 
 6. **Parallel execution** — `OrchestratorAgent` dispatches N `WorkerAgent` instances via `Promise.allSettled`. Each does Swap, Approve, Deposit through the 1Shot EIP-7710 relayer. Zero gas for the user.
 
-7. **Strategy attestation** — The Venice AI output gets hashed (keccak256) and written on-chain via `AgentVaultDepositor.attestStrategy`. Anyone can reproduce the hash from the original JSON.
+7. **Strategy attestation** — The AI strategy output gets hashed (keccak256) and written on-chain via `AgentVaultDepositor.attestStrategy`. Anyone can reproduce the hash from the original JSON.
 
 8. **Autonomous monitor loop** — A background Web Worker polls positions, detects APY drift, surfaces risk alerts, and proposes rebalances. A TradingAgents-style council reviews each cycle. An ACE Curator grows, merges, and prunes playbook rules from notable outcomes. Cycle journals and decision logs are stored in localStorage and surfaced in the Agent Dashboard.
 
@@ -38,7 +38,7 @@ Built out of frustration with click-heavy sequential DeFi workflows. The thesis:
 User input (amount, risk level, vault count)
                 |
                 v
-        Venice AI / DeepSeek fallback
+        AI strategist (Venice AI — key or x402; DeepSeek proxy fallback)
           |-- Multi-vault allocation + live DeFiLlama data
           |-- Skill JSON per agent (swap + deposit constraints)
           |-- MDP state: turbulence regime, gas snapshot
@@ -74,9 +74,9 @@ User input (amount, risk level, vault count)
 
 | Contract | Address |
 |----------|---------|
-| AgentRegistry | `0x735f3a63D5be965E6B7564a2befeca0E316d09Ad` |
-| AgentVaultDepositor | `0x79007794Eb31B6a8439C38B604827012DBc0D771` |
-| MockVault (ERC-4626, asset = USDC) | `0xdef19fED6Da53D3757779d27b9A2640547c30b6F` |
+| AgentRegistry | `0x1f5eb2613585c439d9877CA4b99439f7d06bA4AA` |
+| AgentVaultDepositor | `0xbf2091Fe26183369ae9f0Ba4735190F5fec7686c` |
+| MockVault (ERC-4626, asset = USDC) | `0xDff362A0Dc9E0190b2F77E52CF8Da38721b8b7AC` |
 | USDC (Circle testnet) | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
 
 Verify on Basescan: `https://sepolia.basescan.org/address/<address>`
@@ -88,15 +88,19 @@ Verify on Basescan: `https://sepolia.basescan.org/address/<address>`
 | Layer | Technology |
 |-------|------------|
 | Smart contracts | Solidity ^0.8.24, OpenZeppelin, Foundry |
-| Frontend | React 18, Vite 5, React Router v6, Framer Motion |
+| Frontend | React 18, Vite 5, React Router v6, Framer Motion, react-force-graph-2d |
 | Web3 | MetaMask Smart Accounts Kit v1.6.0, Viem v2, ethers.js v6 |
-| AI | Venice AI (deepseek-v4-flash), DeepSeek fallback via server proxy |
+| AI | **Venice AI** (`zai-org-glm-5-1`) — recommended, via API key or x402 wallet payment (SIWE, prepaid USDC on Base); DeepSeek (`deepseek-v4-flash`) server-side proxy as zero-config fallback |
 | Live yield data | DeFiLlama API — APY, TVL, 7-day history |
-| Gas abstraction | 1Shot API — EIP-7710 permissionless relayer, no API key |
+| Web search | Tavily API (server proxy) — live DeFi context for strategy prompts |
+| Gas abstraction | 1Shot Managed API — EIP-7710 relayer via server proxy, auto-provisioned Base Sepolia server wallet |
 | Wallet | MetaMask Flask 13.9+ (EIP-7702 smart account) |
 | Crypto | libsodium — KDF-sealed per-worker key vault |
+| Validation | Zod schemas at boundaries |
 | Network | Base Sepolia (chain 84532) |
-| CI | GitHub Actions — unit tests, Slither (soft-fail), nightly fork tests |
+| Hosting | Cloudflare Pages — static SPA + `/api/*` Pages Functions (edge) |
+| CI | GitHub Actions — contracts (unit + Slither + nightly fork) + frontend (lint, Vitest, build) |
+| Lint/format | ESLint 9 flat config + Prettier |
 | Test runner | Forge (contracts), Vitest (frontend) |
 
 ---
@@ -185,15 +189,15 @@ The `strategy/` directory contains the autonomous decision-making spine:
 
 ## Skill system
 
-Venice AI generates a typed skill file per agent:
+The AI strategist generates a typed skill file per agent:
 
 ```json
 {
   "agentId": "worker-agent-1",
-  "vaultAddress": "0xdef19fED6Da53D3757779d27b9A2640547c30b6F",
+  "vaultAddress": "0xDff362A0Dc9E0190b2F77E52CF8Da38721b8b7AC",
   "skills": {
     "swap": { "maxSlippage": 0.5, "dexPreference": "uniswap-v3", "maxRetries": 2, "timeoutSeconds": 30 },
-    "deposit": { "maxAmount": "100000000", "vaultAddress": "0xdef1...", "expiresAt": 1749686400 }
+    "deposit": { "maxAmount": "100000000", "vaultAddress": "0xDff3...", "expiresAt": 1749686400 }
   },
   "generatedBy": "venice-ai",
   "approvedByUser": true
@@ -216,7 +220,10 @@ Every field is editable in the Skills Drawer before approval. A vault-advisor sy
 
 ```bash
 cp .env.example .env
-# fill in VITE_RPC_URL and VENICE_API_KEY (or DEEPSEEK_API_KEY)
+# fill in VITE_RPC_URL, plus DEEPSEEK_API_KEY for the zero-config fallback proxy
+# Venice AI (recommended) needs no .env key — users either paste a Venice API key
+# in Settings (https://venice.ai/settings/api), or use x402 wallet payment (an
+# EIP-4361 SIWE signature + prepaid USDC balance on Base — not a social login)
 
 cd frontend
 npm install
@@ -229,11 +236,33 @@ Open `http://localhost:5173` and connect MetaMask Flask.
 
 ## Environment variables
 
+**Contracts / deploy (`.env` — see `.env.example`):**
+
 ```env
-VITE_RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
-PRIVATE_KEY=0x...                                            # deployer — never commit
-VENICE_API_KEY=...
-DEEPSEEK_API_KEY=...                                         # fallback AI provider
+BASE_SEPOLIA_RPC=https://sepolia.base.org        # public default; Alchemy/QuickNode for higher limits
+PRIVATE_KEY=0x...                                # deployer — never commit
+ETHERSCAN_API_KEY=...                            # contract verification
+MAINNET_RPC=...                                  # historical-replay fork tests
+BASE_MAINNET_RPC=...                             # Morpho real-vault fork test
+```
+
+**API proxies (server-side — see `frontend/.dev.vars.example`; never bundled to the client):**
+
+```env
+DEEPSEEK_API_KEY=sk-...                          # /api/ai — fallback AI proxy (Venice is the recommended provider)
+TAVILY_API_KEY=tvly-...                          # /api/search — optional live market context
+ONESHOT_KEY=...                                  # /api/relay — 1Shot Managed API (key + secret + biz id)
+ONESHOT_SECRET=...
+ONESHOT_BIZ_ID=...
+AGENT_VAULT_DEPOSITOR_ADDRESS=0x...              # must match src/config.js
+ALLOWED_ORIGIN=https://your-project.pages.dev    # /api/* origin allowlist (prod)
+RPC_URL=https://sepolia.base.org                 # optional — on-chain replay/code checks
+```
+
+**Client (build-time, `VITE_` prefix — inlined into the public bundle):**
+
+```env
+VITE_RPC_URL=https://sepolia.base.org            # read-only public client RPC
 ```
 
 ---
@@ -261,24 +290,49 @@ wsl -e bash -c "cd /mnt/c/SharredData/project/competition/yield-vibing && forge 
 
 ---
 
-## Frontend tests
+## Frontend scripts
 
 ```bash
 cd frontend
-npm test
+npm test              # Vitest — *.test.js in src/ and src/strategy/
+npm run lint          # ESLint (flat config)
+npm run format        # Prettier write
+npm run build         # production build -> dist/
+npm run pages:dev     # build + wrangler pages dev (Functions run locally)
 ```
-
-Runs Vitest against `*.test.js` files in `src/` and `src/strategy/`.
 
 ---
 
 ## CI pipeline
 
-GitHub Actions (`.github/workflows/contracts.yml`):
+**`.github/workflows/contracts.yml`** — Solidity:
 
 - **unit** — `forge test --no-match-contract Fork` on every push/PR
 - **slither** — static analysis (soft-fail, will promote to hard gate after Phase 5)
 - **fork-nightly** — nightly scheduled fork tests against mainnet RPCs
+
+**`.github/workflows/frontend.yml`** — frontend (push/PR on `main`, `iq`):
+
+- **lint** — `npm run lint` (ESLint, soft-fail)
+- **test** — `npm test` (Vitest)
+- **build** — `npm run build` (Vite production build)
+
+---
+
+## Deployment — Cloudflare Pages
+
+The frontend ships as a Cloudflare Pages app: the Vite SPA (`dist/`) served from the
+edge, and the `/api/{ai,search,relay}` proxies running as Pages Functions. Local Vite
+dev is unchanged — it reuses the same `api/*.js` handlers as middleware.
+
+```bash
+cd frontend
+npm run pages:dev      # local: vite build + wrangler pages dev
+npm run pages:deploy   # deploy (run `wrangler login` first)
+```
+
+Set the server-side secrets (`DEEPSEEK_API_KEY`, `ONESHOT_*`, `ALLOWED_ORIGIN`, …) in
+the Pages dashboard. Full guide: [frontend/DEPLOY-CLOUDFLARE.md](frontend/DEPLOY-CLOUDFLARE.md).
 
 ---
 
@@ -311,6 +365,21 @@ script/
 
 deployments/
   base-sepolia.json              # Live deployment addresses
+
+frontend/
+  wrangler.jsonc                 # Cloudflare Pages runtime config (nodejs_compat)
+  DEPLOY-CLOUDFLARE.md           # Pages deployment guide
+  .dev.vars.example              # Server-side secrets template (local Functions)
+  api/                           # Server-side proxies (Vite dev middleware)
+    ai.js                        # DeepSeek AI proxy (key off the client)
+    search.js                    # Tavily web-search proxy
+    relay.js                     # 1Shot Managed API relay proxy
+    _guard.js                    # CORS allowlist + rate limit
+    _pagesAdapter.js             # Reuses api/*.js handlers as Pages Functions
+  functions/api/                 # Cloudflare Pages Functions (edge wrappers)
+  public/
+    _routes.json                 # Functions run only on /api/*
+    _headers                     # Security headers
 
 frontend/src/
   components/
@@ -416,6 +485,9 @@ docs/
 - [ERC-7715](https://eips.ethereum.org/EIPS/eip-7715)
 - [1Shot API](https://1shotapi.com/docs)
 - [Venice AI](https://venice.ai)
+- [DeepSeek API](https://api-docs.deepseek.com)
+- [Tavily API](https://docs.tavily.com)
+- [Cloudflare Pages](https://developers.cloudflare.com/pages/)
 - [DeFiLlama API](https://defillama.com/docs/api)
 
 ---
