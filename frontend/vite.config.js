@@ -40,7 +40,24 @@ export default defineConfig(({ mode }) => {
     root: '.',
     build: {
       outDir: 'dist',
-      rollupOptions: { external: [] }
+      rollupOptions: {
+        external: [],
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return
+            if (id.includes('react-force-graph') || id.includes('force-graph') || id.includes('d3-'))
+              return 'graph'
+            if (
+              id.includes('ethers') || id.includes('viem') ||
+              id.includes('@metamask') || id.includes('/ox/') ||
+              id.includes('@coinbase') || id.includes('libsodium')
+            )
+              return 'web3'
+            if (id.includes('framer-motion')) return 'motion'
+            return 'vendor'
+          },
+        },
+      },
     },
     server: {
       historyApiFallback: true,
