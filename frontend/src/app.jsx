@@ -1487,7 +1487,7 @@ const App = () => {
                   lastUpdated={agentData.lastUpdated}
                   userAddress={realAddress}
                   settings={agentSettings}
-                  withdrawEnabled={stage === "done"}
+                  withdrawEnabled={stage !== "execute" && stage !== "permission"}
                   onEmergencyWithdraw={handleEmergencyWithdraw}
                   onReview={handleReviewRebalance}
                   onDismiss={dismissAlert}
