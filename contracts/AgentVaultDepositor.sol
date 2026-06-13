@@ -27,7 +27,7 @@ contract AgentVaultDepositor is ReentrancyGuard, Pausable, EIP712 {
 
     // EIP-712 typed data: the worker key signs this; recovered signer == the agent.
     bytes32 public constant DEPOSIT_TYPEHASH =
-        keccak256("AgentDeposit(uint256 amount,uint256 minAmount,bytes32 execId)");
+        keccak256("AgentDeposit(uint256 amount,uint256 minAmount,uint256 minShares,bytes32 execId)");
 
     event AgentDepositExecuted(
         address indexed agent, address indexed owner, address indexed vault,
@@ -36,6 +36,7 @@ contract AgentVaultDepositor is ReentrancyGuard, Pausable, EIP712 {
 
     error ScopeInactive();
     error InsufficientReceived(uint256 received, uint256 minAmount);
+    error InsufficientShares(uint256 received, uint256 minShares);
     error AlreadyExecuted(bytes32 execId);
     error ZeroShares();
     error NotGuardian();
@@ -50,23 +51,26 @@ contract AgentVaultDepositor is ReentrancyGuard, Pausable, EIP712 {
 
     /// @notice EIP-712 digest a worker key must sign. Exposed for tests + the frontend so
     ///         on-chain and off-chain hash the SAME bytes (no divergence).
-    function hashDeposit(uint256 amount, uint256 minAmount, bytes32 execId) public view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(DEPOSIT_TYPEHASH, amount, minAmount, execId)));
+    function hashDeposit(uint256 amount, uint256 minAmount, uint256 minShares, bytes32 execId) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(DEPOSIT_TYPEHASH, amount, minAmount, minShares, execId)));
     }
 
     /// @param amount    tokens to pull from the scope owner (declared by the signer)
     /// @param minAmount floor on the *received* delta (fee-on-transfer / slippage guard)
+    /// @param minShares floor on the ERC-4626 shares minted to the owner. Hardens against an
+    ///                  adversarial/manipulatable vault returning dust shares for a full deposit.
+    ///                  Pass 0 to opt out (ZeroShares still rejects a literal-zero mint).
     /// @param execId    deterministic per (owner,vault,planId,step) — replay-safe
-    /// @param sig       EIP-712 signature over (amount,minAmount,execId) by the worker key.
+    /// @param sig       EIP-712 signature over (amount,minAmount,minShares,execId) by the worker key.
     ///                  The recovered signer IS the agent; msg.sender is irrelevant.
-    function executeAgentDeposit(uint256 amount, uint256 minAmount, bytes32 execId, bytes calldata sig)
+    function executeAgentDeposit(uint256 amount, uint256 minAmount, uint256 minShares, bytes32 execId, bytes calldata sig)
         external
         nonReentrant
         whenNotPaused
         returns (uint256 shares)
     {
         // 0. recover the agent from the signature — this is the authorization, not msg.sender
-        address agent = ECDSA.recover(hashDeposit(amount, minAmount, execId), sig);
+        address agent = ECDSA.recover(hashDeposit(amount, minAmount, minShares, execId), sig);
         AgentRegistry.AgentScope memory s = registry.scopeOf(agent);
 
         // 1. scope active
@@ -91,6 +95,7 @@ contract AgentVaultDepositor is ReentrancyGuard, Pausable, EIP712 {
         token.forceApprove(s.vault, received);
         shares = IERC4626(s.vault).deposit(received, s.owner); // shares → owner directly
         if (shares == 0) revert ZeroShares();
+        if (shares < minShares) revert InsufficientShares(shares, minShares);
         reserves[s.token] -= received;
         token.forceApprove(s.vault, 0);
 

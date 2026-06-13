@@ -22,6 +22,29 @@ const Row = ({ k, v, color }) => (
 
 const pctBtn = { appearance: 'none', flex: 1, border: '.5px solid rgba(255,255,255,.18)', borderRadius: 5, background: 'rgba(255,255,255,.06)', color: 'inherit', font: 'inherit', fontSize: 11, padding: '5px 0', cursor: 'pointer' }
 
+// Map raw ethers/relayer errors to a short, human-readable line.
+// Avoids dumping the full ACTION_REJECTED / sendTransaction payload into the UI.
+const friendlyError = (err) => {
+  const code = err?.code || err?.info?.error?.code
+  const raw = (err?.shortMessage || err?.message || '').toLowerCase()
+  if (code === 'ACTION_REJECTED' || code === 4001 || raw.includes('user rejected') || raw.includes('user denied')) {
+    return 'You rejected the transaction in your wallet.'
+  }
+  if (raw.includes('insufficient funds') || raw.includes('insufficient balance')) {
+    return 'Insufficient balance to cover this withdrawal.'
+  }
+  if (raw.includes('timeout') || raw.includes('timed out')) {
+    return 'The relayer timed out. Please try again.'
+  }
+  if (raw.includes('expired') || raw.includes('permission')) {
+    return 'Agent permission is no longer active. Re-grant and retry.'
+  }
+  // Fall back to the wallet's own short message when present, else a generic line.
+  const short = err?.shortMessage || err?.reason
+  if (short && short.length < 120) return short
+  return 'Withdraw failed. Please try again.'
+}
+
 export default function WithdrawModal({ vault, balance, unclaimedRewards = 0, userAddress, onClose, onSuccess }) {
   const { language: lang } = loadSettings()
   const balUsdc = Number(balance || 0) / 1e6
@@ -58,7 +81,7 @@ export default function WithdrawModal({ vault, balance, unclaimedRewards = 0, us
       onSuccess(vault.address, units)
       setTimeout(onClose, 700)
     } catch (err) {
-      setError(err.message || 'Withdraw failed'); setStatus('idle')
+      setError(friendlyError(err)); setStatus('idle')
     }
   }
 
@@ -94,7 +117,12 @@ export default function WithdrawModal({ vault, balance, unclaimedRewards = 0, us
         <Row k="Permission" v="active" />
         <Row k="Est. time" v="~30 seconds" />
 
-        {error && <div role="alert" style={{ color: 'var(--danger)', fontSize: 10.5, marginTop: 6 }}>{error}</div>}
+        {error && (
+          <div role="alert" style={{ display: 'flex', gap: 7, alignItems: 'flex-start', color: 'var(--danger)', fontSize: 11, lineHeight: 1.4, marginTop: 8, padding: '7px 9px', background: 'rgba(255,80,80,.08)', border: '.5px solid rgba(255,80,80,.25)', borderRadius: 6, overflowWrap: 'anywhere' }}>
+            <span aria-hidden="true" style={{ flexShrink: 0 }}>⚠</span>
+            <span>{error}</span>
+          </div>
+        )}
 
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onClose} disabled={status === 'loading'}>Cancel</button>

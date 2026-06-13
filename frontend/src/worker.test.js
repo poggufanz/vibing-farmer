@@ -11,6 +11,7 @@ vi.mock('./relay.js', () => ({
   DEPOSIT_TYPES: { AgentDeposit: [
     { name: 'amount', type: 'uint256' },
     { name: 'minAmount', type: 'uint256' },
+    { name: 'minShares', type: 'uint256' },
     { name: 'execId', type: 'bytes32' },
   ] },
 }))

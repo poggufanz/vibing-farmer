@@ -29,8 +29,9 @@ export async function newSalt() {
 
 /**
  * Derive a 32-byte symmetric secret from a session passphrase + salt.
- * INTERACTIVE limits (2 ops / 64 MB) are browser-feasible; raise to MODERATE
- * on higher-security deployments (roadmap: move to a KMS entirely).
+ * MODERATE limits (3 ops / 256 MB) raise brute-force cost ~4x in memory over
+ * INTERACTIVE if the sealed IndexedDB blob + salt ever leak and the passphrase is
+ * weak. Still browser-feasible (~0.7s on a laptop). Roadmap: move to a KMS entirely.
  */
 export async function deriveSecret(passphrase, salt) {
   const s = await sodium();
@@ -38,8 +39,8 @@ export async function deriveSecret(passphrase, salt) {
     s.crypto_secretbox_KEYBYTES, // 32
     passphrase,
     salt,
-    s.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-    s.crypto_pwhash_MEMLIMIT_INTERACTIVE,
+    s.crypto_pwhash_OPSLIMIT_MODERATE,
+    s.crypto_pwhash_MEMLIMIT_MODERATE,
     s.crypto_pwhash_ALG_DEFAULT,
   );
 }

@@ -44,7 +44,7 @@ export class WorkerAgent {
    * @param {object} [config.keyStore] @param {object} [config.submitGate] @param {object} [config.gasSnapshot]
    */
   constructor({
-    agentId, user, vault, amount, sessionId, onEvent, planId, step, minAmount,
+    agentId, user, vault, amount, sessionId, onEvent, planId, step, minAmount, minShares,
     scopeAuthorized, capPerPeriod, periodDuration, expiry, agentAddress,
     sessionPassphrase, expectedBenefitWei, keyStore, submitGate, gasSnapshot,
   }) {
@@ -53,6 +53,9 @@ export class WorkerAgent {
     this.vault = vault
     this.amount = BigInt(amount)
     this.minAmount = minAmount != null ? BigInt(minAmount) : BigInt(amount)
+    // minShares: floor on ERC-4626 shares minted to the owner (adversarial-vault guard).
+    // Defaults to 0 (opt out) — MockVault is 1:1 so no client-side preview is needed yet.
+    this.minShares = minShares != null ? BigInt(minShares) : 0n
     this.sessionId = sessionId
     this.onEvent = onEvent || (() => {})
     this.planId = planId ?? 0
@@ -124,10 +127,21 @@ export class WorkerAgent {
       this.emit('step', { agentId: this.agentId, step: 'sign', status: 'done', execId })
 
       this.emit('step', { agentId: this.agentId, step: 'deposit', status: 'pending' })
+      // Snapshot the user's vault shares BEFORE submitting — the only honest success signal.
+      const baselineShares = await this.readShares()
       const depositResult = await relayDeposit({
-        amount: this.amount, minAmount: this.minAmount, execId, sig,
+        amount: this.amount, minAmount: this.minAmount, minShares: this.minShares, execId, sig,
       })
       const gasMethod = depositResult.status === 'onchain' ? 'user-signed' : 'relayer'
+
+      // A relayer/tx that ACCEPTS a job is not a deposit. The relayer's executeAgentDeposit can
+      // still revert (e.g. transferFrom fails when USDC balance < amount) — relayDeposit returns
+      // a txHash regardless. Confirm the vault actually minted shares before declaring success,
+      // otherwise the UI seeds a phantom position the chain never holds.
+      const minted = await this.verifyDepositMined(baselineShares)
+      if (!minted) {
+        throw new Error('deposit not confirmed on-chain: vault shares did not increase (tx likely reverted — check USDC balance/allowance)')
+      }
 
       const lesson = buildLesson(this.vault, { shares: this.amount.toString() })
       this.memoryEntries.push(createEntry('deposit', 'success', { txHash: depositResult.txHash, gasMethod }, lesson))
@@ -222,10 +236,36 @@ export class WorkerAgent {
     const sig = await wallet.signTypedData(
       DEPOSIT_DOMAIN(SEPOLIA_CHAIN_ID, AGENT_VAULT_DEPOSITOR_ADDRESS),
       DEPOSIT_TYPES,
-      { amount: this.amount, minAmount: this.minAmount, execId },
+      { amount: this.amount, minAmount: this.minAmount, minShares: this.minShares, execId },
     )
     pk = null // immutable hex string — drop the reference immediately
     return sig
+  }
+
+  /** Read the user's current ERC-4626 share balance in this worker's vault, or null on RPC failure. */
+  async readShares() {
+    try {
+      const c = new ethers.Contract(this.vault, ['function balanceOf(address) view returns (uint256)'], getReadProvider())
+      return await c.balanceOf(this.user)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Poll the vault until the user's shares exceed the pre-deposit baseline — proof the deposit
+   * actually minted. Returns false if no increase appears within the window (revert/failed relay).
+   * Degrades to true only when the baseline could not be read (RPC down), to avoid false negatives.
+   * @param {bigint|null} baseline shares before the deposit
+   */
+  async verifyDepositMined(baseline, { attempts = 8, intervalMs = 3000 } = {}) {
+    if (baseline == null) return true // couldn't snapshot → can't verify; don't falsely fail
+    for (let i = 0; i < attempts; i++) {
+      const cur = await this.readShares()
+      if (cur != null && cur > baseline) return true
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, intervalMs))
+    }
+    return false
   }
 
   emit(eventName, data) {

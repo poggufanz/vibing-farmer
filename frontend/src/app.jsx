@@ -39,6 +39,7 @@ import HistoryPanel from './components/HistoryPanel.jsx';
 import { saveTransaction } from './history.js';
 import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEvent, emergencyWithdraw } from './agents/agentController.js';
 import AgentDashboard from './components/AgentDashboard.jsx';
+import NotificationCenter from './components/NotificationCenter.jsx';
 import HomePage from './components/HomePage.jsx';
 import LandingHero from './components/LandingHero.jsx';
 import ExplorerPage from './components/ExplorerPage.jsx';
@@ -626,17 +627,33 @@ const App = () => {
     const remaining = (strategy?.agents || []).filter((a) => positions[a.vault.addr]).map((a) => ({ address: a.vault.addr, name: a.vault.name, protocol: a.vault.protocol, depositApy: Number(a.vault.apy) }));
     if (remaining.length === 0) stopBackgroundAgent(); else updateAgentConfig({ activeVaults: remaining });
     addLog({ event: 'PermissionRevoked', meta: `withdrew ${shortAddr(vaultAddress)} · position updated`, detail: 'Position balance updated after withdraw; agent monitoring config synced.' });
-    // Optimistic subtract above can drift (partial fills, share-price). Chain = truth:
-    // applyChainPositions REPLACES balances (can move down), and a fully-withdrawn vault is
-    // absent from the chain map so it stays deleted. The persist effect writes the result,
-    // so the cache can't keep a stale balance for the next reload/reconnect.
+    // Optimistic subtract above can drift (partial fills, share-price). Chain = truth — but
+    // getReadProvider() is a DIFFERENT RPC than the wallet that just mined the withdraw, so a
+    // read fired immediately after tx.wait() often lags a block and returns the PRE-withdraw
+    // balance. Committing that stale read would bounce the UI right back up to the old number
+    // (the bug: "balance doesn't update after withdraw") — and there's no withdraw event
+    // listener to re-correct it. So we poll, and only commit the chain snapshot once it
+    // actually reflects the withdraw (target vault balance <= our optimistic value). The
+    // optimistic value stays on screen the whole time, so the drop is instant and stable.
     if (realAddress) {
-      reconcilePositionsFromChain(realAddress)
-        .then((chain) => {
-          if (!chain) return;
-          setAgentData((d) => ({ ...d, positions: applyChainPositions(d.positions, chain), lastUpdated: Date.now() }));
-        })
-        .catch(() => {});
+      const targetBal = positions[vaultAddress] ? BigInt(positions[vaultAddress].balance || '0') : 0n;
+      let attempts = 0;
+      const reconcile = async () => {
+        attempts++;
+        const chain = await reconcilePositionsFromChain(realAddress).catch(() => null);
+        if (chain) {
+          const entry = Object.entries(chain).find(([k]) => k.toLowerCase() === vaultAddress.toLowerCase());
+          const chainBal = entry ? BigInt(entry[1].balance || '0') : 0n;
+          // Trust the chain only once it has caught up to (or below) the post-withdraw value,
+          // or after a bounded number of tries so we never spin forever on a real drift.
+          if (chainBal <= targetBal || attempts >= 6) {
+            setAgentData((d) => ({ ...d, positions: applyChainPositions(d.positions, chain), lastUpdated: Date.now() }));
+            return;
+          }
+        }
+        if (attempts < 6) setTimeout(reconcile, 2000);
+      };
+      reconcile();
     }
   };
 
@@ -1396,7 +1413,23 @@ const App = () => {
     <div className={`app ${sbExtended ? 'sb-extended' : 'sb-minimized'} ${railCollapsed ? 'rail-collapsed' : ''}`}>
       <Sidebar extended={sbExtended} onToggle={toggleSb} />
       <main className="main">
-        <TopBar walletConnected={walletPhase !== "none"} onReset={handleAgain} railCollapsed={railCollapsed} onToggleRail={toggleRail} />
+        <TopBar
+          walletConnected={walletPhase !== "none"}
+          onReset={handleAgain}
+          railCollapsed={railCollapsed}
+          onToggleRail={toggleRail}
+          notifications={
+            <NotificationCenter
+              alerts={agentData.alerts}
+              settings={agentSettings}
+              positions={agentData.positions}
+              userAddress={realAddress}
+              onEmergencyWithdraw={handleEmergencyWithdraw}
+              onReview={handleReviewRebalance}
+              onDismiss={dismissAlert}
+            />
+          }
+        />
         <Routes>
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="/home" element={
@@ -1454,7 +1487,7 @@ const App = () => {
                   lastUpdated={agentData.lastUpdated}
                   userAddress={realAddress}
                   settings={agentSettings}
-                  withdrawEnabled={stage === "done"}
+                  withdrawEnabled={stage !== "execute" && stage !== "permission"}
                   onEmergencyWithdraw={handleEmergencyWithdraw}
                   onReview={handleReviewRebalance}
                   onDismiss={dismissAlert}

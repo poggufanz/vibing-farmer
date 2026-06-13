@@ -27,10 +27,10 @@ const agent = '0x' + 'd4'.repeat(20)
 describe('relay encode + execId', () => {
   beforeEach(() => { vi.clearAllMocks(); global.fetch = vi.fn(async () => ({ ok: false })) })
 
-  it('encodes executeAgentDeposit(amount,minAmount,execId,sig)', () => {
+  it('encodes executeAgentDeposit(amount,minAmount,minShares,execId,sig)', () => {
     const execId = computeExecId({ owner, vault, planId: 1, step: 0 })
     const sig = '0x' + '11'.repeat(65)
-    const data = encodeExecuteAgentDeposit({ amount: 50_000000n, minAmount: 49_000000n, execId, sig })
+    const data = encodeExecuteAgentDeposit({ amount: 50_000000n, minAmount: 49_000000n, minShares: 0n, execId, sig })
     expect(data.startsWith('0x')).toBe(true)
     expect(execId).toMatch(/^0x[0-9a-f]{64}$/i)
   })

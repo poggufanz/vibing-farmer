@@ -1,9 +1,9 @@
 // Contract addresses — Base Sepolia (84532). AgentRegistry + EIP-712 AgentVaultDepositor
 // deploy 2026-06-11 (Roadmap v2 Phase 1 — deposit-only, signature-authorized).
-export const AGENT_REGISTRY_ADDRESS = '0x735f3a63D5be965E6B7564a2befeca0E316d09Ad'
-export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0x79007794Eb31B6a8439C38B604827012DBc0D771'
+export const AGENT_REGISTRY_ADDRESS = '0x1f5eb2613585c439d9877CA4b99439f7d06bA4AA'
+export const AGENT_VAULT_DEPOSITOR_ADDRESS = '0xbf2091Fe26183369ae9f0Ba4735190F5fec7686c'
 // Single MockVault deployed alongside the new depositor — the demo's execution-safe target.
-export const MOCK_VAULT_ADDRESS = '0xdef19fED6Da53D3757779d27b9A2640547c30b6F'
+export const MOCK_VAULT_ADDRESS = '0xDff362A0Dc9E0190b2F77E52CF8Da38721b8b7AC'
 // Older standalone MockVault deployments — still valid ERC4626(asset=USDC) vaults, reusable
 // as AgentRegistry scope targets (the registry doesn't care which depositor deployed them).
 // All catalog entries route to the deployed ERC-4626 MockVault v2 (asset()==USDC).

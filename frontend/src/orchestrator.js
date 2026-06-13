@@ -1,7 +1,7 @@
 import { WorkerAgent, makeAgentId, makePlanId } from './worker.js'
 import { generateAgentSkills } from './venice.js'
 import { saveSkill } from './skills.js'
-import { batchCalls, approveDepositorOnChain } from './wallet.js'
+import { batchCalls, approveDepositorOnChain, readUsdcBalance } from './wallet.js'
 import { buildAuthorizeSessionKeyCall, buildApproveCall } from './relay.js'
 import { USDC_SEPOLIA } from './config.js'
 
@@ -90,6 +90,17 @@ export class OrchestratorAgent {
     // The deposits themselves are submitted later by each worker (EIP-712 signed) — they
     // need no further popup because authorization is the signature, not msg.sender.
     const totalUnits = vaultPlans.reduce((acc, p) => acc + p.amountUnits, 0n)
+
+    // Pre-flight: block the deposit BEFORE the approve popup if USDC balance can't cover it.
+    // The depositor's transferFrom would revert mid-flight otherwise — wasting a signature and
+    // (pre-verification) seeding a phantom position. Fail fast with an actionable message.
+    const usdcBal = await readUsdcBalance(this.user)
+    if (usdcBal != null && usdcBal < totalUnits) {
+      const msg = `Insufficient USDC: have ${(Number(usdcBal) / 1e6).toFixed(2)}, need ${(Number(totalUnits) / 1e6).toFixed(2)} for this deposit.`
+      this.onEvent('orchestrator-step', { step: 'authorizing-scope', status: 'error', error: msg })
+      throw new Error(msg)
+    }
+
     const workers = vaultPlans.map((p) => new WorkerAgent({
       agentId: p.agentId,
       user: this.user,

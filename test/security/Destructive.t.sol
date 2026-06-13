@@ -36,7 +36,7 @@ contract DestructiveTest is Test {
     }
 
     function _sign(uint256 pk, uint256 amount, uint256 minAmount, bytes32 execId) internal view returns (bytes memory) {
-        bytes32 digest = dep.hashDeposit(amount, minAmount, execId);
+        bytes32 digest = dep.hashDeposit(amount, minAmount, 0, execId);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
         return abi.encodePacked(r, s, v);
     }
@@ -48,7 +48,7 @@ contract DestructiveTest is Test {
     function test_stolenWorkerKey_cannotRedirectVault() public {
         bytes memory sig = _sign(workerPk, 50e6, 50e6, keccak256("d1"));
         vm.prank(stranger);
-        uint256 shares = dep.executeAgentDeposit(50e6, 50e6, keccak256("d1"), sig);
+        uint256 shares = dep.executeAgentDeposit(50e6, 50e6, 0, keccak256("d1"), sig);
         assertEq(vaultA.balanceOf(owner), shares);
         assertEq(vaultB.balanceOf(owner), 0);
         assertEq(vaultA.balanceOf(stranger), 0);
@@ -57,23 +57,23 @@ contract DestructiveTest is Test {
 
     function test_stolenWorkerKey_cannotExceedCap() public {
         bytes memory sig1 = _sign(workerPk, 100e6, 100e6, keccak256("d2"));
-        dep.executeAgentDeposit(100e6, 100e6, keccak256("d2"), sig1);
+        dep.executeAgentDeposit(100e6, 100e6, 0, keccak256("d2"), sig1);
 
         bytes memory sig2 = _sign(workerPk, 1e6, 1e6, keccak256("d3"));
         vm.expectRevert(abi.encodeWithSelector(AgentRegistry.CapExceeded.selector, 1e6, 0));
-        dep.executeAgentDeposit(1e6, 1e6, keccak256("d3"), sig2);
+        dep.executeAgentDeposit(1e6, 1e6, 0, keccak256("d3"), sig2);
     }
 
     function test_midPlanRevoke_haltsImmediately() public {
         bytes memory sig1 = _sign(workerPk, 30e6, 30e6, keccak256("d4"));
-        dep.executeAgentDeposit(30e6, 30e6, keccak256("d4"), sig1);
+        dep.executeAgentDeposit(30e6, 30e6, 0, keccak256("d4"), sig1);
 
         vm.prank(owner);
         reg.revokeAgent(worker); // user pulls the plug
 
         bytes memory sig2 = _sign(workerPk, 30e6, 30e6, keccak256("d5"));
         vm.expectRevert(AgentVaultDepositor.ScopeInactive.selector);
-        dep.executeAgentDeposit(30e6, 30e6, keccak256("d5"), sig2);
+        dep.executeAgentDeposit(30e6, 30e6, 0, keccak256("d5"), sig2);
     }
 
     // A random attacker who does NOT hold the worker key has no scope at all.
@@ -83,6 +83,6 @@ contract DestructiveTest is Test {
     function test_unauthorizedCaller_hasNoScope() public {
         bytes memory sig = _sign(strangerPk, 10e6, 10e6, keccak256("d6"));
         vm.expectRevert(AgentVaultDepositor.ScopeInactive.selector);
-        dep.executeAgentDeposit(10e6, 10e6, keccak256("d6"), sig);
+        dep.executeAgentDeposit(10e6, 10e6, 0, keccak256("d6"), sig);
     }
 }

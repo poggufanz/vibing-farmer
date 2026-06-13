@@ -26,12 +26,12 @@ contract ZeroCustodyTest is Test {
     }
 
     function _sign(uint256 pk, uint256 amount, uint256 minAmount, bytes32 execId) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, dep.hashDeposit(amount, minAmount, execId));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, dep.hashDeposit(amount, minAmount, 0, execId));
         return abi.encodePacked(r, s, v);
     }
 
     function test_workerAndDepositorHoldNothingAfterFlow() public {
-        dep.executeAgentDeposit(50e6, 50e6, keccak256("a"), _sign(workerPk, 50e6, 50e6, keccak256("a")));
+        dep.executeAgentDeposit(50e6, 50e6, 0, keccak256("a"), _sign(workerPk, 50e6, 50e6, keccak256("a")));
         assertEq(token.balanceOf(worker), 0);
         assertEq(token.balanceOf(address(dep)), 0);
         assertEq(dep.reserves(address(token)), 0);

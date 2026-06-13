@@ -32,7 +32,7 @@ contract Handler is Test {
     }
 
     function _sign(uint256 amount, uint256 minAmount, bytes32 execId) internal view returns (bytes memory) {
-        bytes32 digest = dep.hashDeposit(amount, minAmount, execId);
+        bytes32 digest = dep.hashDeposit(amount, minAmount, 0, execId);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(workerPk, digest);
         return abi.encodePacked(r, s, v);
     }
@@ -44,7 +44,7 @@ contract Handler is Test {
         // execId includes `worker` so the id stays unique if Handler grows multi-agent later
         bytes32 execId = keccak256(abi.encode(worker, nonce++));
         bytes memory sig = _sign(amount, 0, execId);
-        try dep.executeAgentDeposit(amount, 0, execId, sig) returns (uint256) {
+        try dep.executeAgentDeposit(amount, 0, 0, execId, sig) returns (uint256) {
             totalPulled += amount; // only counts on SUCCESS
             if (revoked) depositsAfterRevoke++; // any success here is a breach
         } catch {}

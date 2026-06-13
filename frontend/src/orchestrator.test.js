@@ -6,6 +6,8 @@ const approveMock = vi.fn(async () => '0xAPPROVE')
 vi.mock('./wallet.js', () => ({
   batchCalls: (...a) => batchCallsMock(...a),
   approveDepositorOnChain: (...a) => approveMock(...a),
+  // null → balance precheck in orchestrator.dispatch is skipped (have/want guard)
+  readUsdcBalance: async () => null,
 }))
 vi.mock('./relay.js', () => ({
   buildAuthorizeSessionKeyCall: vi.fn(({ agent }) => ({ to: '0xREG', data: '0x', agent })),

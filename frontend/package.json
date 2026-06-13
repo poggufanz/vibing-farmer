@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pages:dev": "npm run build && wrangler pages dev",
+    "pages:deploy": "npm run build && wrangler pages deploy"
   },
   "dependencies": {
     "@coinbase/cdp-sdk": "^1.51.0",
@@ -29,6 +31,7 @@
     "@vitest/coverage-v8": "^2.1.9",
     "tsx": "^4.22.4",
     "vite": "^5.4.0",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "wrangler": "^4.0.0"
   }
 }

@@ -11,6 +11,8 @@ import NavBar from './NavBar.jsx'
 /* data                                                                  */
 /* ------------------------------------------------------------------ */
 
+// Marks are 2-char monospace lockups (no emoji, per design system §8) —
+// rendered uniform in currentColor so no per-partner accent competes with brand.
 const PARTNERS = [
   {
     name: 'MetaMask',
@@ -20,8 +22,7 @@ const PARTNERS = [
       'EIP-7702 smart account upgrade and ERC-7715 scoped permission delegation. The wallet layer that makes bounded autonomy possible.',
     tags: ['EIP-7702', 'ERC-7715', 'Flask 13.9+'],
     link: 'https://docs.metamask.io/smart-accounts-kit',
-    icon: '🦊',
-    accentColor: '#F6851B',
+    mark: 'MM',
   },
   {
     name: 'Venice AI',
@@ -31,8 +32,7 @@ const PARTNERS = [
       'Zero-retention inference via TEE + E2EE. 200+ open-source models. Vibing Farmer uses Venice to generate yield strategies with full privacy.',
     tags: ['llama-3.3-70b', 'TEE', 'Zero-retention'],
     link: 'https://venice.ai',
-    icon: '⚔️',
-    accentColor: '#8B5CF6',
+    mark: 'VA',
   },
   {
     name: '1Shot API',
@@ -42,8 +42,7 @@ const PARTNERS = [
       'Permissionless EIP-7710 relayer. Vibing Farmer agents pay $0 in gas. 1Shot sponsors every execution via stablecoin gas payments.',
     tags: ['EIP-7710', 'Gas abstraction', 'Stablecoin'],
     link: 'https://1shotapi.com',
-    icon: '⚡',
-    accentColor: '#CCFF00',
+    mark: '1S',
   },
   {
     name: 'DeFiLlama',
@@ -53,8 +52,7 @@ const PARTNERS = [
       'Real-time APY and TVL data from 1000+ DeFi protocols. Venice AI receives live market data before generating any strategy recommendation.',
     tags: ['APY', 'TVL', 'Real-time'],
     link: 'https://defillama.com',
-    icon: '🦙',
-    accentColor: '#06B6D4',
+    mark: 'DL',
   },
   {
     name: 'Tavily',
@@ -64,8 +62,7 @@ const PARTNERS = [
       'AI-powered web search for real-time market context and security signals. Risk watcher uses Tavily to detect protocol exploits before they affect positions.',
     tags: ['Risk signals', 'Market intel', 'AI search'],
     link: 'https://tavily.com',
-    icon: '🔍',
-    accentColor: '#10B981',
+    mark: 'TV',
   },
   {
     name: 'Base Sepolia',
@@ -75,8 +72,7 @@ const PARTNERS = [
       'All Vibing Farmer contracts are deployed and verified on Base Sepolia. Every transaction, permission, and attestation is publicly verifiable on-chain.',
     tags: ['Chain ID 84532', 'OP Stack L2', 'Verified'],
     link: 'https://sepolia.basescan.org',
-    icon: '◆',
-    accentColor: '#0052FF',
+    mark: 'BS',
   },
 ]
 
@@ -119,12 +115,9 @@ const DIAGRAM_HTML =
 
 function PartnerCard({ partner }) {
   return (
-    <article
-      className="eco-card"
-      style={{ borderLeftColor: partner.accentColor }}
-    >
+    <article className="eco-card">
       <div className="eco-card__head">
-        <span className="eco-card__icon" aria-hidden="true">{partner.icon}</span>
+        <span className="eco-card__mark" aria-hidden="true">{partner.mark}</span>
         <span className="eco-card__cat">{partner.category}</span>
       </div>
       <h3 className="eco-card__name">{partner.name}</h3>
@@ -370,7 +363,6 @@ function EcoStyle() {
 }
 .eco-card {
   border: 1px solid var(--border-strong, rgba(255,255,255,0.13));
-  border-left-width: 2px;
   border-radius: var(--radius-lg, 14px);
   background: var(--bg-card, #1a1b16);
   padding: clamp(1.1rem, 2.2vw, 1.4rem);
@@ -378,22 +370,33 @@ function EcoStyle() {
   flex-direction: column;
   gap: 0.65rem;
   transition: transform 220ms cubic-bezier(0.16,1,0.3,1),
-              box-shadow 220ms ease;
+              border-color 220ms ease, box-shadow 220ms ease;
 }
 .eco-card:hover {
   transform: translateY(-2px);
+  border-color: var(--border-accent, rgba(207,255,61,0.4));
   box-shadow: 0 8px 32px -8px rgba(0,0,0,0.55);
 }
 .eco-card__head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 }
-.eco-card__icon {
-  font-size: 1.35rem;
-  line-height: 1;
+.eco-card__mark {
   flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-strong, rgba(255,255,255,0.13));
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-elev, #22231d);
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text, #ecebe1);
 }
 .eco-card__cat {
   font-family: var(--font-mono, monospace);
@@ -570,7 +573,7 @@ function EcoStyle() {
   font-family: var(--font-script, "Newsreader", serif);
   font-style: italic;
   font-weight: 500;
-  color: var(--eco-accent);
+  color: var(--text-muted, #95958a);
 }
 .eco-cta__row {
   display: flex;

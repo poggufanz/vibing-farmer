@@ -13,6 +13,13 @@ coverage/
 .env.local
 .env.*.local
 
+# Cloudflare Pages / Wrangler
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.wrangler/
+frontend/dist/
+
 # Node (npx serve, tooling)
 node_modules/
 .pnp
@@ -46,12 +53,11 @@ blob-report/
 
 # Planning (personal notes, not for repo)
 planning/
-docs/superpowers/
+docs/
 .playwright-mcp/
 .kiro/
 graphify-out/
 .claude/settings.json
 design/agentdashboard/
 
-docs/PLAN-REVIEW-FINDINGS.md
 frontend/getUsdc.mjs

@@ -42,6 +42,12 @@
       "skillPath": "skills/build-graph/SKILL.md",
       "computedHash": "ae4760f61632866c69df9bdf6ecf54d1444a3e6bea012310e122d9175f3bd813"
     },
+    "caveman": {
+      "source": "juliusbrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman/SKILL.md",
+      "computedHash": "b0e7741886c0c32270cedc1a2fc21c2879d90964d3ce00f24952de7064613404"
+    },
     "code-review": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
@@ -89,6 +95,12 @@
       "source": "softaworks/agent-toolkit",
       "sourceType": "github",
       "computedHash": "c948e831d5fdfbe2e1fbbba1ebf8ab410a8f077ba529ddd522fd9ae40e6cc653"
+    },
+    "improve": {
+      "source": "shadcn/improve",
+      "sourceType": "github",
+      "skillPath": "skills/improve/SKILL.md",
+      "computedHash": "19d620a60ec3b9917621e8da3db49d4094de574d8b1e1527e5948a2588f74c07"
     },
     "machine-learning-engineer": {
       "source": "404kidwiz/claude-supercode-skills",
@@ -194,6 +206,12 @@
       "source": "pluginagentmarketplace/custom-plugin-blockchain",
       "sourceType": "github",
       "computedHash": "57a9ea01b1aa16a165739dbe6261ed7410b3a42514d0c28ed665513433234f08"
+    },
+    "wrangler": {
+      "source": "cloudflare/skills",
+      "sourceType": "github",
+      "skillPath": "skills/wrangler/SKILL.md",
+      "computedHash": "d2094f7a5a76414fc0cd365fd8ddba3258c2135a1d468b78213c0fa02c309b9b"
     },
     "writing-plans": {
       "source": "obra/superpowers",

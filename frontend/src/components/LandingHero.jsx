@@ -26,10 +26,10 @@ import NavBar from './NavBar.jsx'
 const SCENE_2 = {
   heading: ['Your USDC.', 'Earning yield.', 'Zero gas.'],
   features: [
-    'AI picks the optimal vault',
-    'One permission, scoped & revocable',
+    'Venice AI picks the optimal vault allocation',
+    'Three-specialist AI Council (Yield, Risk, Market) deliberates',
+    'Monte Carlo simulation projects risk & returns',
     '1Shot relayer pays all gas. You pay $0',
-    'Agent monitors 24/7, exits on risk',
   ],
 }
 
@@ -37,9 +37,9 @@ const SCENE_3 = {
   heading: ['Permission-bounded', 'autonomy.'],
   features: [
     'EIP-7702 smart account upgrade',
-    'ERC-7715 scoped permissions',
-    'Multi-agent A2A coordination',
-    'On-chain strategy attestation',
+    'ERC-7715 scoped permissions & AgentRegistry',
+    'Parallel worker agents execute using ephemeral keys',
+    'On-chain strategy attestation (ERC-8004)',
   ],
 }
 
@@ -62,26 +62,6 @@ const lineV = {
 }
 
 /* ------------------------------ pieces ----------------------------- */
-
-function Wordmark({ small = false }) {
-  return (
-    <div className={`vf-wordmark${small ? ' is-small' : ''}`}>
-      <span className="vf-wordmark__vibe">vibing</span>
-      <span className="vf-wordmark__slash">/</span>
-      <span className="vf-wordmark__farm">farmer</span>
-    </div>
-  )
-}
-
-function PlayButton() {
-  return (
-    <button className="vf-play" aria-label="Play demo">
-      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
-        <path d="M8 5.5v13l11-6.5z" fill="currentColor" />
-      </svg>
-    </button>
-  )
-}
 
 // The player itself — pure presentation. Animation lives on the wrapper.
 function Player({ src = '/demo.mp4' }) {
@@ -106,6 +86,34 @@ function Player({ src = '/demo.mp4' }) {
         />
       </div>
     </div>
+  )
+}
+
+// Above-the-fold hero — value prop + CTA visible without scroll.
+// Editorial split: copy left, the demo player right. Stacks on mobile.
+function HeroSection({ onStart }) {
+  return (
+    <section className="vf-hero">
+      <div className="vf-hero__copy">
+        <p className="vf-hero__eyebrow">Autonomous yield · Base Sepolia testnet</p>
+        <h1 className="vf-hero__headline">
+          <span>Set your yield once.</span>
+          <span className="vf-hero__headline-soft">Agents farm it forever.</span>
+        </h1>
+        <p className="vf-hero__sub">
+          Permission-bounded agents swap, approve, and deposit across vaults in
+          parallel. Zero gas, fully on-chain, fully revocable.
+        </p>
+        <div className="vf-hero__cta">
+          <button className="vf-cta__btn" onClick={onStart}>
+            Start farming <span aria-hidden="true">→</span>
+          </button>
+        </div>
+      </div>
+      <div className="vf-hero__visual">
+        <Player src="/demo.mp4" />
+      </div>
+    </section>
   )
 }
 
@@ -156,7 +164,8 @@ function OutroContent({ onStart }) {
     <>
       <p className="vf-outro__eyebrow">the vault is open</p>
       <h2 className="vf-outro__title">
-        The agents run. <em>You don't have to.</em>
+        The agents run.<br />
+        <span className="vf-outro__title-soft">You don't have to.</span>
       </h2>
       <p className="vf-outro__sub">
         Autonomous yield, scoped permissions, zero gas. Set once. Vibe forever.
@@ -172,20 +181,16 @@ function OutroContent({ onStart }) {
 function StaticHero({ onStart }) {
   return (
     <div className="vf-static">
-      <section className="vf-static__scene">
-        <Wordmark />
-        <Player />
-        <p className="vf-tagline">Set once. Vibe forever.</p>
-      </section>
+      <HeroSection onStart={onStart} />
 
       <section className="vf-static__scene vf-static__scene--split">
-        <Player />
+        <Player src="/strategy.mp4" />
         <SceneText data={SCENE_2} side="right" active />
       </section>
 
       <section className="vf-static__scene vf-static__scene--split reverse">
         <SceneText data={SCENE_3} side="left" active />
-        <Player />
+        <Player src="/agent.mp4" />
       </section>
 
       <section className="vf-static__scene vf-outro">
@@ -199,8 +204,8 @@ function StaticHero({ onStart }) {
 
 /* -------------------------- scroll-driven -------------------------- */
 
-// Per-scene video. All /demo.mp4 for now — swap freely later.
-const SCENE_VIDEO = { 1: '/demo.mp4', 2: '/demo.mp4', 3: '/demo.mp4' }
+// Per-scene video mapped to user's recorded demo components.
+const SCENE_VIDEO = { 1: '/demo.mp4', 2: '/strategy.mp4', 3: '/agent.mp4' }
 
 function ScrollHero({ onStart, scrollContainer }) {
   const ref = useRef(null)
@@ -241,6 +246,7 @@ function ScrollHero({ onStart, scrollContainer }) {
 
   return (
     <>
+    <HeroSection onStart={onStart} />
     <section className="vf-stage" ref={ref}>
       <div className="vf-stage__sticky">
         {/* persistent top nav carries the wordmark now (see <NavBar/> at root) */}
@@ -429,34 +435,64 @@ function StyleTag() {
   pointer-events: none;
 }
 
-/* play button — frosted, lime glow on hover */
-.vf-play {
+/* ---------- above-the-fold hero (editorial split) ---------- */
+.vf-hero {
   position: relative;
-  width: clamp(58px, 7vw, 84px);
-  aspect-ratio: 1;
-  border-radius: 50%;
+  z-index: 1;
+  min-height: 100vh;
+  max-width: 1400px;
+  margin: 0 auto;
   display: grid;
-  place-items: center;
-  color: var(--vf-accent);
-  cursor: pointer;
-  border: 1px solid var(--border-accent, rgba(207,255,61,0.4));
-  background: rgba(255,255,255,0.05);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 0 0 0 rgba(207,255,61,0.0);
-  transition: transform 280ms cubic-bezier(0.16,1,0.3,1),
-              box-shadow 280ms ease, background 280ms ease;
+  grid-template-columns: 1.1fr 1fr;
+  align-items: center;
+  gap: clamp(2rem, 5vw, 4.5rem);
+  padding: clamp(5.5rem, 12vh, 8rem) clamp(1.5rem, 6vw, 5rem) clamp(3rem, 8vh, 6rem);
 }
-.vf-play svg { transform: translateX(1px); }
-.vf-play:hover {
-  transform: scale(1.08);
-  background: rgba(207,255,61,0.1);
-  box-shadow: 0 0 36px 4px rgba(207,255,61,0.35);
+.vf-hero__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(1rem, 2.4vh, 1.6rem);
 }
-.vf-play:active { transform: scale(0.98); }
-.vf-play:focus-visible {
-  outline: 2px solid var(--vf-accent);
-  outline-offset: 3px;
+.vf-hero__eyebrow {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint, #56564f);
+}
+.vf-hero__headline {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-display, "Geist", sans-serif);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+  font-size: clamp(2.1rem, 4.4vw, 3.4rem);
+  color: var(--text, #ecebe1);
+  text-wrap: balance;
+}
+.vf-hero__headline-soft { color: var(--text-muted, #95958a); }
+.vf-hero__sub {
+  font-family: var(--font-mono, monospace);
+  font-size: clamp(0.84rem, 1.1vw, 0.98rem);
+  line-height: 1.65;
+  max-width: 46ch;
+  color: var(--text-muted, #95958a);
+}
+.vf-hero__cta { margin-top: 0.3rem; }
+.vf-hero__visual { width: 100%; }
+.vf-hero__visual .vf-player { width: 100%; }
+
+@media (max-width: 900px) {
+  .vf-hero {
+    grid-template-columns: 1fr;
+    gap: 2.2rem;
+    min-height: auto;
+    padding-top: 6rem;
+    padding-bottom: 3rem;
+  }
+  .vf-hero__visual { order: -1; }
 }
 
 /* ---------- tagline / hint ---------- */
@@ -485,7 +521,7 @@ function StyleTag() {
   line-height: 1.4;
   color: var(--text-muted, #95958a);
   padding-left: 0.9rem;
-  border-left: 2px solid var(--border-accent, rgba(207,255,61,0.4));
+  border-left: 1px solid var(--border-strong, rgba(255,255,255,0.13));
 }
 
 /* ---------- CTA ---------- */
@@ -612,11 +648,9 @@ function StyleTag() {
   font-size: clamp(2.4rem, 6vw, 5rem);
   color: var(--text, #ecebe1);
 }
-.vf-outro__title em {
-  font-family: var(--font-script, "Newsreader", serif);
-  font-style: italic;
-  font-weight: 500;
-  color: var(--vf-accent);
+.vf-outro__title-soft {
+  color: var(--text-muted, #95958a);
+  font-weight: 600;
 }
 .vf-outro__sub {
   font-family: var(--font-mono, monospace);
