@@ -201,6 +201,12 @@
       "sourceType": "github",
       "computedHash": "57a9ea01b1aa16a165739dbe6261ed7410b3a42514d0c28ed665513433234f08"
     },
+    "wrangler": {
+      "source": "cloudflare/skills",
+      "sourceType": "github",
+      "skillPath": "skills/wrangler/SKILL.md",
+      "computedHash": "d2094f7a5a76414fc0cd365fd8ddba3258c2135a1d468b78213c0fa02c309b9b"
+    },
     "writing-plans": {
       "source": "obra/superpowers",
       "sourceType": "github",
