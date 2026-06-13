@@ -6,6 +6,12 @@ on:
   # fork-nightly job will not trigger until this is merged to main.
   schedule: [{ cron: '0 3 * * *' }] # nightly fork tests
 
+# Pin Foundry to an exact release tag. `stable` makes foundryup resolve the latest
+# tag via api.github.com, which is rate-limited (HTTP 403) on shared GitHub-hosted
+# runner IPs. A concrete tag downloads straight from the releases CDN — no API call.
+env:
+  FOUNDRY_VERSION: v1.7.1
+
 jobs:
   unit:
     runs-on: ubuntu-latest
@@ -13,19 +19,33 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive }
       - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: '${{ env.FOUNDRY_VERSION }}' }
       # Exclude every fork/RPC test by CONTRACT-NAME suffix `Fork` (brace globs are unreliable).
       - run: forge test --no-match-contract Fork -vv
 
   slither:
     runs-on: ubuntu-latest
-    continue-on-error: true # soft-fail for now; promote to hard gate after Phase 5
     steps:
       - uses: actions/checkout@v4
         with: { submodules: recursive }
-      - uses: foundry-rs/foundry-toolchain@v1 # crytic-compile auto-detects foundry (root foundry.toml + lib/); needs forge on PATH
+      - uses: foundry-rs/foundry-toolchain@v1 # forge lives on the RUNNER host, NOT inside the slither Docker container
+        with: { version: '${{ env.FOUNDRY_VERSION }}' }
+      - run: forge build --build-info # produce out/ + out/build-info on host for slither to read
       - uses: crytic/slither-action@v0.4.2
-        with: { target: 'contracts/' }
-        # config: slither.config.json filters lib/ + test/ noise (see Task 4 Step 0)
+        with:
+          target: '.' # repo root so crytic-compile finds foundry.toml (src=contracts)
+          ignore-compile: true # don't shell out to forge inside the container (forge isn't installed there)
+          slither-config: slither.config.json # filters lib/ + test/ noise; excludes reentrancy-balance (see below)
+          # Hard-gate on HIGH severity only. One HIGH finding (reentrancy-balance, a heuristic
+          # detector — its own WIKI_RECOMMENDATION says reentrancy guards mitigate it) is excluded
+          # in slither.config.json because executeAgentDeposit is nonReentrant (ReentrancyGuard).
+          # Remaining Medium/Low findings stay VISIBLE in the log + SARIF but do not block:
+          #  - reentrancy-no-eth / -benign → same nonReentrant guard
+          #  - timestamp comparisons → inherent to expiry/period scopes
+          #  - divide-before-multiply → intentional floor to period boundary
+          #  - unused-return → vm.serialize* in Deploy script (accumulates internally)
+          # Any NEW high (e.g. reentrancy-eth, arbitrary-send, suicidal) still fails CI.
+          fail-on: high
 
   fork-nightly:
     if: github.event_name == 'schedule'
@@ -34,6 +54,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive }
       - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: '${{ env.FOUNDRY_VERSION }}' }
       - run: forge test --match-contract Fork -vv
         env:
           MAINNET_RPC: ${{ secrets.MAINNET_RPC }}

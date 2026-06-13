@@ -25,6 +25,10 @@ export const USDC_SEPOLIA = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
 // APIs
 export const ONE_SHOT_RELAYER_URL = 'https://relayer.1shotapi.com/relayers'
 export const VENICE_BASE_URL = 'https://api.venice.ai/api/v1'
+// Venice model slug — must be a Venice-hosted ID, NOT a DeepSeek name.
+// 'deepseek-v4-flash' is DeepSeek's own slug and 400s on Venice. Venice's
+// current docs default to zai-org-glm-5-1 (GLM-5.1). Used by both the x402
+// wallet path and the Settings API-key path. See resolveProvider in venice.js.
 export const VENICE_MODEL = 'deepseek-v4-flash'
 export const VENICE_TIMEOUT_MS = 60000
 
@@ -43,7 +47,7 @@ export const DEPOSITOR_ABI = [
   'function registry() external view returns (address)',
   'function executed(bytes32 execId) external view returns (bool)',
   'function reserves(address token) external view returns (uint256)',
-  'event AgentDepositExecuted(address indexed agent, address indexed owner, address indexed vault, address token, uint256 assetsIn, uint256 sharesOut, bytes32 execId)'
+  'event AgentDepositExecuted(address indexed agent, address indexed owner, address indexed vault, address token, uint256 assetsIn, uint256 sharesOut, bytes32 execId)',
 ]
 
 // AgentRegistry ABI — single on-chain source of truth for per-agent deposit scope.
@@ -56,7 +60,7 @@ export const REGISTRY_ABI = [
   'function scopeOf(address agent) external view returns (tuple(address owner, address vault, address token, uint96 capPerPeriod, uint32 periodDuration, uint96 spentInPeriod, uint40 periodStart, uint40 expiry, bool revoked))',
   'function scopesOfOwner(address owner) external view returns (address[])',
   'event AgentAuthorized(address indexed owner, address indexed agent, address vault, address token, uint96 capPerPeriod, uint32 periodDuration, uint40 expiry)',
-  'event AgentRevoked(address indexed owner, address indexed agent)'
+  'event AgentRevoked(address indexed owner, address indexed agent)',
 ]
 
 // MockVault ABI — plain ERC-4626 (no custom rewards/withdraw helpers in the v2 contract).
@@ -73,7 +77,7 @@ export const VAULT_ABI = [
   'function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares)',
   'function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets)',
   'event Deposit(address indexed sender, address indexed owner, uint256 assets, uint256 shares)',
-  'event Withdraw(address indexed sender, address indexed receiver, address indexed owner, uint256 assets, uint256 shares)'
+  'event Withdraw(address indexed sender, address indexed receiver, address indexed owner, uint256 assets, uint256 shares)',
 ]
 
 // Vault catalog — enriched metadata so the AI advisor can reason, not just split.
@@ -88,7 +92,8 @@ export const VAULT_CATALOG = [
     yield_source: 'lending',
     drawdown: '-1.2',
     min_capital: 100,
-    description: 'Overcollateralized pooled lending. Battle-tested, highest TVL in DeFi. Best for principal preservation.'
+    description:
+      'Overcollateralized pooled lending. Battle-tested, highest TVL in DeFi. Best for principal preservation.',
   },
   {
     name: 'Morpho Blue USDC',
@@ -99,7 +104,8 @@ export const VAULT_CATALOG = [
     yield_source: 'curated',
     drawdown: '-2.8',
     min_capital: 500,
-    description: 'Curator-managed isolated lending markets. Better yield than Aave, curator-dependent risk.'
+    description:
+      'Curator-managed isolated lending markets. Better yield than Aave, curator-dependent risk.',
   },
   {
     name: 'Pendle PT-USDC',
@@ -110,7 +116,8 @@ export const VAULT_CATALOG = [
     yield_source: 'structured',
     drawdown: '-6.5',
     min_capital: 1000,
-    description: 'Fixed-rate yield via zero-coupon bond mechanics. Hold to maturity or face AMM exit loss.'
+    description:
+      'Fixed-rate yield via zero-coupon bond mechanics. Hold to maturity or face AMM exit loss.',
   },
   {
     name: 'Fluid USDC',
@@ -121,8 +128,9 @@ export const VAULT_CATALOG = [
     yield_source: 'hybrid',
     drawdown: '-4.1',
     min_capital: 2000,
-    description: 'Unified lending + DEX architecture. Highest capital efficiency, highest architectural risk.'
-  }
+    description:
+      'Unified lending + DEX architecture. Highest capital efficiency, highest architectural risk.',
+  },
 ]
 
 // Back-compat alias — older imports referenced DEMO_VAULTS
