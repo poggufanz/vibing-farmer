@@ -25,7 +25,6 @@ jobs:
 
   slither:
     runs-on: ubuntu-latest
-    continue-on-error: true # soft-fail for now; promote to hard gate after Phase 5
     steps:
       - uses: actions/checkout@v4
         with: { submodules: recursive }
@@ -37,6 +36,13 @@ jobs:
           target: '.' # repo root so crytic-compile finds foundry.toml (src=contracts)
           ignore-compile: true # don't shell out to forge inside the container (forge isn't installed there)
           slither-config: slither.config.json # filters lib/ + test/ noise
+          # Hard-gate on HIGH severity only. The 20 Medium/Low findings are reviewed-acceptable:
+          #  - reentrancy-* on executeAgentDeposit → guarded by nonReentrant (ReentrancyGuard)
+          #  - timestamp comparisons → inherent to expiry/period scopes
+          #  - divide-before-multiply → intentional floor to period boundary
+          #  - unused-return → vm.serialize* in Deploy script (accumulates internally)
+          # They stay visible in the log + SARIF; only a future HIGH (e.g. reentrancy-eth) fails CI.
+          fail-on: high
 
   fork-nightly:
     if: github.event_name == 'schedule'
