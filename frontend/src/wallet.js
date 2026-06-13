@@ -26,6 +26,53 @@ export function parseGrantResult(result) {
 let ethersProvider = null
 let account = null
 
+// ─── MetaMask single-queue guard (-32002 defense) ──────────────────────────────
+// MetaMask Flask routes ALL wallet RPC through ONE service-worker queue. A
+// wallet_requestExecutionPermissions (ERC-7715) grant in particular stays "in
+// process" briefly AFTER its JS promise resolves, so a wallet_sendCalls fired right
+// after throws -32002 ("Cannot process requests while a
+// wallet_requestExecutionPermissions request is in process"). The EIP-7702-delegated
+// EOA also allows only ONE in-flight tx. Two defenses, combined in runWallet():
+//   1. SERIALIZE — chain every wallet-mutating call so two never overlap.
+//   2. RETRY — ride over the transient busy window once the prior request settles.
+let _walletQueue = Promise.resolve()
+
+function isWalletBusy(err) {
+  const code = err?.code ?? err?.info?.error?.code
+  return code === -32002 || /already pending|in process|already processing/i.test(err?.message || '')
+}
+
+/**
+ * Enqueue `fn` so it runs only after all prior wallet calls settle, retrying a
+ * transient MetaMask-busy (-32002) a few times before giving up. A user rejection
+ * (4001) is never retried; any non-busy error surfaces immediately.
+ * @template T @param {() => Promise<T>} fn @returns {Promise<T>}
+ */
+async function runWallet(fn, { tries = 5, delayMs = 1200 } = {}) {
+  const exec = async () => {
+    let lastErr
+    for (let i = 0; i < tries; i++) {
+      try { return await fn() } catch (err) {
+        if (err?.code === 4001 || err?.info?.error?.code === 4001) throw err // user rejected
+        if (!isWalletBusy(err)) throw err
+        lastErr = err
+        await new Promise((r) => setTimeout(r, delayMs))
+      }
+    }
+    throw lastErr
+  }
+  // Run on the tail of the queue regardless of whether a prior link resolved or rejected,
+  // and never let a failed link poison the chain for the next caller.
+  const run = _walletQueue.then(exec, exec)
+  _walletQueue = run.catch(() => {})
+  return run
+}
+
+// ERC-7715 is only honoured by MetaMask Flask on Ethereum Sepolia. wallet_requestExecutionPermissions
+// fired on any other chain (this app runs on Base Sepolia) wedges "in process" in MetaMask's single
+// service-worker queue and never clears, -32002-jamming every later wallet call on the 7702-delegated EOA.
+const ERC7715_CHAIN_HEX = '0xaa36a7' // Ethereum Sepolia (11155111)
+
 // Base Sepolia (84532) params for wallet_addEthereumChain — the chain may not be
 // pre-registered in the user's MetaMask, so switch can fail with 4902 (unknown chain).
 const BASE_SEPOLIA_PARAMS = {
@@ -125,7 +172,22 @@ export async function requestERC7715Permission(expirySeconds = 86400) {
   // Prepare session account for potential ERC-7710 redemption paths.
   prepareSessionAccount()
 
-  const result = await window.ethereum.request({
+  // Chain guard — root cause of the -32002 jam. ERC-7715 only works on Ethereum Sepolia;
+  // on Base Sepolia (this app's chain) wallet_requestExecutionPermissions wedges MetaMask's
+  // service-worker queue forever, breaking every subsequent wallet_sendCalls / deposit. The
+  // grant is decorative here anyway — session redemption never boots (delegationManager comes
+  // back null off Ethereum Sepolia) and the real authorization is the user-signed EIP-712
+  // batch authorizeSessionKey. So skip the jam-inducing RPC and return a mock grant; the UI
+  // permission step still renders and the deposit flow runs clean.
+  let liveChain
+  try { liveChain = await window.ethereum.request({ method: 'eth_chainId' }) } catch { liveChain = null }
+  if (String(liveChain).toLowerCase() !== ERC7715_CHAIN_HEX) {
+    const mockGrant = parseGrantResult(null)
+    saveSessionGrant(mockGrant)
+    return mockGrant
+  }
+
+  const result = await runWallet(() => window.ethereum.request({
     method: 'wallet_requestExecutionPermissions',
     params: [{
       chainId: SEPOLIA_CHAIN_ID_HEX,
@@ -142,7 +204,7 @@ export async function requestERC7715Permission(expirySeconds = 86400) {
       },
       rules: [{ type: 'expiry', data: { timestamp: Math.floor(Date.now() / 1000) + expirySeconds } }]
     }]
-  })
+  }))
 
   if (!result) throw new Error('No permission result returned from MetaMask')
   const grantData = parseGrantResult(result)
@@ -163,11 +225,13 @@ export async function requestERC7715Permission(expirySeconds = 86400) {
  */
 export async function authorizeSessionKeyOnChain(agent, vault, token, capPerPeriod, periodDuration, expiry) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
-  const signer = await ethersProvider.getSigner()
-  const registry = new ethers.Contract(AGENT_REGISTRY_ADDRESS, REGISTRY_ABI, signer)
-  const tx = await registry.authorizeSessionKey(agent, vault, token, capPerPeriod, periodDuration, expiry)
-  await tx.wait()
-  return tx.hash
+  return runWallet(async () => {
+    const signer = await ethersProvider.getSigner()
+    const registry = new ethers.Contract(AGENT_REGISTRY_ADDRESS, REGISTRY_ABI, signer)
+    const tx = await registry.authorizeSessionKey(agent, vault, token, capPerPeriod, periodDuration, expiry)
+    await tx.wait()
+    return tx.hash
+  })
 }
 
 /**
@@ -180,17 +244,19 @@ export async function authorizeSessionKeyOnChain(agent, vault, token, capPerPeri
 export async function broadcastDepositOnChain(calldata) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
   try {
-    const signer = await ethersProvider.getSigner()
-    const tx = await signer.sendTransaction({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: calldata, gasLimit: 350000n })
-    await tx.wait()
-    return tx.hash
+    // Serialized + busy-retried: rides over MetaMask's transient -32002 window after a
+    // 7715 grant / batch, and never overlaps another in-flight tx on the delegated EOA.
+    return await runWallet(async () => {
+      const signer = await ethersProvider.getSigner()
+      const tx = await signer.sendTransaction({ to: AGENT_VAULT_DEPOSITOR_ADDRESS, data: calldata, gasLimit: 350000n })
+      await tx.wait()
+      return tx.hash
+    })
   } catch (err) {
-    // -32002: MetaMask refuses ALL requests while a wallet_requestExecutionPermissions (or
-    // any other) request is still pending in its service worker. Hanging here is what made
-    // the run stall silently. Fail fast with an actionable message instead.
+    // -32002 still after retries → MetaMask is wedged on a stuck request the user must clear.
     const code = err?.code ?? err?.info?.error?.code
     if (code === -32002 || /already pending|in process/i.test(err?.message || '')) {
-      throw new Error('MetaMask busy: a wallet request is already pending. Open MetaMask and resolve/close it (or restart the extension), then retry.')
+      throw new Error('MetaMask busy: a wallet request is still pending. Open MetaMask and resolve/close it (or restart the extension), then retry.')
     }
     throw err
   }
@@ -210,11 +276,13 @@ export async function readUsdcBalance(user) {
  *  Used as the non-batched fallback when the wallet lacks EIP-5792. */
 export async function approveDepositorOnChain(amount) {
   if (!ethersProvider) throw new Error('Wallet not connected.')
-  const signer = await ethersProvider.getSigner()
-  const erc20 = new ethers.Contract(USDC_SEPOLIA, ['function approve(address spender, uint256 amount) returns (bool)'], signer)
-  const tx = await erc20.approve(AGENT_VAULT_DEPOSITOR_ADDRESS, BigInt(amount))
-  await tx.wait()
-  return tx.hash
+  return runWallet(async () => {
+    const signer = await ethersProvider.getSigner()
+    const erc20 = new ethers.Contract(USDC_SEPOLIA, ['function approve(address spender, uint256 amount) returns (bool)'], signer)
+    const tx = await erc20.approve(AGENT_VAULT_DEPOSITOR_ADDRESS, BigInt(amount))
+    await tx.wait()
+    return tx.hash
+  })
 }
 
 /** Revoke a single agent scope — user-signed AgentRegistry.revokeAgent. Works even if the
@@ -292,7 +360,9 @@ export async function batchCalls(calls) {
   if (!window.ethereum || !account) throw new Error('Wallet not connected.')
   let res
   try {
-    res = await window.ethereum.request({
+    // Serialized + busy-retried so the 7715 grant fully settles before this batch fires
+    // (otherwise -32002 "wallet_requestExecutionPermissions in process").
+    res = await runWallet(() => window.ethereum.request({
       method: 'wallet_sendCalls',
       params: [{
         version: '2.0.0',
@@ -301,7 +371,7 @@ export async function batchCalls(calls) {
         atomicRequired: true,
         calls: calls.map((c) => ({ to: c.to, data: c.data })),
       }],
-    })
+    }))
   } catch (e) {
     if (e?.code === 4001) throw e   // user rejected — surface it
     return null                     // method unsupported → caller falls back

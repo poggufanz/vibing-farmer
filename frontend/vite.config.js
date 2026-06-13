@@ -9,6 +9,12 @@ export default defineConfig(({ mode }) => {
   if (env.DEEPSEEK_API_KEY) process.env.DEEPSEEK_API_KEY = env.DEEPSEEK_API_KEY
   if (env.TAVILY_API_KEY) process.env.TAVILY_API_KEY = env.TAVILY_API_KEY
   if (env.ALLOWED_ORIGIN) process.env.ALLOWED_ORIGIN = env.ALLOWED_ORIGIN
+  // Propagate the RPC URL to process.env so the server-side relay proxy (api/relay.js)
+  // uses the SAME (Alchemy) RPC as the client for its hasCode/executed guards. Without
+  // this it falls back to the rate-limited public sepolia.base.org → getCode fails →
+  // hasCode fail-opens → the codeless-depositor guard is silently disabled (the no-op
+  // relay-to-dead-address bug). RPC_URL is first in api/relay.js rpcUrl() precedence.
+  if (env.VITE_RPC_URL) process.env.RPC_URL = env.VITE_RPC_URL
   // 1Shot Managed API creds — server-side only, never exposed to the client bundle.
   if (env.ONESHOT_KEY) process.env.ONESHOT_KEY = env.ONESHOT_KEY
   if (env.ONESHOT_SECRET) process.env.ONESHOT_SECRET = env.ONESHOT_SECRET
