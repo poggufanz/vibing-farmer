@@ -39,6 +39,7 @@ import HistoryPanel from './components/HistoryPanel.jsx';
 import { saveTransaction } from './history.js';
 import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEvent, emergencyWithdraw } from './agents/agentController.js';
 import AgentDashboard from './components/AgentDashboard.jsx';
+import NotificationCenter from './components/NotificationCenter.jsx';
 import HomePage from './components/HomePage.jsx';
 import LandingHero from './components/LandingHero.jsx';
 import ExplorerPage from './components/ExplorerPage.jsx';
@@ -1396,7 +1397,23 @@ const App = () => {
     <div className={`app ${sbExtended ? 'sb-extended' : 'sb-minimized'} ${railCollapsed ? 'rail-collapsed' : ''}`}>
       <Sidebar extended={sbExtended} onToggle={toggleSb} />
       <main className="main">
-        <TopBar walletConnected={walletPhase !== "none"} onReset={handleAgain} railCollapsed={railCollapsed} onToggleRail={toggleRail} />
+        <TopBar
+          walletConnected={walletPhase !== "none"}
+          onReset={handleAgain}
+          railCollapsed={railCollapsed}
+          onToggleRail={toggleRail}
+          notifications={
+            <NotificationCenter
+              alerts={agentData.alerts}
+              settings={agentSettings}
+              positions={agentData.positions}
+              userAddress={realAddress}
+              onEmergencyWithdraw={handleEmergencyWithdraw}
+              onReview={handleReviewRebalance}
+              onDismiss={dismissAlert}
+            />
+          }
+        />
         <Routes>
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="/home" element={

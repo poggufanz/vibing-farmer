@@ -2,7 +2,6 @@
 // Autonomous-agent page: portfolio summary, live positions, explainable alerts.
 // "Users should always feel like they're driving, even when the agent does the work."
 import React, { useState, useEffect } from 'react'
-import AgentActionPreview from './AgentActionPreview.jsx'
 import WithdrawModal from './WithdrawModal.jsx'
 import { loadSettings, t } from '../settingsStore.js'
 
@@ -69,7 +68,9 @@ const textBtn = (color = 'var(--text-muted)') => ({
 })
 
 // ─── AlertCard ───────────────────────────────────────────────────────────────
-function AlertCard({ alert, lang = 'en', onHarvest, onEmergencyWithdraw, onReview, onDismiss }) {
+// Exported: reused by NotificationCenter (the global bell modal). Alerts live in
+// one place now — the top-bar bell — not inline on this page.
+export function AlertCard({ alert, lang = 'en', onHarvest, onEmergencyWithdraw, onReview, onDismiss }) {
   const [why, setWhy] = useState(false)
   const meta = ALERT_META[alert.kind] || { dot: '·', color: 'var(--text-muted)', title: alert.kind }
   const src = alert.sources && alert.sources[0]
@@ -173,20 +174,13 @@ export default function AgentDashboard({
   loopPanel = null, loopStatus = null, decisionPanel = null,
 }) {
   const [now, setNow] = useState(Date.now())
-  const [preview, setPreview] = useState(null)
   const [withdrawVault, setWithdrawVault] = useState(null)
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
 
-  const { alertSeverity, language: lang } = loadSettings()
-  const filteredAlerts = alerts.filter(alert => {
-    if (alert.severity === 'high')   return alertSeverity?.high !== false
-    if (alert.severity === 'medium') return alertSeverity?.medium !== false
-    if (alert.severity === 'low')    return alertSeverity?.low === true
-    return true
-  })
+  const { language: lang } = loadSettings()
 
   const posList = Object.entries(positions)
   const apyOf = (addr) => vaultMeta[addr.toLowerCase()]?.apy || 0
@@ -196,19 +190,6 @@ export default function AgentDashboard({
     ? posList.reduce((s, [a, p]) => s + Number(p.balance || 0) * apyOf(a), 0) / totalUnits
     : 0
   const nextCheck = lastUpdated ? lastUpdated + POSITION_INTERVAL : null
-
-  // Preview interceptors — actual execution runs on confirm via props
-  const requestHarvest = (a) => setPreview({ kind: 'harvest', alert: a, vaultName: a.vaultName, rewardsUsdc: a.rewardsUsdc })
-  const requestWithdraw = (a) => {
-    const bal = Number(positions[a.vaultAddress]?.balance || 0)
-    const amtUnits = settings.emergencyFull ? bal : Math.floor(bal * (settings.emergencyPct || 50) / 100)
-    setPreview({ kind: 'withdraw', alert: a, vaultName: a.vaultName, amountUsdc: (amtUnits / 1e6).toFixed(2), pctLabel: settings.emergencyFull ? 'full position' : `${settings.emergencyPct || 50}% · your setting`, toShort: short(userAddress) })
-  }
-  const confirmPreview = () => {
-    if (preview?.kind === 'harvest') onHarvest(preview.alert)
-    else if (preview?.kind === 'withdraw') onEmergencyWithdraw(preview.alert)
-    setPreview(null)
-  }
 
   return (
     <div className="panel enter">
@@ -375,44 +356,7 @@ export default function AgentDashboard({
         )}
       </div>
 
-      {/* ── ALERTS ─────────────────────────────────────────────────────── */}
-      <div>
-        <div style={sectionLabel}>Alerts</div>
-
-        {alerts.length === 0 ? (
-          /* Healthy state */
-          <div style={{
-            display: 'flex', alignItems: 'flex-start', gap: 10,
-            borderLeft: '2px solid var(--ok)',
-            background: 'rgba(111,227,154,0.04)',
-            borderRadius: `0 var(--radius-sm) var(--radius-sm) 0`,
-            padding: '10px 12px 10px 14px',
-          }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ok)', marginTop: 5, flexShrink: 0 }} />
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', marginBottom: 3 }}>
-                All positions healthy
-              </div>
-              <div style={{ ...mono, color: 'var(--text-faint)', lineHeight: 1.5 }}>
-                {posList.length} vault{posList.length === 1 ? '' : 's'} monitored · {formatTime(lastUpdated, now)}
-                {nextCheck && <span> · next check {fmtRemain(nextCheck - now)}</span>}
-              </div>
-            </div>
-          </div>
-        ) : (
-          filteredAlerts.map((a) => (
-            <AlertCard
-              key={a.id}
-              alert={a}
-              lang={lang}
-              onHarvest={requestHarvest}
-              onEmergencyWithdraw={requestWithdraw}
-              onReview={onReview}
-              onDismiss={onDismiss}
-            />
-          ))
-        )}
-      </div>
+      {/* Alerts moved to the global top-bar bell (NotificationCenter). */}
 
       {loopPanel && (
         <div style={{ paddingTop: 20, borderTop: '1px solid var(--border)', marginTop: 20 }}>
@@ -428,7 +372,6 @@ export default function AgentDashboard({
         </div>
       )}
 
-      <AgentActionPreview preview={preview} onConfirm={confirmPreview} onCancel={() => setPreview(null)} />
       {withdrawVault && (
         <WithdrawModal
           vault={withdrawVault.vault}

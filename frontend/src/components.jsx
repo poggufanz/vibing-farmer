@@ -84,7 +84,7 @@ const Sidebar = ({ extended, onToggle }) => {
 };
 
 /* ---------- Top bar — minimal, no chip soup ---------- */
-const TopBar = ({ walletConnected, onReset, railCollapsed, onToggleRail }) => {
+const TopBar = ({ walletConnected, onReset, railCollapsed, onToggleRail, notifications = null }) => {
   return (
     <header className="topbar">
       <div className="topbar-left">
@@ -102,6 +102,7 @@ const TopBar = ({ walletConnected, onReset, railCollapsed, onToggleRail }) => {
           relayer&nbsp;<b>1Shot</b>&nbsp;·&nbsp;gas&nbsp;<b>0</b>
         </span>
         <button className="icon-btn" title="restart flow" aria-label="restart flow" onClick={onReset}><Icon name="refresh" /></button>
+        {notifications}
         <button className="icon-btn" title="new deposit" aria-label="new deposit" onClick={onReset}><Icon name="plus" /></button>
         <button className="icon-btn" title={railCollapsed ? "Show Info Panel" : "Hide Info Panel"} aria-label="toggle info panel" onClick={onToggleRail}>
           <Icon name={railCollapsed ? "panelRightOpen" : "panelRightClose"} style={{ transition: 'all 0.15s ease' }} />

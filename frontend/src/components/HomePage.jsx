@@ -111,7 +111,6 @@ export default function HomePage({
 }) {
   const navigateTo = useNavigateTo()
   const [withdrawVault, setWithdrawVault] = useState(null)
-  const [dismissed, setDismissed] = useState(() => new Set())
   const [pulse, setPulse] = useState(() => pulseCache || { vaults: SEED, prev: [], fetchedAt: null, live: false })
   const [sortBy, setSortBy] = useState('tvl')
   const [sortDir, setSortDir] = useState('desc')
@@ -181,10 +180,8 @@ export default function HomePage({
   const earnedToday = posList.reduce((s, [a, p]) => s + u(p.balance) * (apyOf(a) / 100) / 365, 0)
   const mode = autoHarvest ? 'autopilot' : 'co-pilot'
 
-  // Alert banner: first unread high/medium risk alert (dismiss is per-session, local state).
-  const { alertBanner } = settings
-  const bannerEnabled = alertBanner !== false
-  const banner = bannerEnabled && alerts.find((a) => a.kind === 'risk_alert' && (a.severity === 'high' || a.severity === 'medium') && !dismissed.has(a.id))
+  // Risk/agent alerts now surface only through the top-bar bell (NotificationCenter);
+  // the inline home banner was removed so alerts live in one place.
 
   // Recent activity: transactions + agent events, merged, newest 5.
   const txItems = getTransactions().map((t) => ({
@@ -257,19 +254,6 @@ export default function HomePage({
   return (
     <div className="enter" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 28 }}>
       <div style={{ maxWidth: 820, margin: '0 auto', width: '100%' }}>
-
-        {/* ── ALERT BANNER (conditional) ── */}
-        {banner && (
-          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', ...card, borderLeft: '3px solid var(--danger)', padding: '14px 16px', marginBottom: 24 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>🚨 Risk detected · {banner.vaultName}</div>
-              <div style={{ ...sub, marginTop: 4 }}>{(banner.searchAnswer || 'Anomaly reported by AI. Consider emergency withdraw.').slice(0, 160)}</div>
-              <button style={{ ...linkBtn, marginTop: 8 }} onClick={onOpenAgent}>View in Agent Dashboard →</button>
-            </div>
-            <button aria-label="dismiss alert" style={{ ...linkBtn, textDecoration: 'none', fontSize: 14 }}
-              onClick={() => setDismissed((s) => new Set(s).add(banner.id))}>✕</button>
-          </div>
-        )}
 
         {posList.length === 0 ? (
           /* ── STATE 2: connected, no positions ── */
