@@ -39,7 +39,7 @@ import SkillDrawer from './components/SkillDrawer.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
 import { saveTransaction } from './history.js';
 import { startBackgroundAgent, stopBackgroundAgent, updateAgentConfig, onAgentEvent, emergencyWithdraw } from './agents/agentController.js';
-import AgentDashboard from './components/AgentDashboard.jsx';
+const AgentDashboard = lazy(() => import('./components/AgentDashboard.jsx'));
 import NotificationCenter from './components/NotificationCenter.jsx';
 import HomePage from './components/HomePage.jsx';
 const LandingHero = lazy(() => import('./components/LandingHero.jsx'));
@@ -1494,6 +1494,7 @@ const App = () => {
                     ))}
                   </div>
                 )}
+                <Suspense fallback={<div className="route-loading" aria-busy="true" />}>
                 <AgentDashboard
                   active={agentEnabled && stage === "done"}
                   positions={agentData.positions}
@@ -1532,6 +1533,7 @@ const App = () => {
                     />
                   )}
                 />
+                </Suspense>
               </div>
             </div>
           } />

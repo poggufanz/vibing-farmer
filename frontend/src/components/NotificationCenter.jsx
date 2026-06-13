@@ -3,7 +3,7 @@
 // top-bar button now — no inline banners, no per-page alert lists. Click the
 // bell anywhere (home, wizard, /agent) to review and act on alerts.
 import React, { useState, useEffect } from 'react'
-import { AlertCard } from './AgentDashboard.jsx'
+import { AlertCard } from './AlertCard.jsx'
 import AgentActionPreview from './AgentActionPreview.jsx'
 import { loadSettings } from '../settingsStore.js'
 import { Icon } from '../components.jsx'
